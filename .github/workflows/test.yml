@@ -55,6 +55,7 @@ jobs:
         luaVersion: "${{ matrix.luaVersion }}"
 
     - name: Install LuaRocks
+      # TODO: Replace with https://github.com/luarocks/gh-actions-luarocks after v6+
       uses: ColinKennedy/gh-actions-luarocks@v1.0.0
 
     - name: Print LuaRocks Version

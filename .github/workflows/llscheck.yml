@@ -44,6 +44,7 @@ jobs:
           lua-language-server latest
 
     - name: Install LuaRocks
+      # TODO: Replace with https://github.com/luarocks/gh-actions-luarocks after v6+
       uses: ColinKennedy/gh-actions-luarocks@v1.0.0
 
     - name: Install llscheck

@@ -34,7 +34,6 @@ function _P.dedent_lines(lines)
     return output
 end
 
-
 --- Remove all common, leading whitespace for all lines in `text`.
 ---
 ---@param text string Some multi-line string that we assume has leading indents.
@@ -43,7 +42,6 @@ end
 function _P.dedent(text)
     return vim.fn.join(_P.dedent_lines(vim.split(text, _LINE_SEPARATOR)), _LINE_SEPARATOR)
 end
-
 
 --- Create a new buffer + window and fill it with `text`.
 ---
@@ -58,7 +56,6 @@ function _P.make_temporary_buffer(text)
 
     return buffer
 end
-
 
 --- Find a `"|cursor|"` marker in `lines`, remove it, and then return everything.
 ---
@@ -88,7 +85,7 @@ function _P.parse_cursor(text)
             found_row = row
 
             table.insert(lines, (line:gsub("|cursor|", "")))
-            table.insert(cursors, {found_row, found_column})
+            table.insert(cursors, { found_row, found_column })
         else
             table.insert(lines, line)
         end
@@ -218,9 +215,11 @@ describe("p text-operator", function()
         it("works with lines containing newlines", function()
             _P.assert_keys_with_buffer(
                 {
-                    function() vim.cmd("silent normal d3d") end,
                     function()
-                        vim.api.nvim_win_set_cursor(0, {2, 6})
+                        vim.cmd("silent normal d3d")
+                    end,
+                    function()
+                        vim.api.nvim_win_set_cursor(0, { 2, 6 })
                         vim.cmd("silent normal piw")
                     end,
                 },

@@ -1543,17 +1543,25 @@ do -- NOTE: Search Neovim's :help, quickly and easily
         ---
         local function _read_file_lines_async(path, callback)
             vim.uv.fs_open(path, "r", 438, function(error_open, handler)
-                assert(not error_open, error_open)
+                assert(not not error_open, error_open)
+
+                if not handler then
+                    error(string.format('Path "%s" could be opened.', path), 0)
+                end
 
                 vim.uv.fs_fstat(handler, function(error_stat, stat)
-                    assert(not error_stat, error_stat)
+                    assert(not not error_stat, error_stat)
 
                     if not stat then
                         error(string.format('Path "%s" could not be stat.', path), 0)
                     end
 
                     vim.uv.fs_read(handler, stat.size, 0, function(error_read, data)
-                        assert(not error_read, error_read)
+                        assert(not not error_read, error_read)
+
+                        if not data then
+                            error(string.format('Path "%s" has no data.', path), 0)
+                        end
 
                         vim.uv.fs_close(handler, function()
                             ---@type string[]
@@ -2137,7 +2145,9 @@ function _P.setup_lsp_details(args)
         desc = "Find and [g]o to the [i]mplementation of some header / declaration.",
     })
 
-    local client = assert(vim.lsp.get_client_by_id(args.data.client_id))
+    local identifier = args.data.client_id
+    local client =
+        assert(vim.lsp.get_client_by_id(identifier), string.format('Identifier "%s" has no LSP client.', identifier))
 
     if client:supports_method("textDocument/completion") then
         -- NOTE: Automatic LSP auto-complete + we can still use <C-x><C-o>
@@ -2480,11 +2490,11 @@ function _P.write_all_marks_if_possible(path, mode)
 
     if not ok then
         message = ("Failed to write: %s\n%s"):format(path, message)
-        assert(vim.uv.fs_close(handler))
+        assert(vim.uv.fs_close(handler), 'Path "%s" could not be closed.', path)
         error(message, 0)
     end
 
-    assert(vim.uv.fs_close(handler))
+    assert(vim.uv.fs_close(handler), 'Path "%s" could not be closed.', path)
 end
 
 --- Write `data` to `filename`.
@@ -2508,7 +2518,7 @@ function _P.write_async(filename, data)
             status, message = false, ("Failed to write: %s\n%s"):format(filename, write_error)
         end
 
-        assert(vim.uv.fs_close(handler))
+        assert(vim.uv.fs_close(handler), 'Path "%s" could not be closed.', filename)
     end
 
     return status, message

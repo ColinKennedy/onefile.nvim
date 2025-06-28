@@ -1,0 +1,13 @@
+return {
+  _all = {
+    coverage = false,
+    lpath = "spec/?.lua",
+    lua = "nvim -u init.lua -U NONE -N -i NONE -l",
+  },
+  default = {
+    verbose = true,
+  },
+  tests = {
+    verbose = true,
+  },
+}

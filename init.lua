@@ -1543,21 +1543,21 @@ do -- NOTE: Search Neovim's :help, quickly and easily
         ---
         local function _read_file_lines_async(path, callback)
             vim.uv.fs_open(path, "r", 438, function(error_open, handler)
-                assert(not not error_open, error_open)
+                assert(not error_open, error_open)
 
                 if not handler then
                     error(string.format('Path "%s" could be opened.', path), 0)
                 end
 
                 vim.uv.fs_fstat(handler, function(error_stat, stat)
-                    assert(not not error_stat, error_stat)
+                    assert(not error_stat, error_stat)
 
                     if not stat then
                         error(string.format('Path "%s" could not be stat.', path), 0)
                     end
 
                     vim.uv.fs_read(handler, stat.size, 0, function(error_read, data)
-                        assert(not not error_read, error_read)
+                        assert(not error_read, error_read)
 
                         if not data then
                             error(string.format('Path "%s" has no data.', path), 0)
@@ -1931,7 +1931,6 @@ function _P.select_from_options(values, options)
         border = "single",
     })
     vim.api.nvim_buf_set_lines(prompt_buffer, 0, -1, false, { "" })
-    vim.bo[prompt_buffer].modifiable = false
 
     -- Start in insert mode in prompt
     vim.api.nvim_set_current_win(prompt_window)
@@ -2151,8 +2150,7 @@ function _P.setup_lsp_details(args)
 
     if client:supports_method("textDocument/completion") then
         -- NOTE: Automatic LSP auto-complete + we can still use <C-x><C-o>
-        -- to trigger manually (because we have `:set
-        -- omnifunc=v:lua.vim.lsp.omnifunc`)
+        -- to trigger manually (because we have `:set omnifunc=v:lua.vim.lsp.omnifunc`)
         --
         vim.lsp.completion.enable(true, client.id, args.buf, { autotrigger = true })
         vim.opt_local.completeopt = "fuzzy,menuone,noinsert"

@@ -134,9 +134,9 @@ local _BOOKMARK_MAXIMUM = 9
 local _CURRENT_RIPGREP_COMMAND = nil
 
 local _FILETYPE_TO_TREESITTER = { python = "python" }
-local _LSP_GROUP = vim.api.nvim_create_augroup("UserLspStart", { clear = true })
-local _SNIPPET_AUGROUP = vim.api.nvim_create_augroup("CustomSnippetCompletion", { clear = true })
-local _TERMINAL_GROUP = vim.api.nvim_create_augroup("TerminalBehavior", { clear = true })
+local _LSP_GROUP = vim.api.nvim_create_augroup("my.lsp.start", { clear = true })
+local _SNIPPET_AUGROUP = vim.api.nvim_create_augroup("my.snippet.completion", { clear = true })
+local _TERMINAL_GROUP = vim.api.nvim_create_augroup("my.terminal.behavior", { clear = true })
 
 ---@type table<string, boolean>
 local _LANGUAGES_CACHE = {}
@@ -2626,7 +2626,7 @@ vim.api.nvim_create_autocmd("FileType", {
 -- :argdo and :bufdo, which disable the Syntax autocmd event to speed up
 -- processing.
 --
-local _SYNTAX_HIGHLIGHTING_GROUP = vim.api.nvim_create_augroup("EnableSyntaxHighlighting", { clear = true })
+local _SYNTAX_HIGHLIGHTING_GROUP = vim.api.nvim_create_augroup("my.highlighter", { clear = true })
 
 vim.api.nvim_create_autocmd({ "BufWinEnter", "WinEnter" }, {
     callback = function()
@@ -2692,7 +2692,7 @@ vim.api.nvim_create_autocmd("BufRead", {
 --  See `:help vim.highlight.on_yank()`
 vim.api.nvim_create_autocmd("TextYankPost", {
     desc = "Highlight when yanking (copying) text",
-    group = vim.api.nvim_create_augroup("kickstart-highlight-yank", { clear = true }),
+    group = vim.api.nvim_create_augroup("my.highlight.yank", { clear = true }),
     callback = function()
         vim.highlight.on_yank()
     end,
@@ -3231,7 +3231,7 @@ vim.opt.termguicolors = true
 
 -- TODO: Set this differently depending on if in Python or not
 vim.api.nvim_create_autocmd("FileType", {
-    group = vim.api.nvim_create_augroup("ColorColumn", { clear = true }),
+    group = vim.api.nvim_create_augroup("my.colors", { clear = true }),
     pattern = { "lua", "python" },
     callback = function()
         vim.opt_local.colorcolumn = "88"
@@ -4568,7 +4568,7 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
 
     --- Add Neovim `toggleterminal`-related autocommands.
     function _P.setup_autocommands()
-        local group = vim.api.nvim_create_augroup("ToggleTerminalCommands", { clear = true })
+        local group = vim.api.nvim_create_augroup("my.toggle_terminal.commands", { clear = true })
         local toggleterm_pattern = { "term://*::toggleterminal::*" }
 
         vim.api.nvim_create_autocmd("BufEnter", {

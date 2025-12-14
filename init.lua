@@ -146,9 +146,12 @@ local _LANGUAGES_CACHE = {}
 
 local _SNIPPETS
 
---- NOTE: Don't mess with this variable unless you know what you're doing.
+-- NOTE: Don't mess with this variable unless you know what you're doing.
 ---@type table<string, _my.Snippet>
 local _TRIGGER_TO_SNIPPET_CACHE = {}
+
+-- NOTE: This is a normal Vim convention for session names.
+local _VIM_SESSION_FILE_NAME = "Session.vim"
 
 -- luacheck: push ignore
 unpack = unpack or table.unpack
@@ -578,6 +581,75 @@ function _P.compute_snippet_completion_options(data)
     end
 
     return output
+end
+
+--- Calls `caller` once after we stop requesting for `caller` after `milliseconds`.
+---
+--- If you call `caller` really often (e.g. because of user keyboard input)
+--- this function makes sure that the requests aren't spammed to Neovim.
+---
+---@generic _Parameters : any
+---@generic _Return : any
+---@param caller (fun(...: _Parameters): _Return) A function to track and debounce.
+---@param timeout integer A 1-or-more milliseconds to wait. Usually you'll want 50+.
+---@param first boolean? Whether to use the arguments of the first call to `caller` or not.
+---@return fun(...: _Parameters): _Return # The wrapped function.
+---
+function _P.debounce_trailing(caller, timeout, first)
+    local timer = vim.uv.new_timer()
+
+    if not timer then
+        error('Unable to debounce the function. No timer could be created!', 2)
+    end
+
+    local wrapped
+
+    if not first then
+        function wrapped(...)
+            local argv = {...}
+            local argc = select('#', ...)
+
+            timer:start(timeout, 0, function()
+                pcall(
+                    vim.schedule_wrap(
+                        function()
+                            pcall(function()
+                                timer:stop()
+                                timer:close()
+                            end)
+
+                            caller(unpack(argv, 1, argc))
+                        end
+                    ),
+                    unpack(argv, 1, argc)
+                )
+            end)
+        end
+    else
+        local argv, argc
+
+        function wrapped(...)
+            argv = argv or {...}
+            argc = argc or select('#', ...)
+
+            timer:start(timeout, 0, function()
+                pcall(
+                    vim.schedule_wrap(
+                        function()
+                            pcall(function()
+                                timer:stop()
+                                timer:close()
+                            end)
+
+                            caller(unpack(argv, 1, argc))
+                        end
+                    )
+                )
+            end)
+        end
+    end
+
+    return wrapped
 end
 
 --- Remove `candidates` if they start with `base`.
@@ -1458,13 +1530,6 @@ function _P.run_ripgrep_command(opts)
     end
 
     _P.run_ripgrep(_P.split_quoted_string(opts.args))
-end
-
--- Keep track of the current layout, on-close. Create a Vim Session.vim file.
-function _P.save_session()
-    if vim.v.this_session ~= "" then
-        vim.cmd("mksession! " .. vim.v.this_session)
-    end
 end
 
 --- Show, Select, and Navigate to a buffer from a list of buffers.
@@ -2525,10 +2590,34 @@ function _P.write_async(filename, data)
     return status, message
 end
 
----@return string # Get the current Git branch.
--- luacheck: push ignore
-function get_git_branch_safe()
-    -- luacheck: pop
+---@return string? # Get the current Git branch, if any.
+function get_git_branch_safe(path)
+    local command = { _GIT_EXECUTABLE, "rev-parse", "--abbrev-ref", "HEAD" }
+
+    if path then
+        vim.list_extend(command, {"-C", path})
+    end
+
+    if not _P.exists_command(command[1]) then
+        return nil
+    end
+
+    local process = vim.system(command, { text = true }):wait()
+
+    if process.code ~= 0 then
+        return nil
+    end
+
+    local branch = process.stdout:gsub("\n", "")
+
+    if branch == "" then
+        return nil
+    end
+
+    return branch
+end
+
+function get_git_branch_label_safe()
     local command = { _GIT_EXECUTABLE, "rev-parse", "--abbrev-ref", "HEAD" }
 
     if not _P.exists_command(command[1]) then
@@ -2728,7 +2817,6 @@ vim.api.nvim_create_autocmd("TermOpen", {
     pattern = "*",
 })
 
-vim.api.nvim_create_autocmd("VimLeave", { callback = _P.save_session })
 ---------- Auto-Commands [End] ----------
 
 ---------- Auto-Commands 2 [Start] ----------
@@ -4913,8 +5001,59 @@ do
     end
 
     vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile", "BufWritePost", "TextChanged", "TextChangedI" }, {
-        callback = _highlight_comments,
+        -- TODO: Fix this later. It's broken. The colors are often wrong and don't apply correctly
+        callback = _P.debounce_trailing(_highlight_comments, 300),
     })
 
     vim.schedule(_highlight_comments)
+end
+
+do  -- NOTE: Add mksession support.
+    -- This integrates well with [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect)
+    --
+    -- It's recommended to add this to your ~/.bash_aliases:
+    -- ```sh
+    -- alias es='cp $PWD/${NEOVIM_SESSIONS_DIRECTORY_NAME:-.sessions}/`git branch --show-current`/Session.vim . 2>/dev/null; NVIM_APPNAME=noplugins nvim -S Session.vim'
+    -- ```
+
+    local _SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
+
+    --- Keep track of the current Vim Session.vim, if there is one.
+    function _P.save_session()
+        local session = vim.v.this_session
+
+        if session == "" then
+            return
+        end
+
+        vim.cmd("mksession! " .. session)
+
+        local root = _P.get_nearest_project_root(session)
+
+        if not root then
+            vim.notify(
+                string.format('Skipped saving "%s" session. Not git root was found.', session),
+                vim.log.levels.ERROR
+            )
+
+            return
+        end
+
+        local branch = get_git_branch_safe()
+
+        if not branch then
+            vim.notify(
+                string.format('Cannot save "%s" project. No branch was found.', root),
+                vim.log.levels.ERROR
+            )
+
+            return
+        end
+
+        local path = vim.fs.joinpath(root, _SESSIONS_DIRECTORY_NAME, branch, _VIM_SESSION_FILE_NAME)
+        vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
+        vim.uv.fs_copyfile(session, path)
+    end
+
+    vim.api.nvim_create_autocmd("VimLeavePre", { callback = _P.save_session })
 end

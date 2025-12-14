@@ -138,6 +138,9 @@ local _LSP_GROUP = vim.api.nvim_create_augroup("my.lsp.start", { clear = true })
 local _SNIPPET_AUGROUP = vim.api.nvim_create_augroup("my.snippet.completion", { clear = true })
 local _TERMINAL_GROUP = vim.api.nvim_create_augroup("my.terminal.behavior", { clear = true })
 
+local _GIT_EXECUTABLE = os.getenv("NEOVIM_GIT_EXECUTABLE_PATH") or "git"
+local _RIPGREP_EXECUTABLE = os.getenv("NEOVIM_RIPGREP_EXECUTABLE_PATH") or "rg"
+
 ---@type table<string, boolean>
 local _LANGUAGES_CACHE = {}
 
@@ -1200,7 +1203,7 @@ function _P.push_stash_by_name()
             return
         end
 
-        local command = { "git", "stash", "push", "--message", input }
+        local command = { _GIT_EXECUTABLE, "stash", "push", "--message", input }
 
         if not _P.exists_command(command[1]) then
             vim.notify("Cannot create state. No `git` command was found.", vim.log.levels.ERROR)
@@ -1362,7 +1365,7 @@ end
 --- Run `git add -p` in the current tab's `$PWD` in a new terminal.
 function _P.run_git_add_p()
     vim.cmd.split()
-    vim.cmd.terminal("git add -p")
+    vim.cmd.terminal(string.format("%s add -p", _GIT_EXECUTABLE))
     vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
 
     local terminal_buffer = vim.api.nvim_get_current_buf()
@@ -1383,7 +1386,7 @@ function _P.run_ripgrep(command)
     end
 
     local commands = {
-        "rg",
+        _RIPGREP_EXECUTABLE,
         "--vimgrep", -- Format: file:line:column:match
         "--smart-case",
         unpack(command),
@@ -1795,7 +1798,7 @@ function _P.select_file_in_directory(root)
     end
 
     root = root or vim.fn.getcwd()
-    local command = { "rg", "--files", root }
+    local command = { _RIPGREP_EXECUTABLE, "--files", root }
 
     if not _P.exists_command(command[1]) then
         vim.notify("Cannot do search. No `rg` command was found.", vim.log.levels.ERROR)
@@ -2210,7 +2213,7 @@ end
 
 --- Show all git stashes in the repository in a floating window, if any.
 function _P.show_git_stashes()
-    local command = { "git", "stash", "list" }
+    local command = { _GIT_EXECUTABLE, "stash", "list" }
 
     if not _P.exists_command(command[1]) then
         vim.notify("Cannot create state. No `git` command was found.", vim.log.levels.ERROR)
@@ -2249,7 +2252,7 @@ function _P.show_git_stashes()
         end,
         confirm = function(entry)
             local stash = entry.value.index
-            local process = vim.system({ "git", "stash", "apply", stash }):wait()
+            local process = vim.system({ _GIT_EXECUTABLE, "stash", "apply", stash }):wait()
 
             if process.code == 0 then
                 return
@@ -2526,7 +2529,7 @@ end
 -- luacheck: push ignore
 function get_git_branch_safe()
     -- luacheck: pop
-    local command = { "git", "rev-parse", "--abbrev-ref", "HEAD" }
+    local command = { _GIT_EXECUTABLE, "rev-parse", "--abbrev-ref", "HEAD" }
 
     if not _P.exists_command(command[1]) then
         return "<No git command>"
@@ -3477,7 +3480,7 @@ do -- NOTE: git-related keymaps
 
         ---@type string[]
         local full_command = {}
-        vim.list_extend(full_command, { "git", "-C", directory })
+        vim.list_extend(full_command, { _GIT_EXECUTABLE, "-C", directory })
         vim.list_extend(full_command, command)
 
         vim.system(full_command, { text = true }, function(object)

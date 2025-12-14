@@ -4476,6 +4476,7 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
 
         local buffer = vim.fn.bufnr()
         _initialize_terminal_buffer(buffer)
+        _P.close_terminal_afterwards(buffer)
 
         return { buffer = buffer, mode = _STARTING_MODE }
     end

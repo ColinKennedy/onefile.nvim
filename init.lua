@@ -5047,25 +5047,21 @@ do  -- NOTE: Add mksession support.
 
     local _SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
 
-    --- Keep track of the current Vim Session.vim, if there is one.
-    function _P.save_session()
-        local session = vim.v.this_session
-
-        if session == "" then
-            return
-        end
-
-        vim.cmd("mksession! " .. session)
-
-        local root = _P.get_nearest_project_root(session)
+    --- Find the location on-disk where we should save a Sesssion.vim file.
+    ---
+    ---@param reference_path string The path on-disk to search for a git / VCS root.
+    ---@return string? # The recommended Session.vim save location, if any.
+    ---
+    function _P.get_session_branch_path(reference_path)
+        local root = _P.get_nearest_project_root(reference_path)
 
         if not root then
             vim.notify(
-                string.format('Skipped saving "%s" session. Not git root was found.', session),
+                string.format('Skipped saving "%s" session. Not git root was found.', reference_path),
                 vim.log.levels.ERROR
             )
 
-            return
+            return nil
         end
 
         local branch = get_git_branch_safe()
@@ -5076,13 +5072,64 @@ do  -- NOTE: Add mksession support.
                 vim.log.levels.ERROR
             )
 
+            return nil
+        end
+
+        return vim.fs.joinpath(root, _SESSIONS_DIRECTORY_NAME, branch, _VIM_SESSION_FILE_NAME)
+    end
+
+    --- Keep track of the current Vim Session.vim, if there is one.
+    function _P.save_session(session)
+        vim.cmd("mksession! " .. session)
+
+        local path = _P.get_session_branch_path(session)
+
+        if not path then
+            vim.notify(string.format('Cannot save a branch session for "%s" session. no VCS root was found.', session), vim.log.levels.ERROR)
+
             return
         end
 
-        local path = vim.fs.joinpath(root, _SESSIONS_DIRECTORY_NAME, branch, _VIM_SESSION_FILE_NAME)
         vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
         vim.uv.fs_copyfile(session, path)
     end
 
-    vim.api.nvim_create_autocmd("VimLeavePre", { callback = _P.save_session })
+    vim.api.nvim_create_autocmd(
+        "VimLeavePre",
+        { callback = function()
+            local session = vim.v.this_session
+
+            if session == "" then
+                return
+            end
+
+            _P.save_session(session)
+        end}
+    )
+    vim.api.nvim_create_user_command("SessionWrite", function()
+        local directory = vim.fn.getcwd()
+        local root = _P.get_nearest_project_root(directory)
+
+        if not root then
+            vim.notify(string.format('Cannot save a session for "%s" directory. No VCS root was found.', directory), vim.log.levels.ERROR)
+
+            return
+        end
+
+        local path = _P.get_session_branch_path(directory)
+
+        if not path then
+            vim.notify(string.format('Cannot save a session for "%s" directory for some reason.', directory), vim.log.levels.ERROR)
+
+            return
+        end
+
+        local session = vim.fs.joinpath(directory, _VIM_SESSION_FILE_NAME)
+        _P.save_session(session)
+        vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
+        vim.uv.fs_copyfile(session, path)
+    end, {
+    nargs = 0,
+    desc = "Write a session to the current git repository's branch.",
+})
 end

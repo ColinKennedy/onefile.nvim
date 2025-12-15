@@ -599,28 +599,26 @@ function _P.debounce_trailing(caller, timeout, first)
     local timer = vim.uv.new_timer()
 
     if not timer then
-        error('Unable to debounce the function. No timer could be created!', 2)
+        error("Unable to debounce the function. No timer could be created!", 2)
     end
 
     local wrapped
 
     if not first then
         function wrapped(...)
-            local argv = {...}
-            local argc = select('#', ...)
+            local argv = { ... }
+            local argc = select("#", ...)
 
             timer:start(timeout, 0, function()
                 pcall(
-                    vim.schedule_wrap(
-                        function()
-                            pcall(function()
-                                timer:stop()
-                                timer:close()
-                            end)
+                    vim.schedule_wrap(function()
+                        pcall(function()
+                            timer:stop()
+                            timer:close()
+                        end)
 
-                            caller(unpack(argv, 1, argc))
-                        end
-                    ),
+                        caller(unpack(argv, 1, argc))
+                    end),
                     unpack(argv, 1, argc)
                 )
             end)
@@ -629,22 +627,18 @@ function _P.debounce_trailing(caller, timeout, first)
         local argv, argc
 
         function wrapped(...)
-            argv = argv or {...}
-            argc = argc or select('#', ...)
+            argv = argv or { ... }
+            argc = argc or select("#", ...)
 
             timer:start(timeout, 0, function()
-                pcall(
-                    vim.schedule_wrap(
-                        function()
-                            pcall(function()
-                                timer:stop()
-                                timer:close()
-                            end)
+                pcall(vim.schedule_wrap(function()
+                    pcall(function()
+                        timer:stop()
+                        timer:close()
+                    end)
 
-                            caller(unpack(argv, 1, argc))
-                        end
-                    )
-                )
+                    caller(unpack(argv, 1, argc))
+                end))
             end)
         end
     end
@@ -2595,7 +2589,7 @@ function get_git_branch_safe(path)
     local command = { _GIT_EXECUTABLE, "rev-parse", "--abbrev-ref", "HEAD" }
 
     if path then
-        vim.list_extend(command, {"-C", path})
+        vim.list_extend(command, { "-C", path })
     end
 
     if not _P.exists_command(command[1]) then
@@ -4573,7 +4567,7 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
             vim.cmd("edit! " .. _suggest_name("term://bash"))
 
             buffer = vim.fn.bufnr()
-         end
+        end
 
         _initialize_terminal_buffer(buffer)
         _P.close_terminal_afterwards(buffer)
@@ -4712,12 +4706,14 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
             end,
         })
 
-        vim.api.nvim_create_autocmd("VimEnter",
-            {
-                group = group,
-                callback = function() vim.schedule(function() _IS_VIM_ENTERED = true end) end,
-            }
-        )
+        vim.api.nvim_create_autocmd("VimEnter", {
+            group = group,
+            callback = function()
+                vim.schedule(function()
+                    _IS_VIM_ENTERED = true
+                end)
+            end,
+        })
     end
 
     --- Add command(s) for interacting with the terminals.
@@ -4762,11 +4758,11 @@ do
 
     ---@enum _my.ColorType A custom color alias (used to compute real colors later).
     local _ColorType = {
-        default="default",
-        error="error",
-        hint="hint",
-        info="info",
-        warning="warning",
+        default = "default",
+        error = "error",
+        hint = "hint",
+        info = "info",
+        warning = "warning",
     }
 
     ---@class _my.comment.ColorOptions
@@ -5037,7 +5033,7 @@ do
     vim.schedule(_highlight_comments)
 end
 
-do  -- NOTE: Add mksession support.
+do -- NOTE: Add mksession support.
     -- This integrates well with [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect)
     --
     -- Important:
@@ -5072,10 +5068,7 @@ do  -- NOTE: Add mksession support.
         local branch = get_git_branch_safe()
 
         if not branch then
-            vim.notify(
-                string.format('Cannot save "%s" project. No branch was found.', root),
-                vim.log.levels.ERROR
-            )
+            vim.notify(string.format('Cannot save "%s" project. No branch was found.', root), vim.log.levels.ERROR)
 
             return nil
         end
@@ -5090,7 +5083,10 @@ do  -- NOTE: Add mksession support.
         local path = _P.get_session_branch_path(session)
 
         if not path then
-            vim.notify(string.format('Cannot save a branch session for "%s" session. no VCS root was found.', session), vim.log.levels.ERROR)
+            vim.notify(
+                string.format('Cannot save a branch session for "%s" session. no VCS root was found.', session),
+                vim.log.levels.ERROR
+            )
 
             return
         end
@@ -5099,9 +5095,8 @@ do  -- NOTE: Add mksession support.
         vim.uv.fs_copyfile(session, path)
     end
 
-    vim.api.nvim_create_autocmd(
-        "VimLeavePre",
-        { callback = function()
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+        callback = function()
             local session = vim.v.this_session
 
             if session == "" then
@@ -5109,15 +5104,18 @@ do  -- NOTE: Add mksession support.
             end
 
             _P.save_session(session)
-        end}
-    )
+        end,
+    })
 
     vim.api.nvim_create_user_command("SessionWrite", function()
         local directory = vim.fn.getcwd()
         local root = _P.get_nearest_project_root(directory)
 
         if not root then
-            vim.notify(string.format('Cannot save a session for "%s" directory. No VCS root was found.', directory), vim.log.levels.ERROR)
+            vim.notify(
+                string.format('Cannot save a session for "%s" directory. No VCS root was found.', directory),
+                vim.log.levels.ERROR
+            )
 
             return
         end
@@ -5125,7 +5123,10 @@ do  -- NOTE: Add mksession support.
         local path = _P.get_session_branch_path(directory)
 
         if not path then
-            vim.notify(string.format('Cannot save a session for "%s" directory for some reason.', directory), vim.log.levels.ERROR)
+            vim.notify(
+                string.format('Cannot save a session for "%s" directory for some reason.', directory),
+                vim.log.levels.ERROR
+            )
 
             return
         end

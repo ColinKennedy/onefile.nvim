@@ -5042,9 +5042,22 @@ do -- NOTE: Add mksession support.
     --     still work but likely aren't going to work 100% as expected.
     --
     -- It's recommended to add this to your ~/.bash_aliases:
+    --
     -- ```sh
-    -- alias es='cp $PWD/${NEOVIM_SESSIONS_DIRECTORY_NAME:-.sessions}/`git branch --show-current`/Session.vim . 2>/dev/null; NVIM_APPNAME=noplugins nvim -S Session.vim'
+    -- alias es='cp $PWD/${NEOVIM_SESSIONS_DIRECTORY_NAME:-.sessions}/`git branch --show-current`/Session.vim . 2>/dev/null; NVIM_APPNAME=noplugins nvim -S'
     -- ```
+    --
+    -- How it works:
+    -- - Use `es` to load Neovim
+    -- - Just before loading neovim, the current branch's Session.vim is copied over.
+    --     - This is also the same command that tmux-resurrect uses
+    -- - Just work as you normally do now.
+    -- - On-close, Neovim will save the current layout + git branch to a unique Session.vim file.
+    --
+    -- TODO: This doesn't 100% work with tmux-resurrect. We need to make
+    -- tmux-resurrect use the alias, somehow. Add instructions on how to do
+    -- that later.
+    --
 
     local _SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
 

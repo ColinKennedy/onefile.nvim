@@ -1,5 +1,6 @@
 This is a "no plugins" Neovim configuration. You run it by calling:
 
+
 ## Install
 ### In-place Install
 Get the path where Neovim loads from by calling this:
@@ -15,6 +16,7 @@ Copy the `init.lua` to that directory.
 ```sh
 cp ./init.lua `nvim --clean --headless --cmd 'lua print(vim.fn.stdpath("config"))' --cmd 'quit'`
 ```
+
 
 ### Side-loaded Install
 If you have an existing Neovim configuration that you don't want to touch, you can "try

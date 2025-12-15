@@ -3142,8 +3142,22 @@ vim.keymap.set("x", "/", "<Esc>/\\%V", { desc = "Search for text some within a v
 -- Change Vim to add numbered j/k  movement to the jumplist. It makes <C-o> and
 -- <C-i> remember more cursor positions.
 --
-vim.cmd([[nnoremap <expr> k (v:count > 1 ? "m'" . v:count : '') . 'k']])
-vim.cmd([[nnoremap <expr> j (v:count > 1 ? "m'" . v:count : '') . 'j']])
+vim.keymap.set("n", "k", function()
+    if vim.v.count <= 1 then
+        return "k"
+    end
+
+    return "m'" .. vim.v.count .. "k"
+end, { desc =  "Include numbered-up-movements in Vim's jumplist", expr = true })
+
+vim.keymap.set("n", "j", function()
+    if vim.v.count <= 1 then
+        return "j"
+    end
+
+    return "m'" .. vim.v.count .. "j"
+end, { desc = "Include numbered-down-movements in Vim's jumplist", expr = true })
+
 
 -- Reference: https://github.com/neovim/neovim/issues/21422#issue-1497443707
 vim.keymap.set(
@@ -3608,40 +3622,58 @@ do -- NOTE: git-related keymaps
 end
 
 -- Reference: https://github.com/vim/vim/issues/17187#issuecomment-2820531752
-do -- NOTE: Automatically call `:nohlsearch`
-    vim.cmd([[
-    noremap <expr> <Plug>(StopHL) execute('nohlsearch')[-1]
-    noremap! <expr> <Plug>(StopHL) execute('nohlsearch')[-1]
+do -- NOTE: Automatically call `:nohlsearch` when moving off of search text
+    local _GROUP = vim.api.nvim_create_augroup("my.highlighter.word_search", { clear = true })
+    local _PLUG_MAPPING = "<Plug>(StopHL)"
 
-    fu! HlSearch()
-        let s:pos = match(getline('.'), @/, col('.') - 1) + 1
-        if s:pos != col('.')
-         call StopHL()
-        endif
-    endfu
+    vim.keymap.set({ "n", "i" }, _PLUG_MAPPING, function()
+        vim.cmd("nohlsearch")
+    end, { desc = "Cancel search highlights.", expr = false })
 
-    fu! StopHL()
-        if !v:hlsearch || mode() isnot 'n'
-         return
-        else
-         sil call feedkeys("\<Plug>(StopHL)", 'm')
-        endif
-    endfu
+    -- StopHL function
+    function _P.stop_highlighting_search_text()
+        if vim.v.hlsearch == 0 or vim.api.nvim_get_mode().mode ~= "n" then
+            return
+        end
 
-    augroup SearchHighlight
-    au!
-        au CursorMoved * call HlSearch()
-        au InsertEnter * call StopHL()
-    augroup end
-    ]])
+        vim.api.nvim_feedkeys(
+            vim.api.nvim_replace_termcodes(_PLUG_MAPPING, true, false, true),
+            "m",
+            false
+        )
+    end
+
+    -- highlight_search_text function
+    function _P.highlight_search_text()
+        local line = vim.api.nvim_get_current_line()
+        local col = vim.fn.col(".")
+        local pattern = vim.fn.getreg("/")
+
+        -- match() returns 0-based index, or -1
+        local pos = vim.fn.match(line, pattern, col - 1) + 1
+
+        if pos ~= col then
+            _P.stop_highlighting_search_text()
+        end
+    end
+
+    vim.api.nvim_create_autocmd("CursorMoved", {
+        group = _GROUP,
+        callback = _P.highlight_search_text
+    })
+
+    vim.api.nvim_create_autocmd("InsertEnter", {
+        group = _GROUP,
+        callback = _P.stop_highlighting_search_text,
+    })
 end
 
-do
-    -- grapple.nvim replacement using only native Neovim
-    --
-    -- Reference:
-    --     https://www.reddit.com/r/neovim/comments/1js5bg8/comment/mloidmn/?utm_source=share&utm_medium=web3x&utm_name=web3xcss
-    --
+do -- NOTE: A grapple.nvim replacement using only native Neovim
+   --
+   -- Reference:
+   --     https://www.reddit.com/r/neovim/comments/1js5bg8/comment/mloidmn/?utm_source=share&utm_medium=web3x&utm_name=web3xcss
+   --
+
     for index = _BOOKMARK_MINIMUM, _BOOKMARK_MAXIMUM do
         local mark = _P.get_vim_mark_from_bookmark_index(index)
 
@@ -3883,11 +3915,6 @@ do -- NOTE: Make text-objects to work with `p`. e.g. `piw`
     vim.keymap.set("n", "pp", "p", { noremap = true, silent = true, desc = "Paste the text." })
     vim.keymap.set("n", "P", "<Nop>", { noremap = true, silent = true, desc = "Disable pasting with P." })
 end
-
--- Section Start: quick-scope
--- Reference: https://github.com/unblevable/quick-scope/blob/master/plugin/quick_scope.vim
--- TODO: Finish this
--- Section End: quick-scope
 
 do -- NOTE: Colorscheme
     local _extend = function(table_to_modify, items)
@@ -4726,7 +4753,7 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
     end
 
     _P.setup_autocommands()
-    vim.keymap.set("n", "<space>T", _toggle_terminal)
+    vim.keymap.set("n", "<space>T", _toggle_terminal, { desc = "Toggle [T]erminal, in a split at the bottom of the current tab." })
 
     -- NOTE: Allow quick and easy movement out of a terminal buffer using just <C-hjkl>
     vim.keymap.set({ "n", "t" }, "<C-h>", _save_terminal_state("<C-\\><C-n><C-w>h"), {

@@ -4472,6 +4472,8 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
     local _NEXT_NUMBER = 0
     local _STARTING_MODE = _Mode.insert -- NOTE: Start off in insert mode
 
+    local _IS_VIM_ENTERED = false
+
     --- Check if `buffer` is shown to the user.
     ---
     --- @param buffer number A 0-or-more index pointing to some Vim data.
@@ -4561,11 +4563,18 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
         )
     end
 
-    --- @return _my.ToggleTerminal # Create a buffer from scratch.
-    local function _create_terminal()
-        vim.cmd("edit! " .. _suggest_name("term://bash"))
+    --- Create a new buffer or reuse the given terminal `buffer`.
+    ---
+    ---@param buffer integer? If not provided, a new terminal is created.
+    ---@return _my.ToggleTerminal # Create a buffer from scratch.
+    ---
+    local function _create_terminal(buffer)
+        if not buffer then
+            vim.cmd("edit! " .. _suggest_name("term://bash"))
 
-        local buffer = vim.fn.bufnr()
+            buffer = vim.fn.bufnr()
+         end
+
         _initialize_terminal_buffer(buffer)
         _P.close_terminal_afterwards(buffer)
 
@@ -4669,6 +4678,19 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
             callback = function()
                 local buffer = vim.fn.bufnr()
                 vim.schedule(function()
+                    if not _IS_VIM_ENTERED then
+                        -- NOTE: This is a special situation. If we're
+                        -- restoring from a Vim Session, we won't have buffer
+                        -- information. So we have to add it manually.
+                        --
+                        local terminal = _create_terminal(buffer)
+                        local tab = vim.fn.tabpagenr()
+                        _TAB_TERMINALS[tab] = terminal
+                        _BUFFER_TO_TERMINAL[terminal.buffer] = _TAB_TERMINALS[tab]
+
+                        return
+                    end
+
                     _handle_term_enter(buffer)
                 end)
             end,
@@ -4689,6 +4711,13 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
                 end)
             end,
         })
+
+        vim.api.nvim_create_autocmd("VimEnter",
+            {
+                group = group,
+                callback = function() vim.schedule(function() _IS_VIM_ENTERED = true end) end,
+            }
+        )
     end
 
     --- Add command(s) for interacting with the terminals.

@@ -5052,12 +5052,22 @@ do
         _highlight_using_neovim_treesitter(buffer, parser:parse()[1])
     end
 
+    --- Only highlight a buffer's text if needed.
+    local function _highlight_comments_if_needed()
+        if vim.bo.buftype == "terminal" then
+            -- NOTE: terminals don't need these kind of highlights, ever.
+            return
+        end
+
+        _highlight_comments()
+    end
+
     vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile", "BufWritePost", "TextChanged", "TextChangedI" }, {
         -- TODO: Fix this later. It's broken. The colors are often wrong and don't apply correctly
-        callback = _P.debounce_trailing(_highlight_comments, 300),
+        callback = _P.debounce_trailing(_highlight_comments_if_needed, 300),
     })
 
-    vim.schedule(_highlight_comments)
+    vim.schedule(_highlight_comments_if_needed)
 end
 
 do -- NOTE: Add mksession support.

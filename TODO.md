@@ -1,6 +1,8 @@
 - Add gp mapping
  - It exists but doesn't work with ]p or [p yet. And probably doesn't work with `>p` / `<p` yet. Fix.
 
+- Add :ObsidianAliases
+
 - Make startup faster
 
 - Add pairwise mappings. e.g. "", (), {}, etc
@@ -9,6 +11,7 @@
 
 - Add "grapple.nvim, for sessions" support (it should save and restore bookmarks per-git-branch)
 
+- Add deferral magic
 
 - Change NOTE sections to go above the do/end blocks
 - Clean the variable names and stuff. Gross
@@ -96,3 +99,23 @@ escape insert or terminal mode using jk
 | n | `<C-w>`o      | Toggle full-screen or minimize a window.                  |
 | n | P    | Prevent text from being put, twice.                                        |
 | n | PP   | Put text, like you normally would in Vim, but how [Y]ank does it.          |
+
+
+Make sure keymaps have descs
+
+```lua
+local modes = { "n", "i", "v", "x", "s", "o", "t", "c" }
+
+for _, mode in ipairs(modes) do
+    for _, map in ipairs(vim.api.nvim_get_keymap(mode)) do
+        if not map.desc or map.desc == "" then
+            print(string.format(
+            "[%s] %s -> %s",
+            mode,
+            map.lhs,
+            map.rhs or "<Lua>"
+        ))
+    end
+end
+end
+```

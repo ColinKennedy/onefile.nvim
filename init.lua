@@ -5286,10 +5286,17 @@ do -- NOTE: Add mksession support.
         _P.save_session(session)
         vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
         vim.uv.fs_copyfile(session, path)
+<<<<<<< HEAD
     end,
     {
         nargs = 0,
         desc = "Write a session to the current git repository's branch.",
     }
     )
+=======
+    end, {
+        nargs = 0,
+        desc = "Write a session to the current git repository's branch.",
+    })
+>>>>>>> 7f6b01d (Added a desc to SessionWrite)
 end

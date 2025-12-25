@@ -819,6 +819,7 @@ function _P.get_fuzzy_match_score(input, target)
     local position = 1
     local score = 0
     local last_match = 0
+    local first_match = nil
 
     for index = 1, #input_lower do
         local character = input_lower:sub(index, index)
@@ -826,6 +827,10 @@ function _P.get_fuzzy_match_score(input, target)
 
         while position <= #target_lower do
             if target_lower:sub(position, position) == character then
+                if not first_match then
+                    first_match = position
+                end
+
                 if last_match > 0 then
                     score = score + (position - last_match)
                 end
@@ -844,6 +849,9 @@ function _P.get_fuzzy_match_score(input, target)
             return nil
         end
     end
+
+    -- Penalize late starts (earlier start = lower score = better)
+    score = score + ((first_match or 1) - 1)
 
     return score
 end

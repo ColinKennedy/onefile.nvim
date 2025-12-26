@@ -1453,11 +1453,10 @@ function _P.rstrip(text)
     return text:match("^(.-)%s*$")
 end
 
---- Call `git push` from the current working directory.
-function _P.run_git_push()
+function _P.run_git_generic_command(command)
     local function _notify_on_error(result)
         if result.code == 0 then
-            vim.schedule(function() vim.notify("`git push` completed successfully.", vim.log.levels.INFO) end)
+            vim.schedule(function() vim.notify(string.format("`git %s` completed successfully.", command), vim.log.levels.INFO) end)
 
             return
         end
@@ -1465,14 +1464,24 @@ function _P.run_git_push()
         vim.schedule(
             function()
                 vim.notify(
-                    string.format('`git push` failed with error: "%s"', result.stderr),
+                    string.format('`git %s` failed with error: "%s"', command, result.stderr),
                     vim.log.levels.ERROR
                 )
             end
         )
     end
 
-    vim.system({ _GIT_EXECUTABLE, "push" }, { text = true }, _notify_on_error):wait()
+    vim.system({ _GIT_EXECUTABLE, command }, { text = true }, _notify_on_error):wait()
+end
+
+--- Call `git pull` from the current working directory.
+function _P.run_git_pull()
+    _P.run_git_generic_command("pull")
+end
+
+--- Call `git push` from the current working directory.
+function _P.run_git_push()
+    _P.run_git_generic_command("push")
 end
 
 --- Run `git add -p` in the current tab's `$PWD` in a new terminal.
@@ -5335,17 +5344,8 @@ do -- NOTE: Add mksession support.
         _P.save_session(session)
         vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
         vim.uv.fs_copyfile(session, path)
-<<<<<<< HEAD
-    end,
-    {
-        nargs = 0,
-        desc = "Write a session to the current git repository's branch.",
-    }
-    )
-=======
     end, {
         nargs = 0,
         desc = "Write a session to the current git repository's branch.",
     })
->>>>>>> 7f6b01d (Added a desc to SessionWrite)
 end

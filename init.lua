@@ -821,7 +821,9 @@ function _P.get_fuzzy_match_score(input, target)
     local last_match = 0
     local first_match = nil
 
-    for index = 1, #input_lower do
+    local input_length = #input_lower
+
+    for index = 1, input_length do
         local character = input_lower:sub(index, index)
         local found = false
 
@@ -850,8 +852,21 @@ function _P.get_fuzzy_match_score(input, target)
         end
     end
 
-    -- Penalize late starts (earlier start = lower score = better)
-    score = score + ((first_match or 1) - 1)
+    first_match = first_match or 1
+    -- NOTE: Late start penalty
+    score = score + (first_match - 1)
+
+    -- NOTE: The span penalty can be pretty harsh whenever `target` is a long
+    -- string. To prevent any problems, we "normalize" it so short strings
+    -- don't have an advantage.
+    --
+    local span = last_match - first_match
+    local ideal_span = input_length - 1
+
+    if span > ideal_span then
+        local normalized_spread = (span - ideal_span) / #target_lower
+        score = score + normalized_spread * input_length
+    end
 
     return score
 end
@@ -1939,6 +1954,11 @@ end
 ---    A function run to run on-selection. e.g. "open the file in a buffer".
 ---
 function _P.select_from_options(values, options)
+
+    local function _passthrough(value)
+        return value
+    end
+
     ---@generic T: any
     --- A dynamic `ipairs`.
     ---
@@ -2038,22 +2058,14 @@ function _P.select_from_options(values, options)
         ---@type _my.selector_gui.entry.Selection[]
         local matches = {}
 
-        if options.deserialize then
-            for _, item in _dynamic_ipairs(state.all) do
-                local entry = options.deserialize(item)
-                local score = _P.get_fuzzy_match_score(state.input, entry.display or entry.value)
+        local deserializer = options.deserialize or _passthrough
 
-                if score then
-                    table.insert(matches, { display = entry.display, score = score, value = entry.value })
-                end
-            end
-        else
-            for _, item in _dynamic_ipairs(state.all) do
-                local score = _P.get_fuzzy_match_score(state.input, item)
+        for _, item in _dynamic_ipairs(state.all) do
+            local entry = deserializer(item)
+            local score = _P.get_fuzzy_match_score(state.input, entry.display or entry.value)
 
-                if score then
-                    table.insert(matches, { display = tostring(item), score = score, value = item })
-                end
+            if score then
+                table.insert(matches, { display = entry.display, score = score, value = entry.value })
             end
         end
 
@@ -2067,6 +2079,7 @@ function _P.select_from_options(values, options)
 
         state.selected = math.min(state.selected, #state.filtered)
 
+        -- NOTE: We always select one entry, here.
         if state.selected < 1 then
             state.selected = 1
         end

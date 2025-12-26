@@ -1459,6 +1459,28 @@ function _P.rstrip(text)
     return text:match("^(.-)%s*$")
 end
 
+--- Call `git push` from the current working directory.
+function _P.run_git_push()
+    local function _notify_on_error(result)
+        if result.code == 0 then
+            vim.schedule(function() vim.notify("`git push` completed successfully.", vim.log.levels.INFO) end)
+
+            return
+        end
+
+        vim.schedule(
+            function()
+                vim.notify(
+                    string.format('`git push` failed with error: "%s"', result.stderr),
+                    vim.log.levels.ERROR
+                )
+            end
+        )
+    end
+
+    vim.system({ _GIT_EXECUTABLE, "push" }, { text = true }, _notify_on_error):wait()
+end
+
 --- Run `git add -p` in the current tab's `$PWD` in a new terminal.
 function _P.run_git_add_p()
     vim.cmd.split()
@@ -3836,6 +3858,12 @@ do -- NOTE: git-related keymaps
         "<leader>gap",
         _P.run_git_add_p,
         { noremap = true, silent = true, desc = "Create a terminal and run `git add -p` on it." }
+    )
+    vim.keymap.set(
+        "n",
+        "<leader>gph",
+        _P.run_git_push,
+        { noremap = true, silent = true, desc = "Push the committed to changes to the remote branch." }
     )
 end
 

@@ -1,5 +1,18 @@
 local _P = {}
 
+---@class my._datatypes.IntBounds An inclusive or exclusive pair of integers.
+---@field first integer The starting value.
+---@field last integer The ending value.
+
+---@class my.comment._TagColumns
+---    A description of the first line of a "tagged" inline comment.
+---@field tag_text my._datatypes.IntBounds
+---    The exact range where a matched tag's text starts and ends.
+---@field tag_bounds my._datatypes.IntBounds
+---    The outer range of "the tag's text + the surrounding characters".
+---@field comment_text my._datatypes.IntBounds
+---    The actual user inline comment, without the tag.
+
 ---@class _my.completion.Data All Snippet-internal data used during callbacks.
 ---@field completed vim.v.completed_item The completed word/phrase.
 
@@ -1459,11 +1472,14 @@ function _P.rstrip(text)
     return text:match("^(.-)%s*$")
 end
 
---- Call `git push` from the current working directory.
-function _P.run_git_push()
+--- Run the git `command` and show an error if it fails for some reason.
+---
+---@param command string The git command to run. e.g. `"pull"`, `"push"`, etc.
+---
+function _P.run_git_generic_command(command)
     local function _notify_on_error(result)
         if result.code == 0 then
-            vim.schedule(function() vim.notify("`git push` completed successfully.", vim.log.levels.INFO) end)
+            vim.schedule(function() vim.notify(string.format("`git %s` completed successfully.", command), vim.log.levels.INFO) end)
 
             return
         end
@@ -1471,14 +1487,24 @@ function _P.run_git_push()
         vim.schedule(
             function()
                 vim.notify(
-                    string.format('`git push` failed with error: "%s"', result.stderr),
+                    string.format('`git %s` failed with error: "%s"', command, result.stderr),
                     vim.log.levels.ERROR
                 )
             end
         )
     end
 
-    vim.system({ _GIT_EXECUTABLE, "push" }, { text = true }, _notify_on_error):wait()
+    vim.system({ _GIT_EXECUTABLE, command }, { text = true }, _notify_on_error):wait()
+end
+
+--- Call `git pull` from the current working directory.
+function _P.run_git_pull()
+    _P.run_git_generic_command("pull")
+end
+
+--- Call `git push` from the current working directory.
+function _P.run_git_push()
+    _P.run_git_generic_command("push")
 end
 
 --- Run `git add -p` in the current tab's `$PWD` in a new terminal.
@@ -2060,7 +2086,7 @@ function _P.select_from_options(values, options)
         vim.api.nvim_feedkeys(options.input, "i", false)
     end
 
-    -- Redraw the current, filtered list.
+    --- Redraw the current, filtered list.
     local function _redraw()
         -- TODO: Don't redraw the whole buffer. This is slow.
         vim.api.nvim_buf_set_lines(list_buffer, 0, -1, false, {})
@@ -2071,7 +2097,7 @@ function _P.select_from_options(values, options)
         end
     end
 
-    -- Populate filtered items.
+    --- Populate filtered items.
     local function _update_filter()
         local line = vim.api.nvim_buf_get_lines(prompt_buffer, 0, 1, false)[1]
         state.input = line or ""
@@ -2109,11 +2135,17 @@ function _P.select_from_options(values, options)
         _redraw()
     end
 
+    --- Close all search-related floating windows.
     local function _close_all()
         vim.api.nvim_win_close(list_window, true)
         vim.api.nvim_win_close(prompt_window, true)
     end
 
+    --- Get the selected item, close all the windows, and do something with the selection.
+    ---
+    --- The "do something" part is defined by `options`. We don't control any
+    --- part of what happens next.
+    ---
     local function _confirm_selection()
         _close_all()
 
@@ -2121,6 +2153,7 @@ function _P.select_from_options(values, options)
         options.confirm(entry)
     end
 
+    --- Don't select anything from the search and just close all of the windows.
     local function _cancel()
         _close_all()
 
@@ -2133,7 +2166,7 @@ function _P.select_from_options(values, options)
         end
     end
 
-    -- Set up keymaps for list window navigation
+    --- Set up keymaps for list window navigation
     local function _setup_keys()
         local opts = { noremap = true, silent = true, buffer = prompt_buffer }
         local confirm_options = vim.tbl_deep_extend("force", opts, { desc = "Confirm your current selection." })
@@ -3865,6 +3898,12 @@ do -- NOTE: git-related keymaps
         _P.run_git_push,
         { noremap = true, silent = true, desc = "Push the committed to changes to the remote branch." }
     )
+    vim.keymap.set(
+        "n",
+        "<leader>gpl",
+        _P.run_git_pull,
+        { noremap = true, silent = true, desc = "Push the latest commits from the remote branch." }
+    )
 end
 
 -- Reference: https://github.com/vim/vim/issues/17187#issuecomment-2820531752
@@ -3876,7 +3915,7 @@ do -- NOTE: Automatically call `:nohlsearch` when moving off of search text
         vim.cmd("nohlsearch")
     end, { desc = "Cancel search highlights.", expr = false })
 
-    -- StopHL function
+    --- Stop highlighting search results, if needed. Basically it's a fancier `:nohlsearch`.
     function _P.stop_highlighting_search_text()
         if vim.v.hlsearch == 0 or vim.api.nvim_get_mode().mode ~= "n" then
             return
@@ -3889,7 +3928,7 @@ do -- NOTE: Automatically call `:nohlsearch` when moving off of search text
         )
     end
 
-    -- highlight_search_text function
+    --- Highlight searched text until the cursor moves away from one of the matches.
     function _P.highlight_search_text()
         local line = vim.api.nvim_get_current_line()
         local col = vim.fn.col(".")
@@ -4014,6 +4053,11 @@ do -- NOTE: The `ii` indentwise text-object
         local current_line = vim.fn.line(".")
         local indent = vim.fn.indent(current_line)
 
+        --- Check `line` to see if we should keep looking for more indented lines.
+        ---
+        ---@param line integer The row in a buffer to check. (A 1-or-more value).
+        ---@return boolean # If we should end the scan, return `true`.
+        ---
         local function _needs_stop(line)
             local text = vim.fn.getline(line)
 
@@ -4146,6 +4190,15 @@ do -- NOTE: Make text-objects to work with `p`. e.g. `piw`
         return function()
             local original = vim.go.operatorfunc
 
+            --- Call operatorfunc with `type_` and then cleanup everything.
+            ---
+            --- We clean up after ourselves so there are no side-effects from
+            --- the operatorfunc work we have been doing up until now.
+            ---
+            ---@param type_ "char" | "line"
+            ---    An indicator from Vim which operator mode we're in.
+            ---    See `:help Operator-pending-mode` for details. e.g. `"char"`.
+            ---
             function _G.temporary_operator_paste(type_)
                 caller(type_)
 
@@ -4504,6 +4557,14 @@ do -- NOTE: Colorscheme
 end
 
 do -- NOTE: auto-pairs functionality
+    --- Whenever `character` is typed, check if we want to move the cursor right instead.
+    ---
+    --- If `character` like `")"` is already in the buffer and is the cursor is
+    --- immediately to the left of it, typing another `")"` means "don't
+    --- actually insert a second `")"`, just move me outside of the `"()"` pair.
+    ---
+    ---@param character string An ending character. e.g. `")"`.
+    ---
     local function _define_close_mapping(character)
         vim.keymap.set("i", character, function()
             local line = vim.api.nvim_get_current_line()
@@ -4518,10 +4579,16 @@ do -- NOTE: auto-pairs functionality
         end, { expr = true, desc = "Decide whether to type a closing character or move to the right, instead." })
     end
 
+    --- Whenever `open` is typed, also type `close` and place the cursor between them.
+    ---
+    ---@param open string A starting character. e.g. `"("`.
+    ---@param close string An ending character. e.g. `")"`.
+    ---
     local function _define_open_mapping(open, close)
+        local reverse_characters = string.rep("<Left>", #close)
+
         vim.keymap.set("i", open, function()
-            -- NOTE: Assume that `cloes` is only one character.
-            return open .. close .. "<Left>"
+            return open .. close .. reverse_characters
         end, { expr = true, desc = "Create an open + close pair and move the cursor to the middle." })
     end
 
@@ -4529,6 +4596,8 @@ do -- NOTE: auto-pairs functionality
         ["("] = ")",
         ["["] = "]",
         ["{"] = "}",
+
+        -- TODO: These symmetric-pair characters don't work as mappings yet. Fix them later.
         ["'"] = "'",
         ['"'] = '"',
         ["`"] = "`",
@@ -4906,6 +4975,13 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
         vim.cmd.resize(10)
     end
 
+    --- Keep the current terminal mode and then passthrough `keys`.
+    ---
+    --- This function is intended to be used with a keymap with `expr = true`.
+    ---
+    ---@param keys string The original keymap to run.
+    ---@return fun(): string # The wrapped function.
+    ---
     local function _save_terminal_state(keys)
         return function()
             _handle_term_leave(vim.fn.bufnr())
@@ -5128,7 +5204,6 @@ do -- NOTE: A native "EasyMotion" snippet
         _run_easy_motion,
         { desc = "Jump anywhere on-screen. Just type 2 consecutive characters to where you want to go." }
     )
-
 end
 
 do
@@ -5232,7 +5307,6 @@ do
 
         return { bg = color_details.fg, bold = true, fg = background_details.background }
     end
-    -- TODO: something here asdfasdfasasdf more text
 
     -- TODO: We could memoize the arg + result here.
     function _P.get_text_color(color)
@@ -5255,10 +5329,20 @@ do
         return { fg = data.fallback, bold = true }
     end
 
+    --- Get the Vim highlighter that will be used for the comment prefix tag.
+    ---
+    ---@param text string The prefix name. e.g. "Todo".
+    ---@return string # The full highlighter name. e.g. `"MyTodoHighlightMatch"`.
+    ---
     function _P.get_match_foreground_highlight_name(text)
         return string.format("My%sHighlightMatch", text)
     end
 
+    --- Get the Vim highlighter that will be used for the user's actual comment text.
+    ---
+    ---@param text string The prefix name. e.g. "Todo".
+    ---@return string # The full highlighter name. e.g. `"MyTodoHighlightText"`.
+    ---
     function _P.get_text_foreground_highlight_name(text)
         return string.format("My%sHighlightText", text)
     end
@@ -5293,29 +5377,49 @@ do
         return start
     end
 
-    function _P.highlight_matching_line(buffer, highlight_groups, index, columns)
-        local line = index - 1
-        local match_end_column = columns.match.end_column - 1
+    --- Highlight the line that matched a "tagged" inline comment.
+    ---
+    ---@param buffer integer
+    ---    The Vim buffer to highlight.
+    ---@param highlight_groups _my.comment.HighlightGroup
+    ---    A Vim highlight groups to apply to each text region.
+    ---@param line integer
+    ---    The text row to highlight (0-or-more number).
+    ---@param columns my.comment._TagColumns
+    ---    The colume range data that we need to highlight the tag properly.
+    ---
+    function _P.highlight_matching_line(buffer, highlight_groups, line, columns)
+        local priority = 200
+        local match_end_column = columns.tag_text.last - 1
 
-        vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, columns.match.start_column, {
+        -- "NOTE: This highlights the tag prefix.
+        vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, columns.tag_text.first, {
             end_col = match_end_column,
             hl_group = highlight_groups.match_highlight_name,
-            priority = 100,
+            priority = priority,
         })
 
+        -- NOTE: This conceals any language-related syntax surrounding the tag prefix.
+        -- vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, columns.tag_text.first, {
+        --     end_col = columns.tag_text.last,
+        --     hl_group = highlight_groups.match_conceal_highlight_name,
+        --     priority = priority,
+        -- })
         vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, match_end_column, {
-            end_col = columns.match.end_column,
+            end_col = columns.tag_text.last,
             hl_group = highlight_groups.match_conceal_highlight_name,
-            priority = 100,
+            priority = priority,
         })
 
-        vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, columns.text.start_column, {
-            end_col = columns.text.end_column,
+        -- NOTE: This highlights the actual comment (the text that comes after the tag).
+        vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, columns.tag_text.first, {
+            end_col = columns.tag_text.last,
             hl_group = highlight_groups.text_highlight_name,
-            priority = 100,
+            priority = priority,
         })
     end
 
+    -- TODO: Add support for this later
     function _P.highlight_other_lines(buffer, highlight_name, start_line, end_line, lines)
         local current = start_line
 
@@ -5323,6 +5427,7 @@ do
         end
     end
 
+    -- TODO: Remove this later?
     -- function _P.iter_comment_lines(buffer)
     --     local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
     --     local commentstring = vim.bo.commentstring
@@ -5349,6 +5454,10 @@ do
     --     end
     -- end
 
+    --- Use standard Lua regex to find and highlight all inline comments.
+    ---
+    ---@param buffer integer A Vim buffer to highlight.
+    ---
     function _P.highlight_using_vim_commentstring_regex(buffer)
         local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
         local commentstring = vim.bo.commentstring
@@ -5368,9 +5477,10 @@ do
                     local match_end_column = start_column + (end_match - start_match) + 2
                     local end_line = _P.get_end_line(index, lines)
 
-                    _P.highlight_matching_line(buffer, highlight_groups, index, {
-                        match = { start_column = start_column, end_column = match_end_column },
-                        text = { start_column = match_end_column, end_column = #lines[end_line] },
+                    _P.highlight_matching_line(buffer, highlight_groups, index - 1, {
+                        tag_text = { first = start_column, last = match_end_column },
+                        tag_bounds = { first = start_column, last = match_end_column },
+                        comment_text = { first = match_end_column, last = #lines[end_line] },
                     })
 
                     _P.highlight_other_lines(buffer, highlight_groups.text_highlight_name, index + 1, end_line, lines)
@@ -5383,10 +5493,19 @@ do
         end
     end
 
+    --- Use tree-sitter to find and highlight all inline comments.
+    ---
+    ---@param buffer integer A Vim buffer to highlight.
+    ---@param tree TSTree The parsed tree-sitter graph.
+    ---
     local function _highlight_using_neovim_treesitter(buffer, tree)
         error("TODO: add support for _highlight_using_neovim_treesitter later")
     end
 
+    --- Highlight all inline comments that start with some known tag. e.g. `"NOTE"`.
+    ---
+    --- We use tree-sitter to find the comments if we can. And use regex if we can't.
+    ---
     local function _highlight_comments()
         local buffer = vim.api.nvim_get_current_buf()
         local status, parser = pcall(function()
@@ -5478,6 +5597,11 @@ do -- NOTE: Add mksession support.
     end
 
     --- Keep track of the current Vim Session.vim, if there is one.
+    ---
+    ---@param session string
+    ---    The path on-disk to write a session file. We will
+    ---    also make a VCS-root session file too, if needed.
+    ---
     function _P.save_session(session)
         vim.cmd("mksession! " .. session)
 
@@ -5536,19 +5660,10 @@ do -- NOTE: Add mksession support.
         _P.save_session(session)
         vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
         vim.uv.fs_copyfile(session, path)
-<<<<<<< HEAD
-    end,
-    {
-        nargs = 0,
-        desc = "Write a session to the current git repository's branch.",
-    }
-    )
-=======
     end, {
         nargs = 0,
         desc = "Write a session to the current git repository's branch.",
     })
->>>>>>> 7f6b01d (Added a desc to SessionWrite)
 end
 
 -- TODO: Once `SessionLoadPre` exists, use that instead of this

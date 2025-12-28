@@ -1,5 +1,5 @@
-- Consolidate the type names. Some start with my, others start with _my, and the name-scheme isn't well thoughtout
-- Add git branch + session support for the bookmarks
+- Add quickscope support
+- Add `G[it]` Vim Command wrapper
 
 - Add a <CR> mapping in normal mode in the selection GUI buffer. It's annoying to have to switch to insert mode to confirm the selection every time
 
@@ -17,8 +17,6 @@
 - Make startup faster
 
 - Add pairwise mappings. e.g. "", '', ``, etc
-- Make the statusline actually good-looking
- - Fix the git branch display code. Since it's busted.
 
 - Add "grapple.nvim, for sessions" support (it should save and restore bookmarks per-git-branch)
 
@@ -53,6 +51,10 @@ _privat|e_thing -> dav -> _thing
 - Add noice.nvim (TODO, FIXME, IMPORTANT, NOTE, XXX, PERF)
 
 - Add auto-= sign
+
+- Add Cli-based mark support
+ - Async-update whenever the file is changed
+  - e.g. Run `mypy` on a python file
 
 - Fix the <C-hjkl> mappings
  - needs to work

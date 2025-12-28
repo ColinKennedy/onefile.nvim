@@ -1,16 +1,16 @@
 local _P = {}
 
----@class my._datatypes.IntBounds An inclusive or exclusive pair of integers.
+---@class _my._datatypes.IntBounds An inclusive or exclusive pair of integers.
 ---@field first integer The starting value.
 ---@field last integer The ending value.
 
----@class my.comment._TagColumns
+---@class _my.comment._TagColumns
 ---    A description of the first line of a "tagged" inline comment.
----@field tag_text my._datatypes.IntBounds
+---@field tag_text _my._datatypes.IntBounds
 ---    The exact range where a matched tag's text starts and ends.
----@field tag_bounds my._datatypes.IntBounds
+---@field tag_bounds _my._datatypes.IntBounds
 ---    The outer range of "the tag's text + the surrounding characters".
----@field comment_text my._datatypes.IntBounds
+---@field comment_text _my._datatypes.IntBounds
 ---    The actual user inline comment, without the tag.
 
 ---@class _my.completion.Data All Snippet-internal data used during callbacks.
@@ -94,15 +94,6 @@ local _P = {}
 ---@field buffer integer The Vim buffer of the terminal.
 ---@field mode string The last Vim mode (NORMAL, TERMINAL, etc).
 
----@class _neovim.quickfix.BaseEntry
----@field col integer
----@field filename string
----@field lnum integer
----@field text string
-
----@class _neovim.quickfix.Entry : _neovim.quickfix.BaseEntry
----@field bufnr integer
-
 local _ALL_CONTIGUOUS_PROJECT_ROOT_MARKERS = { "CMakeLists.txt", "__init__.py" }
 local _ENGLISH_LANGUAGE = "en"
 
@@ -173,6 +164,8 @@ local _VIM_SESSION_FILE_NAME = "Session.vim"
 local _VIMSCRIPT_COMMENT_MARKER = '"'
 
 local _SESSIONX_NAME = "Sessionx.vim"
+
+local _IS_NERDFONT_ALLOWED = false
 
 -- luacheck: push ignore
 unpack = unpack or table.unpack
@@ -293,6 +286,11 @@ end
 
 --- Remove leading spaces across all snippets.
 function _P.dedent_snippets()
+    --- Remove all common, leading whitespace from text.
+    ---
+    ---@param text string Some blob of text that probably contains leading whitespaces.
+    ---@return string # Keep internal indentation but remove all common indentation across all lines.
+    ---
     local function _dedent(text)
         text = text:gsub("\n[ ]+$", "\n")
 
@@ -626,6 +624,7 @@ function _P.debounce_trailing(caller, timeout, first)
     local wrapped
 
     if not first then
+        --- Debounce `caller` and use the last arguments of the last debounced call.
         function wrapped(...)
             local argv = { ... }
             local argc = select("#", ...)
@@ -647,6 +646,7 @@ function _P.debounce_trailing(caller, timeout, first)
     else
         local argv, argc
 
+        --- Debounce `caller` and use the first arguments of the last debounced call.
         function wrapped(...)
             argv = argv or { ... }
             argc = argc or select("#", ...)
@@ -1339,6 +1339,10 @@ end
 ---@param buffer integer | string A 0-or-more buffer to modify
 ---
 function _P.reset_bookmark(mark, buffer)
+    --- Save the current buffer, call `caller`, and then return to the current buffer.
+    ---
+    ---@param caller fun(): nil Something to call and restore later.
+    ---
     local function _return_to_current_buffer(caller)
         local current_buffer = vim.api.nvim_get_current_buf()
         local success, message = pcall(caller)
@@ -1452,21 +1456,22 @@ end
 ---@param command string The git command to run. e.g. `"pull"`, `"push"`, etc.
 ---
 function _P.run_git_generic_command(command)
+    --- Print success or failure, depending on `result`.
+    ---
+    ---@param result vim.SystemCompleted Some CLI command data to check for a return code.
+    ---
     local function _notify_on_error(result)
         if result.code == 0 then
-            vim.schedule(function() vim.notify(string.format("`git %s` completed successfully.", command), vim.log.levels.INFO) end)
+            vim.schedule(function()
+                vim.notify(string.format("`git %s` completed successfully.", command), vim.log.levels.INFO)
+            end)
 
             return
         end
 
-        vim.schedule(
-            function()
-                vim.notify(
-                    string.format('`git %s` failed with error: "%s"', command, result.stderr),
-                    vim.log.levels.ERROR
-                )
-            end
-        )
+        vim.schedule(function()
+            vim.notify(string.format('`git %s` failed with error: "%s"', command, result.stderr), vim.log.levels.ERROR)
+        end)
     end
 
     vim.system({ _GIT_EXECUTABLE, command }, { text = true }, _notify_on_error):wait()
@@ -1534,7 +1539,7 @@ function _P.run_ripgrep(command)
             return
         end
 
-        ---@type _neovim.quickfix.BaseEntry[]
+        ---@type vim.quickfix.entry[]
         local entries = {}
 
         for line in vim.gsplit(obj.stdout or "", "\n") do
@@ -1977,7 +1982,12 @@ end
 ---    A function run to run on-selection. e.g. "open the file in a buffer".
 ---
 function _P.select_from_options(values, options)
-
+    --- Pass `value` through and just return it.
+    ---
+    ---@generic T : any
+    ---@param value T Some value to return.
+    ---@return T # The returned value.
+    ---
     local function _passthrough(value)
         return value
     end
@@ -2300,7 +2310,7 @@ end
 
 --- Load current bookmarks into the quickfix list.
 function _P.show_bookmarks()
-    ---@type _neovim.quickfix.Entry[]
+    ---@type vim.quickfix.entry[]
     local quickfix_entries = {}
 
     for index = _BOOKMARK_MINIMUM, _BOOKMARK_MAXIMUM do
@@ -2516,7 +2526,9 @@ function SessionManager.new()
     self._callbacks = {} ---@type table<string, fun(): string>
 
     vim.api.nvim_create_autocmd("SessionWritePost", {
-        callback = function() self:write_current_session() end
+        callback = function()
+            self:write_current_session()
+        end,
     })
 
     return self
@@ -2570,7 +2582,6 @@ function SessionManager:_get_header_vcs_text(root)
 
     return string.format("\" SESSION MANAGER v1.0.0: '%s'", vim.pesc(branch))
 end
-
 
 --- Read `path` for a SessionManager-backed branch name.
 ---
@@ -2642,7 +2653,6 @@ function SessionManager:register_session_write_pre_callback(name, callback)
     self._callbacks[name] = callback
 end
 
-
 --- Check if our Sessionx.vim is out of date and, if so, replace it.
 ---
 --- If someone externally altered the git branch or something, the current
@@ -2691,7 +2701,7 @@ function SessionManager:write_current_session()
         error(string.format('Directory "%s" has no VCS root. Cannot sync a session.', directory))
     end
 
-    local paths = {}  ---@type string[]
+    local paths = {} ---@type string[]
 
     for name, callback in pairs(self._callbacks) do
         local destination = _P.get_branch_path(name, root)
@@ -2708,7 +2718,7 @@ function SessionManager:write_current_session()
     handler:write(self:_get_header_vcs_text(root) .. "\n")
 
     for _, path in ipairs(paths) do
-        handler:write(string.format('source %s', path), "\n")
+        handler:write(string.format("source %s", path), "\n")
     end
 
     handler:close()
@@ -2717,12 +2727,15 @@ function SessionManager:write_current_session()
     vim.uv.fs_copyfile(sessionx_destination, root_destination)
 end
 
-
 local _SESSION_MANAGER = SessionManager.new()
-
 
 --- Unset the bookmark if it is set or set it if it's not set.
 function _P.toggle_bookmark_in_current_buffer()
+    --- Delete and re-add all bookmarks.
+    ---
+    --- Bookmarks can sometimes become internally messy and tis function just
+    --- forces them to be clean and contiguous.
+    ---
     local function _refresh_all_bookmark_values()
         ---@type {index: integer?, path: string?}[]
         local buffers = {}
@@ -2749,6 +2762,7 @@ function _P.toggle_bookmark_in_current_buffer()
         end
     end
 
+    --- Add the current buffer to the bookmarks list if it isn't already.
     local function _add_current_buffer_if_needed()
         local current_buffer = vim.api.nvim_get_current_buf()
         ---@type integer[]
@@ -2859,7 +2873,8 @@ function _P.get_git_branch_safe(path)
     return branch
 end
 
-function get_git_branch_label_safe()
+---@return string # Get a human-readable git branch name, if possible.
+function _P.get_git_branch_label_safe()
     local command = { _GIT_EXECUTABLE, "rev-parse", "--abbrev-ref", "HEAD" }
 
     if not _P.exists_command(command[1]) then
@@ -2878,7 +2893,15 @@ function get_git_branch_label_safe()
         return "<No git branch found>"
     end
 
-    return " " .. branch
+    local git_prefix
+
+    if _IS_NERDFONT_ALLOWED then
+        git_prefix = " "
+    else
+        git_prefix = "git "
+    end
+
+    return git_prefix .. branch
 end
 
 ---@return string # Get the position in the current file.
@@ -3396,7 +3419,7 @@ vim.keymap.set("n", "k", function()
     end
 
     return "m'" .. vim.v.count .. "k"
-end, { desc =  "Include numbered-up-movements in Vim's jumplist", expr = true })
+end, { desc = "Include numbered-up-movements in Vim's jumplist", expr = true })
 
 vim.keymap.set("n", "j", function()
     if vim.v.count <= 1 then
@@ -3405,7 +3428,6 @@ vim.keymap.set("n", "j", function()
 
     return "m'" .. vim.v.count .. "j"
 end, { desc = "Include numbered-down-movements in Vim's jumplist", expr = true })
-
 
 -- Reference: https://github.com/neovim/neovim/issues/21422#issue-1497443707
 vim.keymap.set(
@@ -3818,8 +3840,12 @@ do -- NOTE: git-related keymaps
     ---    The path on-disk that is on or underneath a git repository.
     ---
     function _P.run_git_command(command, directory)
+        --- Print `object` to the user.
+        ---
+        ---@param object any Some object to inspect and print.
+        ---
         local function _on_fail(object)
-            vim.notify(string.format('Command failed: Got "%s" error.', vim.inspect(object)))
+            vim.notify(string.format('Command failed: Got "%s" error.', vim.inspect(object)), vim.log.levels.ERROR)
         end
 
         ---@type string[]
@@ -3896,11 +3922,7 @@ do -- NOTE: Automatically call `:nohlsearch` when moving off of search text
             return
         end
 
-        vim.api.nvim_feedkeys(
-            vim.api.nvim_replace_termcodes(_PLUG_MAPPING, true, false, true),
-            "m",
-            false
-        )
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(_PLUG_MAPPING, true, false, true), "m", false)
     end
 
     --- Highlight searched text until the cursor moves away from one of the matches.
@@ -3919,7 +3941,7 @@ do -- NOTE: Automatically call `:nohlsearch` when moving off of search text
 
     vim.api.nvim_create_autocmd("CursorMoved", {
         group = _GROUP,
-        callback = _P.highlight_search_text
+        callback = _P.highlight_search_text,
     })
 
     vim.api.nvim_create_autocmd("InsertEnter", {
@@ -3929,10 +3951,10 @@ do -- NOTE: Automatically call `:nohlsearch` when moving off of search text
 end
 
 do -- NOTE: A grapple.nvim replacement using only native Neovim
-   --
-   -- Reference:
-   --     https://www.reddit.com/r/neovim/comments/1js5bg8/comment/mloidmn/?utm_source=share&utm_medium=web3x&utm_name=web3xcss
-   --
+    --
+    -- Reference:
+    --     https://www.reddit.com/r/neovim/comments/1js5bg8/comment/mloidmn/?utm_source=share&utm_medium=web3x&utm_name=web3xcss
+    --
 
     for index = _BOOKMARK_MINIMUM, _BOOKMARK_MAXIMUM do
         local mark = _P.get_vim_mark_from_bookmark_index(index)
@@ -4010,19 +4032,36 @@ do -- NOTE: Remove trailing whitespace from modified lines
 end
 
 do -- NOTE: The `ii` indentwise text-object
-    local function first_non_whitespace_col(line)
+    --- Find the first column that is not whitespace for some `line`.
+    ---
+    ---@param line integer | string The 1-or-more index of some Vim buffer to search for text.
+    ---@return integer # A 1-or-more found column value.
+    ---
+    local function _get_first_non_whitespace_column(line)
         line = vim.fn.getline(line)
         local _, column = string.find(line, "^%s*")
 
         return column and (column + 1) or 1 -- Lua is 1-indexed
     end
 
-    local function last_non_whitespace_col(line)
+    --- Find the last column that is not whitespace for some `line`.
+    ---
+    ---@param line integer | string The 1-or-more index of some Vim buffer to search for text.
+    ---@return integer # A 1-or-more found column value.
+    ---
+    local function _get_last_non_whitespace_column(line)
         line = vim.fn.getline(line)
         local trimmed = string.match(line, "^(.-)%s*$")
         return #trimmed + 1 -- again, Lua is 1-indexed
     end
 
+    --- Select all lines with the same indentation.
+    ---
+    ---@param allow_empty_line boolean
+    ---    If `false` then "same indentation or
+    ---    greater" are selected. If `true` then empty newlines are also included
+    ---    in the selection.
+    ---
     local function select_same_indent(allow_empty_line)
         allow_empty_line = allow_empty_line or false
         local current_line = vim.fn.line(".")
@@ -4077,9 +4116,9 @@ do -- NOTE: The `ii` indentwise text-object
 
         _P.set_text_object_marks(
             start_line,
-            first_non_whitespace_col(start_line) - 1,
+            _get_first_non_whitespace_column(start_line) - 1,
             end_line,
-            last_non_whitespace_col(end_line) - 2
+            _get_last_non_whitespace_column(end_line) - 2
         )
     end
 
@@ -4089,51 +4128,6 @@ do -- NOTE: The `ii` indentwise text-object
     vim.keymap.set({ "o", "x" }, "iI", function()
         select_same_indent(true)
     end, { desc = "Select block with same indentation, ignore whitespace lines." })
-end
-
-do -- NOTE: Statusline definition
-    ---@return string # The Neovim statusline for saved grapple buffers
-    function get_grapple_statusline()
-        ---@type string[]
-        local output = {}
-        local current_buffer = vim.api.nvim_get_current_buf()
-
-        for index, buffer_number, buffer_path in _P.iter_bookmarks() do
-            local buffer_name = vim.fs.basename(buffer_path)
-            local group = "%#StatusGrappleInactive#"
-
-            if buffer_number == current_buffer then
-                group = "%#StatusGrappleActive#"
-            end
-
-            table.insert(output, group)
-            table.insert(output, string.format("%s. %s", index, buffer_name))
-        end
-
-        if vim.tbl_isempty(output) then
-            return ""
-        end
-
-        return " " .. table.concat(output, " ") .. " "
-    end
-
-    vim.o.statusline = table.concat({
-        " ",
-        "%#StatusGit# ",
-        "%{%v:lua.get_git_branch_safe()%} ",
-        "%#StatusGitAfter# ",
-        "%{%v:lua.get_grapple_statusline()%} ",
-        "%=", -- Spacer
-        "%#StatusPosition# Ln %l, Col %c ",
-        "%#StatusProgress# [%{v:lua.get_window_line_progress()}] ",
-    })
-
-    vim.api.nvim_set_hl(0, "StatusLine", { bg = "#333333" })
-    vim.api.nvim_set_hl(0, "StatusGit", { link = "Special" })
-    vim.api.nvim_set_hl(0, "StatusPosition", { link = "Comment" })
-    vim.api.nvim_set_hl(0, "StatusProgress", { link = "Comment" })
-    vim.api.nvim_set_hl(0, "StatusGrappleInactive", { link = "Comment" })
-    vim.api.nvim_set_hl(0, "StatusGrappleActive", { link = "Special" })
 end
 
 do -- NOTE: Make text-objects to work with `p`. e.g. `piw`
@@ -4368,7 +4362,6 @@ do -- NOTE: Colorscheme
     vim.api.nvim_set_hl(0, "PreCondit", _STATEMENT)
     vim.api.nvim_set_hl(0, "PreProc", _STATEMENT)
     vim.api.nvim_set_hl(0, "Question", _NOTE_10_FG)
-    vim.api.nvim_set_hl(0, "QuickFixLine", _multi_2(_SEARCH_FG, _SEARCH_BG))
     vim.api.nvim_set_hl(0, "Repeat", _STATEMENT)
     vim.api.nvim_set_hl(0, "Search", _multi_2(_SEARCH_FG, _TITLE_BG)) -- Searched, non-selected text
     vim.api.nvim_set_hl(0, "SignColumn", _BG)
@@ -4533,6 +4526,100 @@ do -- NOTE: Colorscheme
 
     -- Neovim 0.10+ ships Python queries that break backwards compatibility
     vim.api.nvim_set_hl(0, "@variable", { link = "Identifier" })
+end
+
+do -- NOTE: Statusline definition
+    local _ModeColor = {
+        c = "#e5c07b", -- NOTE: Sand
+        i = "#61afef", -- NOTE: Cyan
+        n = "#98c379", -- NOTE: Pale-ish green
+
+        V = "#803a95", -- NOTE: Saturated purple
+        v = "#c678dd", -- NOTE: Light purple
+        ["\22"] = "#a37eae", -- NOTE: This is CTRL-V mode. It's pale purple
+    }
+
+    --- Define a new `name` highlight based on `source` + `overrides`.
+    ---
+    ---@param name string
+    ---    The highlight to make (or reuse).
+    ---@param source string
+    ---    The existing Vim highlight group to draw from.
+    ---@param overrides vim.api.keyset.highlight?
+    ---    Any highlight options to layer on top of `source`.
+    ---
+    function _P.clone_highlight(name, source, overrides)
+        ---@type vim.api.keyset.highlight
+        local highlight = {}
+        highlight = vim.tbl_extend("force", highlight, vim.api.nvim_get_hl(0, { name = source, link = false }))
+
+        for key, value in pairs(overrides or {}) do
+            highlight[key] = value
+        end
+
+        vim.api.nvim_set_hl(0, name, highlight)
+    end
+
+    ---@return string # The Neovim statusline for saved grapple buffers
+    function get_grapple_statusline()
+        ---@type string[]
+        local output = {}
+        local current_buffer = vim.api.nvim_get_current_buf()
+
+        for index, buffer_number, buffer_path in _P.iter_bookmarks() do
+            local buffer_name = vim.fs.basename(buffer_path)
+            local group = "%#StatusGrappleInactive#"
+
+            if buffer_number == current_buffer then
+                group = "%#StatusGrappleActive#"
+            end
+
+            table.insert(output, group)
+            table.insert(output, string.format("%s. %s", index, buffer_name))
+        end
+
+        if vim.tbl_isempty(output) then
+            return ""
+        end
+
+        return " " .. table.concat(output, " ") .. " "
+    end
+
+    local dark_lefthand_background = "#2c323c" -- NOTE: Blueish-dark gray
+    local lighter_background = "#3e4452" -- NOTE: Just a bit lighter than `dark_lefthand_background`
+
+    vim.api.nvim_set_hl(0, "StatusMode", {}) -- NOTE: We auto-replace the `bg` in another section.
+    vim.api.nvim_set_hl(0, "StatusLine", { fg = "#dddddd", bg = dark_lefthand_background })
+    vim.api.nvim_set_hl(0, "StatusGit", { bg = lighter_background })
+
+    _P.clone_highlight("StatusPosition", "Comment", { fg = "#aaaaaa", bg = lighter_background })
+    _P.clone_highlight("StatusProgress", "Comment", { fg = "#aaaaaa", bg = lighter_background })
+    _P.clone_highlight("StatusGrappleInactive", "Comment", { bg = dark_lefthand_background })
+    _P.clone_highlight("StatusGrappleActive", "Special", { bold = true, bg = dark_lefthand_background })
+
+    -- NOTE: This redefines `_P.get_git_branch_label_safe` as a global function.
+    _G.get_git_branch_label_safe = _P.get_git_branch_label_safe
+
+    vim.o.statusline = table.concat({
+        "%#StatusMode#   ",
+        "%#StatusGit# ",
+        "%{%v:lua.get_git_branch_label_safe()%} ",
+        "%#StatusGitAfter# ",
+        "%{%v:lua.get_grapple_statusline()%} ",
+        "%=", -- Spacer
+        "%#StatusLine#",
+        "%#StatusPosition# %l:%c",
+        "%#StatusProgress# [%{v:lua.get_window_line_progress()}] ",
+        "%#StatusMode#   ",
+    })
+
+    vim.api.nvim_create_autocmd({ "ModeChanged", "InsertEnter" }, {
+        callback = function(args)
+            local mode = args.match:sub(3, 3)
+            local color = _ModeColor[mode] or _ModeColor.n
+            _P.clone_highlight("StatusMode", "StatusMode", { bg = color })
+        end,
+    })
 end
 
 do -- NOTE: auto-pairs functionality
@@ -4711,10 +4798,10 @@ do -- NOTE: If at the edge of the Neovim tab, move to the nearest tmux pane inst
 end
 
 do -- NOTE: Basic [obsidian](https://obsidian.md) support
-   --
-   -- Instead of supporting
-   -- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim), which is
-   -- a huge I just port the commands that I want to keep. And I only need a few commands.
+    --
+    -- Instead of supporting
+    -- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim), which is
+    -- a huge I just port the commands that I want to keep. And I only need a few commands.
 
     -- NOTE: obsidian.nvim separates the top-level note data from the rest of the
     -- document using these characters.
@@ -4795,7 +4882,7 @@ do -- NOTE: Basic [obsidian](https://obsidian.md) support
 
         for _, path in ipairs(vim.fn.glob(template, true, true)) do
             for _, alias in ipairs(_P.get_aliases(path)) do
-                table.insert(found, {display=alias, value=path})
+                table.insert(found, { display = alias, value = path })
             end
         end
 
@@ -4815,7 +4902,6 @@ do -- NOTE: Basic [obsidian](https://obsidian.md) support
         { nargs = 0, desc = "Load obsidian.nvim notes in using their alias name." }
     )
 end
-
 
 do -- NOTE: Print the current word (It's https://github.com/andrewferrier/debugprint.nvim, basically)
     local _COUNTER = 1
@@ -5169,7 +5255,12 @@ do -- NOTE: A lightweight "toggleterminal". Use <space>T to open and close it.
     end
 
     _P.setup_autocommands()
-    vim.keymap.set("n", "<space>T", _toggle_terminal, { desc = "Toggle [T]erminal, in a split at the bottom of the current tab." })
+    vim.keymap.set(
+        "n",
+        "<space>T",
+        _toggle_terminal,
+        { desc = "Toggle [T]erminal, in a split at the bottom of the current tab." }
+    )
 
     -- NOTE: Allow quick and easy movement out of a terminal buffer using just <C-hjkl>
     vim.keymap.set({ "n", "t" }, "<C-h>", _save_terminal_state("<C-\\><C-n><C-w>h"), {
@@ -5388,9 +5479,9 @@ do
     function _P.get_match_color(color)
         local color_details = _P.get_text_color(color)
         -- TODO: Check this highlight group later
-        local background_details = vim.api.nvim_get_hl_by_name("Normal", true)
+        local background_details = vim.api.nvim_get_hl(0, { name = "Normal" })
 
-        return { bg = color_details.fg, bold = true, fg = background_details.background }
+        return { bg = color_details.fg, bold = true, fg = background_details.fg }
     end
 
     -- TODO: We could memoize the arg + result here.
@@ -5398,15 +5489,13 @@ do
         local data = _COLOR_TYPES[color] or _COLOR_TYPES.default
 
         for _, link in ipairs(data.links) do
-            local status, result = pcall(function()
-                return vim.api.nvim_get_hl_by_name(link, true)
-            end)
+            local status, result = pcall(vim.api.nvim_get_hl, 0, { name = link })
 
             if status then
-                if result.background then
-                    return { fg = result.background, bold = false }
+                if result.bg then
+                    return { fg = result.bg, bold = false }
                 else
-                    return { fg = result.foreground, bold = false }
+                    return { fg = result.fg, bold = false }
                 end
             end
         end
@@ -5457,6 +5546,12 @@ do
         end
     end
 
+    --- Check for the last inline comment line, of `lines`, starting from `start`.
+    ---
+    ---@param start integer The first line to check from, inclusive.
+    ---@param lines string[] The source code lines to check for more comments.
+    ---@return integer # The last comment line. If none are found, `start` is returned.
+    ---
     function _P.get_end_line(start, lines)
         -- TODO: Add support for this later
         return start
@@ -5470,7 +5565,7 @@ do
     ---    A Vim highlight groups to apply to each text region.
     ---@param line integer
     ---    The text row to highlight (0-or-more number).
-    ---@param columns my.comment._TagColumns
+    ---@param columns _my.comment._TagColumns
     ---    The colume range data that we need to highlight the tag properly.
     ---
     function _P.highlight_matching_line(buffer, highlight_groups, line, columns)

@@ -5270,13 +5270,12 @@ do -- NOTE: A native "EasyMotion" snippet
                         absolute_index = absolute_index + 1
 
                         if absolute_index > #_CHARACTERS then
-                            goto break_outer
+                            return output
                         end
                     end
                 end
             end
         end
-        ::break_outer::
 
         return output
     end

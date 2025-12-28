@@ -884,31 +884,6 @@ function _P.get_fuzzy_match_score(input, target)
     return score
 end
 
----@return string # The Neovim statusline for saved grapple buffers
-function _P.get_grapple_statusline()
-    ---@type string[]
-    local output = {}
-    local current_buffer = vim.api.nvim_get_current_buf()
-
-    for index, buffer_number, buffer_path in _P.iter_bookmarks() do
-        local buffer_name = vim.fs.basename(buffer_path)
-        local group = "%#StatusGrappleInactive#"
-
-        if buffer_number == current_buffer then
-            group = "%#StatusGrappleActive#"
-        end
-
-        table.insert(output, group)
-        table.insert(output, string.format("%s. %s", index, buffer_name))
-    end
-
-    if vim.tbl_isempty(output) then
-        return ""
-    end
-
-    return " " .. table.concat(output, " ") .. " "
-end
-
 ---@return string[] # Every file or directory on-disk that could be helpfiles.
 function _P.get_helptag_search_paths()
     -- TODO: Fix type-hint in Neovim core, later
@@ -4117,37 +4092,41 @@ do -- NOTE: The `ii` indentwise text-object
 end
 
 do -- NOTE: Statusline definition
-    local _SHUTDOWN_STATUSLINE = false
-    local _TIMER = vim.uv.new_timer()
+    ---@return string # The Neovim statusline for saved grapple buffers
+    function get_grapple_statusline()
+        ---@type string[]
+        local output = {}
+        local current_buffer = vim.api.nvim_get_current_buf()
 
-    if not _TIMER then
-        error("A new timer could not be created.", 0)
-    end
+        for index, buffer_number, buffer_path in _P.iter_bookmarks() do
+            local buffer_name = vim.fs.basename(buffer_path)
+            local group = "%#StatusGrappleInactive#"
 
-    -- NOTE: Update the statusline every 10 ms (0.01 seconds)
-    _TIMER:start(
-        0,
-        10,
-        vim.schedule_wrap(function()
-            if _SHUTDOWN_STATUSLINE then
-                _TIMER:stop()
-                _TIMER:close()
-
-                return
+            if buffer_number == current_buffer then
+                group = "%#StatusGrappleActive#"
             end
 
-            vim.o.statusline = table.concat({
-                " ",
-                "%#StatusGit# ",
-                get_git_branch_safe(),
-                "%#StatusGitAfter# ",
-                _P.get_grapple_statusline(),
-                "%=", -- Spacer
-                "%#StatusPosition# Ln %l, Col %c ",
-                "%#StatusProgress# [%{v:lua.get_window_line_progress()}] ",
-            })
-        end)
-    )
+            table.insert(output, group)
+            table.insert(output, string.format("%s. %s", index, buffer_name))
+        end
+
+        if vim.tbl_isempty(output) then
+            return ""
+        end
+
+        return " " .. table.concat(output, " ") .. " "
+    end
+
+    vim.o.statusline = table.concat({
+        " ",
+        "%#StatusGit# ",
+        "%{%v:lua.get_git_branch_safe()%} ",
+        "%#StatusGitAfter# ",
+        "%{%v:lua.get_grapple_statusline()%} ",
+        "%=", -- Spacer
+        "%#StatusPosition# Ln %l, Col %c ",
+        "%#StatusProgress# [%{v:lua.get_window_line_progress()}] ",
+    })
 
     vim.api.nvim_set_hl(0, "StatusLine", { bg = "#333333" })
     vim.api.nvim_set_hl(0, "StatusGit", { link = "Special" })

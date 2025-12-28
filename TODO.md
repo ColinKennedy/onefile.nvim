@@ -1,11 +1,22 @@
+- Consolidate the type names. Some start with my, others start with _my, and the name-scheme isn't well thoughtout
+- Add git branch + session support for the bookmarks
+
+- Add a <CR> mapping in normal mode in the selection GUI buffer. It's annoying to have to switch to insert mode to confirm the selection every time
+
 - Add gp mapping
  - It exists but doesn't work with ]p or [p yet. And probably doesn't work with `>p` / `<p` yet. Fix.
 
-- Add :ObsidianAliases
+- Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
+
+- Add a "git statusline" that does not suck
+
+- Need a better "delete tailing whitespace" thing
+
+- when auto-completing, add a mapping to be able to show the documentation of the currently-selected auto-complete thing
 
 - Make startup faster
 
-- Add pairwise mappings. e.g. "", (), {}, etc
+- Add pairwise mappings. e.g. "", '', ``, etc
 - Make the statusline actually good-looking
  - Fix the git branch display code. Since it's busted.
 

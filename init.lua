@@ -4731,6 +4731,113 @@ do -- NOTE: If at the edge of the Neovim tab, move to the nearest tmux pane inst
     end, desc("right"))
 end
 
+do -- NOTE: Basic [obsidian](https://obsidian.md) support
+   --
+   -- Instead of supporting
+   -- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim), which is
+   -- a huge I just port the commands that I want to keep. And I only need a few commands.
+
+    -- NOTE: obsidian.nvim separates the top-level note data from the rest of the
+    -- document using these characters.
+    --
+    local _METADATA_MARKER = "---"
+    -- NOTE: obsidian.nvim uses YAML and aliases is a string[] that starts with "aliases:"
+    local _ALIASES_START_MARKER = "aliases:"
+    local _VAULTS_DIRECTORY = os.getenv("NEOVIM_VAULTS_DIRECTORY") or vim.fs.joinpath("~", "vaults")
+
+    --- Find the alias from `text`, if any.
+    ---
+    ---@param text string The line to query. e.g. ` - some_tag/here`.
+    ---@return string? # The found match, if any.
+    ---
+    function _P.get_alias_text(text)
+        return (string.match(text, "%s*-%s*(.*)"))
+    end
+
+    --- Find all file aliases from some obsidian.nvim note `path`.
+    ---
+    --- Raises:
+    ---     If `path` cannot be read for data.
+    ---
+    ---@param path string An absolute path on-disk to some obsidian note to query from.
+    ---@return string[]  # All found aliases, if any.
+    ---
+    function _P.get_aliases(path)
+        --- Check if `line` defines an alias/title for us to read.
+        ---
+        ---@param line string Some line to check. e.g. `"tags:"`
+        ---@return boolean # If `line` defines the start of a non-alias metadata, return `false`.
+        ---
+        local function _is_alias_line(line)
+            local character = line[1]
+
+            return character and character ~= " "
+        end
+
+        local handler = io.open(path)
+
+        if not handler then
+            error(string.format('File "%s" could not be opened.', path), 0)
+        end
+
+        local started = false
+        local aliases_started = false
+        ---@type string[]
+        local output = {}
+
+        for line in handler:lines() do
+            if line == _METADATA_MARKER then
+                if not started then
+                    started = true
+                else
+                    break
+                end
+            elseif line == _ALIASES_START_MARKER then
+                aliases_started = true
+            elseif aliases_started then
+                local alias = _P.get_alias_text(line)
+
+                if alias then
+                    table.insert(output, alias)
+                elseif not _is_alias_line(line) then
+                    break
+                end
+            end
+        end
+
+        return output
+    end
+
+    --- Search all Obsidian notes across all vaults by-alias (basically by-title).
+    function _P.search_notes_by_aliases()
+        local template = vim.fs.joinpath(_VAULTS_DIRECTORY, "**", "*.md")
+        ---@type _my.selector_gui.entry.Deserialized[]
+        local found = {}
+
+        for _, path in ipairs(vim.fn.glob(template, true, true)) do
+            for _, alias in ipairs(_P.get_aliases(path)) do
+                table.insert(found, {display=alias, value=path})
+            end
+        end
+
+        local window = vim.api.nvim_get_current_win()
+
+        _P.select_from_options(found, {
+            confirm = function(entry)
+                vim.api.nvim_set_current_win(window)
+                vim.cmd.edit(entry.value)
+            end,
+        })
+    end
+
+    vim.api.nvim_create_user_command(
+        "ObsidianAliases",
+        _P.search_notes_by_aliases,
+        { nargs = 0, desc = "Load obsidian.nvim notes in using their alias name." }
+    )
+end
+
+
 do -- NOTE: Print the current word (It's https://github.com/andrewferrier/debugprint.nvim, basically)
     local _COUNTER = 1
 

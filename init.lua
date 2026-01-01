@@ -148,6 +148,8 @@ local _LANGUAGES_CACHE = {}
 
 local _SNIPPETS
 
+local _SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
+
 -- NOTE: Don't mess with this variable unless you know what you're doing.
 ---@type table<string, _my.Snippet>
 local _TRIGGER_TO_SNIPPET_CACHE = {}
@@ -2449,6 +2451,120 @@ function _P.strip_left(text)
     return (text:gsub("^%s*", ""))
 end
 
+local _SESSIONX_NAME = "Sessionx.vim"
+
+local SessionManager = {}
+SessionManager.__index = SessionManager
+
+--- Create a new instance of `SessionManager`.
+function SessionManager.new()
+    local self = setmetatable({}, SessionManager)
+
+    self._callbacks = {} ---@type table<string, fun(): string>
+
+    vim.api.nvim_create_autocmd("SessionWritePost", {
+        callback = function() self:sync_current_session() end
+    })
+
+    return self
+end
+
+--- Write `contents` to `path` easily.
+---
+---@param path string Some file location on-disk to write to.
+---@param contents string The blob of text to write.
+---
+local function write_file(path, contents)
+    local handler = assert(io.open(path, "w"))
+    handler:write(contents)
+    handler:close()
+end
+
+--- Find the "branch-aware" internal session path associated with `name`.
+---
+---@param name string Some unique file name to search within for a path.
+---@param root string Use this path to find the git repository.
+---@return string # The found path. Usually it's `{VCS}/.sessions/{git branch name}/{name}`.
+---
+function _P.get_branch_path(name, root)
+    local branch = _P.get_git_branch_safe(root)
+
+    if not branch then
+        error(string.format('Cannot save "%s" project. No branch was found.', root))
+    end
+
+    return vim.fs.joinpath(root, _SESSIONS_DIRECTORY_NAME, branch, name)
+end
+
+--- Recommend a git branch name to write to some Vimscript.
+---
+---@param root string Use this path to find the git repository.
+---@return string # The Vimscript header to write out to-disk, later.
+---
+function SessionManager:_get_header_vcs_text(root)
+    local path = _P.get_branch_path("placeholder", root)
+    local branch = vim.fs.basename(vim.fs.dirname(path))
+
+    return string.format("\" SESSION MANAGER v1.0.0: '%s'", vim.pesc(branch))
+end
+
+--- Generate a session-related `name` file later, using the output of `callback`.
+---
+---@param name string Some unique file name to register.
+---@param callback fun(): string We call this function to fill `name` with data, later.
+---
+function SessionManager:register_session_write_pre_callback(name, callback)
+    assert(not name:find("[/\\]"), "name must not contain a path")
+
+    local keys = vim.tbl_keys(self._callbacks)
+
+    if vim.tbl_contains(keys, name) then
+        error(string.format('Name "%s" is already in "%s".', name, vim.inspect(keys)))
+    end
+
+    self._callbacks[name] = callback
+end
+
+--- Copy all session-related files to the VCS root.
+---
+--- Raises:
+---     If the session could not be written to-disk.
+---
+function SessionManager:sync_current_session()
+    local directory = vim.fn.getcwd()
+    local root = _P.get_nearest_project_root(directory)
+
+    if not root then
+        error(string.format('Directory "%s" has no VCS root. Cannot sync a session.', directory))
+    end
+
+    local paths = {}  ---@type string[]
+
+    for name, callback in pairs(self._callbacks) do
+        local destination = _P.get_branch_path(name, root)
+        vim.uv.fs_mkdir(vim.fs.dirname(destination), 448) -- NOTE: 448 = 0700
+        write_file(destination, callback())
+        table.insert(paths, destination)
+    end
+
+    local destination = vim.fs.joinpath(root, _SESSIONX_NAME)
+
+    local handler, error_ = io.open(destination, "w")
+    assert(handler, error_)
+
+    handler:write(self:_get_header_vcs_text(root) .. "\n")
+
+    for _, path in ipairs(paths) do
+        handler:write(string.format('source "%s"', path), "\n")
+    end
+
+    handler:close()
+end
+
+
+local _SESSION_MANAGER = SessionManager.new()
+
+
 --- Unset the bookmark if it is set or set it if it's not set.
 function _P.toggle_bookmark_in_current_buffer()
     local function _refresh_all_bookmark_values()
@@ -2504,9 +2620,7 @@ function _P.toggle_bookmark_in_current_buffer()
     _add_current_buffer_if_needed()
     _refresh_all_bookmark_values()
 
-    if vim.g.initial_cwd then
-        _P.write_all_marks_if_possible(vim.fs.joinpath(vim.g.initial_cwd, ".nvim.marks.lua"))
-    end
+    _SESSION_MANAGER:sync_current_session()
 end
 
 --- Open or close the QuickFix window (don't move the cursor to the window).
@@ -2529,34 +2643,6 @@ function _P.toggle_quickfix()
     if info[1] and info[1].quickfix ~= 1 then
         vim.api.nvim_set_current_win(current_window)
     end
-end
-
---- Write mark instructions to-disk at thnge project directory.
----
----@param path string The path on-disk to write.
----@param mode string? A Lua write mode. e.g. "w" / "a".
----
-function _P.write_all_marks_if_possible(path, mode)
-    mode = mode or "w"
-    local handler, message, _ = vim.uv.fs_open(path, mode, 438)
-
-    if not handler then
-        error(("Failed to open: %s\n%s"):format(path, message), 0)
-
-        return
-    end
-
-    local data = _P.serialize_mark_code(vim.fs.dirname(path))
-    local ok
-    ok, message, _ = vim.uv.fs_write(handler, data, 0)
-
-    if not ok then
-        message = ("Failed to write: %s\n%s"):format(path, message)
-        assert(vim.uv.fs_close(handler), 'Path "%s" could not be closed.', path)
-        error(message, 0)
-    end
-
-    assert(vim.uv.fs_close(handler), 'Path "%s" could not be closed.', path)
 end
 
 --- Write `data` to `filename`.
@@ -2586,8 +2672,12 @@ function _P.write_async(filename, data)
     return status, message
 end
 
+--- Find the git branch name, if any.
+---
+---@param path string? Use this path to find the git repository. If not provided, we use Vim's own $PWD instead.
 ---@return string? # Get the current Git branch, if any.
-function get_git_branch_safe(path)
+---
+function _P.get_git_branch_safe(path)
     local command = { _GIT_EXECUTABLE, "rev-parse", "--abbrev-ref", "HEAD" }
 
     if path then
@@ -3695,6 +3785,14 @@ do -- NOTE: A grapple.nvim replacement using only native Neovim
     end, { desc = "Cycle to the previous bookmark." })
     vim.keymap.set("n", "<M-S-l>", _P.show_bookmarks, { desc = "List all bookmarks." })
     vim.keymap.set("n", "<M-S-h>", _P.toggle_bookmark_in_current_buffer, { desc = "Delete bookmark." })
+
+    _SESSION_MANAGER:register_session_write_pre_callback(".nvim.marks.lua", function()
+        local directory = vim.fn.getcwd()
+        local root = _P.get_nearest_project_root(directory)
+        local data = _P.serialize_mark_code(root)
+
+        return table.concat(data, "\n")
+    end)
 end
 
 do -- NOTE: Visualize trailing whitespace
@@ -5197,8 +5295,6 @@ do -- NOTE: Add mksession support.
     -- that later.
     --
 
-    local _SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
-
     --- Find the location on-disk where we should save a Sesssion.vim file.
     ---
     ---@param reference_path string The path on-disk to search for a git / VCS root.
@@ -5216,7 +5312,7 @@ do -- NOTE: Add mksession support.
             return nil
         end
 
-        local branch = get_git_branch_safe()
+        local branch = _P.get_git_branch_safe()
 
         if not branch then
             vim.notify(string.format('Cannot save "%s" project. No branch was found.', root), vim.log.levels.ERROR)

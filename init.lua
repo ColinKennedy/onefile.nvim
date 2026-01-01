@@ -157,6 +157,10 @@ local _TRIGGER_TO_SNIPPET_CACHE = {}
 -- NOTE: This is a normal Vim convention for session names.
 local _VIM_SESSION_FILE_NAME = "Session.vim"
 
+local _VIMSCRIPT_COMMENT_MARKER = '"'
+
+local _SESSIONX_NAME = "Sessionx.vim"
+
 -- luacheck: push ignore
 unpack = unpack or table.unpack
 -- luacheck: pop
@@ -2451,8 +2455,6 @@ function _P.strip_left(text)
     return (text:gsub("^%s*", ""))
 end
 
-local _SESSIONX_NAME = "Sessionx.vim"
-
 local SessionManager = {}
 SessionManager.__index = SessionManager
 
@@ -2463,7 +2465,7 @@ function SessionManager.new()
     self._callbacks = {} ---@type table<string, fun(): string>
 
     vim.api.nvim_create_autocmd("SessionWritePost", {
-        callback = function() self:sync_current_session() end
+        callback = function() self:write_current_session() end
     })
 
     return self
@@ -2496,16 +2498,80 @@ function _P.get_branch_path(name, root)
     return vim.fs.joinpath(root, _SESSIONS_DIRECTORY_NAME, branch, name)
 end
 
+--- Find the currently-active VCS branch name from `root`
+---
+---@param root string Use this path to find the git repository.
+---@return string # The found git branch name.
+---
+function SessionManager:_get_active_branch_name(root)
+    local path = _P.get_branch_path("placeholder", root)
+
+    return vim.fs.basename(vim.fs.dirname(path))
+end
+
 --- Recommend a git branch name to write to some Vimscript.
 ---
 ---@param root string Use this path to find the git repository.
 ---@return string # The Vimscript header to write out to-disk, later.
 ---
 function SessionManager:_get_header_vcs_text(root)
-    local path = _P.get_branch_path("placeholder", root)
-    local branch = vim.fs.basename(vim.fs.dirname(path))
+    local branch = self:_get_active_branch_name(root)
 
     return string.format("\" SESSION MANAGER v1.0.0: '%s'", vim.pesc(branch))
+end
+
+
+--- Read `path` for a SessionManager-backed branch name.
+---
+--- This function assumes there is a header comment at the top file that
+--- indicates the branch.
+---
+---@param path string The Vimscript path on-disk to read.
+---@return string # The found (git) branch name.
+---
+function SessionManager:_get_stored_branch_name(path)
+    local function _get_branch_name(path_)
+        for line in io.lines(path_) do
+            if not line:match("^%s*$") then
+                local stripped = _P.strip_left(line)
+
+                if not vim.startswith(stripped, _VIMSCRIPT_COMMENT_MARKER) then
+                    return nil
+                end
+
+                local match = stripped:match("^%s*\" SESSION MANAGER v%d+[%.%d+]*: '([^']+)'")
+
+                if match then
+                    return match
+                end
+            end
+        end
+
+        return nil
+    end
+
+    local branch = _get_branch_name(path)
+
+    if branch then
+        return branch
+    end
+
+    error(string.format('We couldn\'t find a branch for "%s" path.', path))
+end
+
+--- Get the top-level Sessionx.vim file from some `directory`.
+---
+---@param directory string | integer The child directory to search for a VCS root.
+---@return string # The recommended path (which may or may not exist on-disk).
+---
+function SessionManager:_get_vcs_root_sessionx_file(directory)
+    local root = _P.get_nearest_project_root(directory)
+
+    if not root then
+        error(string.format('Directory "%s" has no VCS root. Cannot sync a session.', directory))
+    end
+
+    return vim.fs.joinpath(root, _SESSIONX_NAME)
 end
 
 --- Generate a session-related `name` file later, using the output of `callback`.
@@ -2525,12 +2591,48 @@ function SessionManager:register_session_write_pre_callback(name, callback)
     self._callbacks[name] = callback
 end
 
+
+--- Check if our Sessionx.vim is out of date and, if so, replace it.
+---
+--- If someone externally altered the git branch or something, the current
+--- Sessionx.vim file on-disk could be out-of-date. This method treats the git
+--- branch as the ground truth and replaces the Sessionx.vim file to match it.
+---
+function SessionManager:sync_current_session()
+    local directory = vim.fn.getcwd()
+    local active_branch = self:_get_active_branch_name(directory)
+    local stored_branch = self:_get_stored_branch_name(self:_get_vcs_root_sessionx_file(directory))
+
+    if active_branch == stored_branch then
+        return
+    end
+
+    local root = _P.get_nearest_project_root(directory)
+
+    if not root then
+        error(string.format('No VCS root was found for "%s" directory.', directory))
+    end
+
+    local sessionx_destination = _P.get_branch_path(_SESSIONX_NAME, root)
+
+    if vim.fn.filereadable(sessionx_destination) ~= 1 then
+        -- NOTE: This would only happen if a session was not saved for the git
+        -- branch at least once already. It's unlikely but could happen. Just
+        -- let it go if it does.
+        --
+        return
+    end
+
+    local root_destination = vim.fs.joinpath(root, _SESSIONX_NAME)
+    vim.uv.fs_copyfile(sessionx_destination, root_destination)
+end
+
 --- Copy all session-related files to the VCS root.
 ---
 --- Raises:
 ---     If the session could not be written to-disk.
 ---
-function SessionManager:sync_current_session()
+function SessionManager:write_current_session()
     local directory = vim.fn.getcwd()
     local root = _P.get_nearest_project_root(directory)
 
@@ -2547,9 +2649,9 @@ function SessionManager:sync_current_session()
         table.insert(paths, destination)
     end
 
-    local destination = vim.fs.joinpath(root, _SESSIONX_NAME)
+    local sessionx_destination = _P.get_branch_path(_SESSIONX_NAME, root)
 
-    local handler, error_ = io.open(destination, "w")
+    local handler, error_ = io.open(sessionx_destination, "w")
     assert(handler, error_)
 
     handler:write(self:_get_header_vcs_text(root) .. "\n")
@@ -2559,6 +2661,9 @@ function SessionManager:sync_current_session()
     end
 
     handler:close()
+
+    local root_destination = vim.fs.joinpath(root, _SESSIONX_NAME)
+    vim.uv.fs_copyfile(sessionx_destination, root_destination)
 end
 
 
@@ -2620,7 +2725,7 @@ function _P.toggle_bookmark_in_current_buffer()
     _add_current_buffer_if_needed()
     _refresh_all_bookmark_values()
 
-    _SESSION_MANAGER:sync_current_session()
+    _SESSION_MANAGER:write_current_session()
 end
 
 --- Open or close the QuickFix window (don't move the cursor to the window).
@@ -2694,7 +2799,7 @@ function _P.get_git_branch_safe(path)
         return nil
     end
 
-    local branch = process.stdout:gsub("\n", "")
+    local branch = vim.split(process.stdout, "\n", { plain = true })[1]
 
     if branch == "" then
         return nil
@@ -5389,3 +5494,6 @@ do -- NOTE: Add mksession support.
     }
     )
 end
+
+-- TODO: Once `SessionLoadPre` exists, use that instead of this
+_SESSION_MANAGER:sync_current_session()

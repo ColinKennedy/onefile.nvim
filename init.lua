@@ -2657,7 +2657,7 @@ function SessionManager:write_current_session()
     handler:write(self:_get_header_vcs_text(root) .. "\n")
 
     for _, path in ipairs(paths) do
-        handler:write(string.format('source "%s"', path), "\n")
+        handler:write(string.format('source %s', path), "\n")
     end
 
     handler:close()

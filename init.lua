@@ -1326,7 +1326,7 @@ function _P.reset_bookmark(mark, buffer)
         local current_buffer = vim.api.nvim_get_current_buf()
         local success, message = pcall(caller)
 
-        vim.cmd.buffer(current_buffer)
+        vim.cmd(string.format("silent buffer %s", current_buffer))
 
         if not success then
             error(message)
@@ -1338,12 +1338,12 @@ function _P.reset_bookmark(mark, buffer)
     -- NOTE: Visit the buffer, then set the mark, then go back to the previous buffer
     if type_ == "string" then
         _return_to_current_buffer(function()
-            vim.cmd.edit(buffer)
+            vim.cmd(string.format("silent edit %s", buffer))
             vim.cmd.mark(mark)
         end)
     elseif type_ == "number" then
         _return_to_current_buffer(function()
-            vim.cmd.buffer(buffer)
+            vim.cmd(string.format("silent buffer %s", buffer))
             vim.cmd.mark(mark)
         end)
     else

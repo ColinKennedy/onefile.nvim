@@ -1,5 +1,5 @@
 - Add quickscope support
-- Add `G[it]` Vim Command wrapper
+- Add tmux pane swapper logic
 
 - Add a <CR> mapping in normal mode in the selection GUI buffer. It's annoying to have to switch to insert mode to confirm the selection every time
 
@@ -7,8 +7,6 @@
  - It exists but doesn't work with ]p or [p yet. And probably doesn't work with `>p` / `<p` yet. Fix.
 
 - Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
-
-- Add a "git statusline" that does not suck
 
 - Need a better "delete tailing whitespace" thing
 
@@ -18,16 +16,12 @@
 
 - Add pairwise mappings. e.g. "", '', ``, etc
 
-- Add "grapple.nvim, for sessions" support (it should save and restore bookmarks per-git-branch)
-
 - Add deferral magic
 
 - Change NOTE sections to go above the do/end blocks
 - Clean the variable names and stuff. Gross
 
 - Consider moving purpose-specific functions into their sections. e.g. grapple-related code goes into its do-block
-
-- Add a thin git command wrapper, maybe
 
 - Add terminal hjkl mappings so it works with tmux too
 - Add [m, ]m, [c, ]c mappings

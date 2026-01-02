@@ -6354,7 +6354,7 @@ do -- NOTE: Better git-diff support. It has git marks + "load the git diff as a 
     )
 end
 
-do  -- NOTE: Add an automated winbar title to the Quickfix window.
+do -- NOTE: Add an automated winbar title to the Quickfix window.
     ---@return string # The recommended Quickfix window title, if any is defined.
     function _P.get_quickfix_winbar_title()
         local info = vim.fn.getqflist({ title = 0 })

@@ -2329,7 +2329,7 @@ function _P.show_bookmarks()
     end
 
     -- Set the quickfix list
-    vim.fn.setqflist(quickfix_entries)
+    vim.fn.setqflist({}, " ", { title = "Bookmarks", items = quickfix_entries })
 
     -- Open the quickfix window if there are bookmarks
     if #quickfix_entries > 0 then
@@ -5915,7 +5915,446 @@ do -- NOTE: A really basic git command wrapper.
     })
 end
 
-do -- NOTE: Add an automated winbar title to the Quickfix window.
+do -- NOTE: Better git-diff support. It has git marks + "load the git diff as a quickfix"
+    ---@class _my.gitsigns.HunkData All of the data to convert git hunks into Vim signs, later.
+    ---@field end_line integer The last line of the hunk. (1-or-more value) (inclusive).
+    ---@field mode string A type of change (added, removed, changed, etc).
+    ---@field relative_path string The path to some file, from the start of the git root.
+    ---@field sign_name string The name of the Vim sign to draw for this hunk.
+    ---@field start_line integer The first line of the hunk. (1-or-more value) (inclusive).
+    ---@field start_text string A summary of the start of the hunk.
+
+    local _GITSIGN_VIM_SIGN_GROUP_ADD_NAME = "GitDiffAddMark"
+    local _GITSIGN_VIM_SIGN_GROUP_CHANGE_NAME = "GitDiffChangeMark"
+    local _GITSIGN_VIM_SIGN_GROUP_DELETE_NAME = "GitDiffDeleteMark"
+    local _GITSIGNS_GROUP_NAME = "my.gitsigns"
+
+    local _GITSIGN_ADD_HIGHLIGHT = "GitDiffAdd"
+    local _GITSIGN_CHANGE_HIGHLIGHT = "GitDiffChange"
+    local _GITSIGN_DELETE_HIGHLIGHT = "GitDiffDelete"
+
+    local _CHANGED_MODE = "~"
+
+    local _MODE_TO_GITSIGN_NAME = {
+        ["+"] = _GITSIGN_VIM_SIGN_GROUP_ADD_NAME,
+        ["-"] = _GITSIGN_VIM_SIGN_GROUP_DELETE_NAME,
+        ["~"] = _GITSIGN_VIM_SIGN_GROUP_CHANGE_NAME,
+    }
+
+    local diff_add_highlight = vim.api.nvim_get_hl(0, { name = "DiffAdd" })
+    local diff_change_highlight = vim.api.nvim_get_hl(0, { name = "DiffChange" })
+    local diff_delete_highlight = vim.api.nvim_get_hl(0, { name = "DiffDelete" })
+    vim.api.nvim_set_hl(0, _GITSIGN_ADD_HIGHLIGHT, { fg = diff_add_highlight.fg })
+    vim.api.nvim_set_hl(0, _GITSIGN_CHANGE_HIGHLIGHT, { bold = true, fg = diff_change_highlight.fg })
+    vim.api.nvim_set_hl(0, _GITSIGN_DELETE_HIGHLIGHT, { bold = true, fg = diff_delete_highlight.fg })
+
+    if _IS_NERDFONT_ALLOWED then
+        vim.fn.sign_define(
+            _GITSIGN_VIM_SIGN_GROUP_ADD_NAME,
+            { text = "┃", texthl = _GITSIGN_ADD_HIGHLIGHT, numhl = "" }
+        )
+        vim.fn.sign_define(
+            _GITSIGN_VIM_SIGN_GROUP_CHANGE_NAME,
+            { text = "┃", texthl = _GITSIGN_CHANGE_HIGHLIGHT, numhl = "" }
+        )
+        vim.fn.sign_define(
+            _GITSIGN_VIM_SIGN_GROUP_DELETE_NAME,
+            { text = "_", texthl = _GITSIGN_DELETE_HIGHLIGHT, numhl = "" }
+        )
+    else
+        vim.fn.sign_define(
+            _GITSIGN_VIM_SIGN_GROUP_ADD_NAME,
+            { text = "|", texthl = _GITSIGN_ADD_HIGHLIGHT, numhl = "" }
+        )
+        vim.fn.sign_define(
+            _GITSIGN_VIM_SIGN_GROUP_CHANGE_NAME,
+            { text = "|", texthl = _GITSIGN_CHANGE_HIGHLIGHT, numhl = "" }
+        )
+        vim.fn.sign_define(
+            _GITSIGN_VIM_SIGN_GROUP_DELETE_NAME,
+            { text = "_", texthl = _GITSIGN_DELETE_HIGHLIGHT, numhl = "" }
+        )
+    end
+
+    ---@alias _my.gitsign._HunkState.mode "+" | "-" | "~"
+
+    ---@class _my.gitsign._HunkState
+    ---@field path string?
+    ---@field start_line_anchor integer?
+    ---@field start_line_offset integer?
+    ---@field mode_found boolean
+    ---@field line_range_offset integer
+    ---@field mode _my.gitsign._HunkState.mode
+    ---@field start_line integer?
+    ---@field start_text string?
+
+    local HunkState = {}
+    HunkState.__index = HunkState
+
+    --- Create a new mutable, partial hunk instance with `options`.
+    ---
+    ---@param options {path: string?, start_line_anchor: number?}? Non-default overrides.
+    ---@return _my.gitsign._HunkState # The new instance.
+    ---
+    function HunkState.new(options)
+        local self = setmetatable({}, HunkState)
+
+        options = options or {}
+
+        self.path = options.path
+        self.start_line_anchor = options.start_line_anchor
+        self.start_line_offset = 0
+        self.mode_found = false
+        self.line_range_offset = 0
+        self.mode = nil
+        self.start_line = nil
+        self.start_text = nil
+
+        return self
+    end
+
+    ---@return boolean # If this has everything it needs to run `to_hunk_data`, return `true`.
+    function HunkState:is_fully_described()
+        if self.path and self.start_line_anchor and self.mode then
+            return true
+        end
+
+        return false
+    end
+
+    ---@return _my.gitsigns.HunkData # A copy of this instance with filled-out fields.
+    function HunkState:to_hunk_data()
+        return {
+            end_line = self.start_line + self.line_range_offset - 1,
+            mode = self.mode,
+            relative_path = self.path,
+            sign_name = _MODE_TO_GITSIGN_NAME[self.mode],
+            start_line = self.start_line,
+            start_text = self.start_text,
+        }
+    end
+
+    --- Convert `entries` from our internal representation to something Vim quickfix can understand.
+    ---
+    ---@param entries _my.gitsigns.HunkData[] Raw hunk data to convert.
+    ---@return vim.quickfix.entry[] # The converted values.
+    ---
+    function _P.get_git_diff_as_quickfix_list(entries)
+        ---@type vim.quickfix.entry[]
+        local output = {}
+        local mode_to_label = {
+            ["+"] = "A",
+            ["-"] = "D",
+            ["~"] = "C",
+        }
+
+        for _, entry in ipairs(entries) do
+            table.insert(output, {
+                end_lnum = entry.end_line,
+                filename = entry.relative_path,
+                lnum = entry.start_line,
+                text = entry.start_text,
+                type = mode_to_label[entry.mode] or entry.mode,
+            })
+        end
+
+        return output
+    end
+
+    --- Get all git-diff-related hunks for `path`.
+    ---
+    ---@param options {path: string?, root: string?}?
+    ---    If `path` is given, we only get the diff of that path. If no path is
+    ---    given, all hunks across all files are queried instead. If `root` is
+    ---    given then the git command will be run from the POV of that root
+    ---    directory.
+    ---@return _my.gitsigns.HunkData[]
+    ---    The found hunks across all of `path` or across all files.
+    ---
+    function _P.get_git_hunks(options)
+        -- A typical diff looks like this:
+        --
+        --```diff
+        --diff --git some_file.md some_file.md
+        --index 2639f46..0c6b2bc 100644
+        ----- some_file.md
+        --+++ some_file.md
+        --@@ -1,6 +1,11 @@
+        -- - Add quickscope support
+        -- - Add tmux pane swapper logic
+        --
+        --+- Create a quick git-adder
+        --+ - e.g. starting with `require("my_custom.utilities.git_diff").load_git_diff()`
+        --```
+        --
+        -- Some things to remember:
+        -- - The `+++ some_file.md` line the current file name
+        -- - In the `@@ -1,6 +1,11 @@` line, the first number is line anchor number
+        -- - Every added line starts with a `+`
+        -- - Every removed line starts with a `-`
+        -- - (This could be wrong but) Every changed line is a contiguous list
+        --   of lines that either start with `+` and then become `-` or vice-versa
+        -- - You have to compute the real line number manually because the diff
+        --   doesn't just say it exactly.
+
+        local command = "git diff --no-prefix --relative"
+        options = options or {}
+
+        if options.root then
+            command = string.format("%s -C %s", command, options.root)
+        end
+
+        if options.path then
+            command = string.format("%s -- %s", command, options.path)
+        end
+
+        local current_hunk = HunkState.new()
+        ---@type _my.gitsigns.HunkData[]
+        local output = {}
+
+        --- Add the currently-processed hunk to our output if it is ready for copying.
+        local function _add_hunk_if_able()
+            if current_hunk:is_fully_described() then
+                table.insert(output, current_hunk:to_hunk_data())
+            end
+        end
+
+        for _, line in ipairs(vim.fn.systemlist(command)) do
+            local found_line_anchor = _P.get_hunk_line_anchor(line)
+
+            if found_line_anchor then
+                -- NOTE: The start of a new hunk also means the end of the
+                -- previous hunk (if any).
+                --
+                _add_hunk_if_able()
+                current_hunk = HunkState.new({ path = current_hunk.path, start_line_anchor = found_line_anchor - 1 })
+            end
+
+            if current_hunk.start_line_anchor then
+                current_hunk.start_line_offset = current_hunk.start_line_offset + 1
+                local mode = _P.get_hunk_mode(line)
+
+                if not mode then
+                    if current_hunk.mode_found then
+                        -- NOTE: We reached the end of a hunk.
+                        --
+                        -- IMPORTANT: I think this `mode_found` is paranoia and
+                        -- probably not actually needed. But it's harmless so
+                        -- let's keep it.
+                        --
+                        _add_hunk_if_able()
+                        current_hunk = HunkState.new({ path = current_hunk.path })
+                    end
+                else
+                    current_hunk.mode_found = true
+
+                    if mode == "+" then
+                        -- NOTE: Only added lines count towards the line range total.
+                        current_hunk.line_range_offset = current_hunk.line_range_offset + 1
+                    end
+
+                    if not current_hunk.start_line then
+                        -- NOTE: Since `mode` is non-empty, we finally found
+                        -- the "real" starting line. Compute and and remember
+                        -- it for later.
+                        --
+                        current_hunk.start_line = current_hunk.start_line_anchor + current_hunk.start_line_offset - 1
+                        current_hunk.start_text = line
+                    end
+
+                    if current_hunk.mode and mode ~= current_hunk.mode then
+                        -- NOTE: If we found a line that differs from the current mode
+                        -- then we must be "changing" the lines in this hunk.
+                        --
+                        current_hunk.mode = _CHANGED_MODE
+                    else
+                        current_hunk.mode = mode
+                    end
+                end
+            end
+
+            local found_path = _P.get_hunk_path(line)
+
+            if found_path then
+                -- NOTE: We changed files, which means the previous hunk is done.
+                _add_hunk_if_able()
+                current_hunk = HunkState.new({ path = found_path, start_line_anchor = current_hunk.start_line_anchor })
+            end
+        end
+
+        -- NOTE: Get the last hunk, if there is one.
+        _add_hunk_if_able()
+
+        return output
+    end
+
+    --- Get the top-level git repository path, starting from `root`.
+    ---
+    ---@param root string A directory on-disk that is on or underneath the git repository.
+    ---@return string? # The found git repository root directory on-disk, if any.
+    ---
+    function _P.get_git_root(root)
+        local result = vim.system({ "git", "-C", root, "rev-parse", "--show-toplevel" }, { text = true }):wait()
+
+        if result.code ~= 0 then
+            return nil
+        end
+
+        return (result.stdout:gsub("\n$", ""))
+    end
+
+    --- Find the line number that starts a git diff hunk, using `text`.
+    ---
+    ---@param text string Some git diff line marker. e.g. `"@@ -1,6 +1,11 @@"`.
+    ---@return integer? # The 1-or-more found line number, if any.
+    ---
+    function _P.get_hunk_line_anchor(text)
+        local sign, value = text:match("^@@%s+[+-]%d+,%d+%s+([+-])(%d+)")
+
+        if not sign or not value then
+            return nil
+        end
+
+        local number = tonumber(value)
+
+        if sign == "-" then
+            number = -1 * number
+        end
+
+        return number
+    end
+
+    --- Check if `text` defines a git hunk for some file.
+    ---
+    ---@param text string Some raw diff text to check. e.g. `"+++ foo.md"`.
+    ---@return string? # The found, git-relative file path, if any.
+    ---
+    function _P.get_hunk_path(text)
+        return (text:match("^%+%+%+%s+(%S+)"))
+    end
+
+    --- Parse `text` for git-diff-related information.
+    ---
+    --- Every git diff line either starts with `"+"` or `"-"`.
+    ---
+    ---@param text string Some raw unified diff text. e.g. `"+some added text"`.
+    ---@return _my.gitsign._HunkState.mode? # The found mode, if any.
+    ---
+    function _P.get_hunk_mode(text)
+        local sign = text:match("^([+-])[^%1]?")
+
+        if not sign then
+            return nil
+        end
+
+        if text:sub(1, 3) == sign .. sign .. sign then
+            return nil
+        end
+
+        return sign
+    end
+
+    local function elide_left(text, maximum)
+        maximum = maximum or 40
+        local count = #text
+
+        if count <= maximum then
+            return text
+        end
+
+        return "..." .. text:sub(count - maximum, count)
+    end
+    --- Run `git diff` from `directory` and add set the quickfix list with the results.
+    ---
+    ---@param directory string An absolute or relative path to some git repository.
+    ---
+    function _P.load_git_diff_as_quickfix_list(directory)
+        directory = directory or vim.fn.getcwd()
+        local entries = _P.get_git_diff_as_quickfix_list(_P.get_git_hunks({ root = directory }))
+
+        if vim.tbl_isempty(entries) then
+            vim.notify('Directory "' .. directory .. '" has no git diff.', vim.log.levels.ERROR)
+
+            return
+        end
+
+        local root = _P.get_git_root(directory)
+        local title --[[@as string]]
+
+        if root then
+            local repository_name = vim.fs.basename(root)
+            title = repository_name
+        else
+            title = elide_left(directory, 30)
+        end
+
+        vim.fn.setqflist({}, " ", { title = string.format("Git Diff: %s", title), items = entries })
+        vim.cmd.copen()
+    end
+
+    --- Add git-related marks to the Vim `buffer`.
+    ---
+    --- This function does nothing if `buffer` is not a git-tracked file on-disk.
+    ---
+    function _P.load_git_marks_if_needed()
+        local buffer = vim.api.nvim_get_current_buf()
+        local full_buffer_path = vim.api.nvim_buf_get_name(buffer)
+
+        if vim.fn.filereadable(full_buffer_path) ~= 1 then
+            -- NOTE: If the buffer isn't on-disk then there's no way git is
+            -- tracking it. So just exit early.
+            --
+            return
+        end
+
+        local root = _P.get_git_root(vim.fs.dirname(full_buffer_path))
+
+        if not root then
+            error("The current buffer is not in a git repository. Cannot continue.")
+        end
+
+        local entries = _P.get_git_hunks({ path = full_buffer_path, root = root })
+        vim.fn.sign_unplace(_GITSIGNS_GROUP_NAME, { buffer = buffer })
+
+        local signs = {} --[[ @as vim.fn.sign_placelist.list.item[] ]]
+
+        for _, entry in ipairs(entries) do
+            local full_git_path = vim.fs.joinpath(root, entry.relative_path)
+
+            if full_git_path == full_buffer_path then
+                local name = entry.sign_name
+
+                for line = entry.start_line, entry.end_line do
+                    table.insert(signs, {
+                        group = _GITSIGNS_GROUP_NAME,
+                        buffer = buffer,
+                        id = 0, -- NOTE: Just use an auto-generated ID.
+                        lnum = line,
+                        name = name,
+                    })
+                end
+            end
+
+            vim.fn.sign_placelist(signs)
+        end
+    end
+
+    vim.api.nvim_create_autocmd({ "BufWinEnter", "FileChangedShellPost" }, { callback = _P.load_git_marks_if_needed })
+
+    vim.api.nvim_create_autocmd(
+        { "TextChanged", "TextChangedI" },
+        { callback = _P.debounce_trailing(_P.load_git_marks_if_needed, 200) }
+    )
+
+    vim.keymap.set(
+        "n",
+        "<leader>gq",
+        _P.load_git_diff_as_quickfix_list,
+        { desc = "Load the current [g]it diff as a [q]uickfix window.", expr = false }
+    )
+end
+
+do  -- NOTE: Add an automated winbar title to the Quickfix window.
     ---@return string # The recommended Quickfix window title, if any is defined.
     function _P.get_quickfix_winbar_title()
         local info = vim.fn.getqflist({ title = 0 })

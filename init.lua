@@ -2662,7 +2662,14 @@ end
 function SessionManager:sync_current_session()
     local directory = vim.fn.getcwd()
     local active_branch = self:_get_active_branch_name(directory)
-    local stored_branch = self:_get_stored_branch_name(self:_get_vcs_root_sessionx_file(directory))
+
+    local root_session = self:_get_vcs_root_sessionx_file(directory)
+
+    if vim.fn.filereadable(root_session) ~= 1 then
+        return
+    end
+
+    local stored_branch = self:_get_stored_branch_name(root_session)
 
     if active_branch == stored_branch then
         return

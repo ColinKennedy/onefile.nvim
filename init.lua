@@ -816,6 +816,23 @@ function _P.get_deferred_shell_command_results(command, on_fail)
     return output
 end
 
+--- Crop `text` if it is longer than `maximum`.
+---
+---@param text string A long message that possibly crop.
+---@param maximum integer? A 1-or-more value. If not given, a "good" default value is used.
+---@return string # The simplified text.
+---
+function _P.get_elided_left_text(text, maximum)
+    maximum = maximum or 40
+    local count = #text
+
+    if count <= maximum then
+        return text
+    end
+
+    return "..." .. text:sub(count - maximum, count)
+end
+
 --- Rate how closely `target` matches `input`.
 ---
 ---@param input string
@@ -3764,7 +3781,6 @@ do -- NOTE: Commands
     })
 end
 
-
 do -- NOTE: Write `:messages` to a buffer
     vim.api.nvim_create_user_command("Messages", function()
         local bufnr = vim.api.nvim_create_buf(false, true)
@@ -3777,7 +3793,6 @@ do -- NOTE: Write `:messages` to a buffer
         vim.api.nvim_win_set_buf(winnr, bufnr)
     end, { desc = "Dump all (Neo)vim messages to a read-only buffer", nargs = 0 })
 end
-
 
 do -- NOTE: Keymaps
     vim.keymap.set(
@@ -4831,7 +4846,8 @@ do -- NOTE: Basic [obsidian](https://obsidian.md) support
     local _METADATA_MARKER = "---"
     -- NOTE: obsidian.nvim uses YAML and aliases is a string[] that starts with "aliases:"
     local _ALIASES_START_MARKER = "aliases:"
-    local _VAULTS_DIRECTORY = os.getenv("NEOVIM_VAULTS_DIRECTORY") or vim.fs.joinpath("~", "vaults")
+    local _CURRENT_WORKSPACE = "politics"
+    local _ROOT = os.getenv("NEOVIM_VAULTS_DIRECTORY") or vim.fs.joinpath(vim.fn.expand("~"), "vaults")
 
     --- Find the alias from `text`, if any.
     ---
@@ -4896,9 +4912,79 @@ do -- NOTE: Basic [obsidian](https://obsidian.md) support
         return output
     end
 
+    --- Use `title` to recommend a simplified ID for the Obsidian note.
+    ---
+    ---@param title string Some word or phrase to make into a note.
+    ---@return string # The generated ID.
+    ---
+    function _P.get_note_identifier(title)
+        local suffix = ""
+
+        if title ~= nil and title ~= "" then
+            suffix = title
+                :gsub("%s+", "-") -- spaces → hyphens
+                :gsub("[^A-Za-z0-9-]", "") -- strip invalid chars
+                :lower()
+        else
+            for _ = 1, 4 do
+                suffix = suffix .. string.char(math.random(65, 90))
+            end
+        end
+
+        return tostring(os.time()) .. "-" .. suffix
+    end
+
+    ---@return string # The absolute path on-disk where all workspaces should be.
+    function _P.get_vaults_root_path()
+        return _ROOT
+    end
+
+    ---@return string # The absolute path on-disk where the workspace should be.
+    function _P.get_workspace_path()
+        return vim.fs.joinpath(_ROOT, _CURRENT_WORKSPACE)
+    end
+
+    --- Make a note in an Obsidian vault.
+    ---
+    ---@param title string Some word or phrase to identify the note.
+    ---
+    function _P.create_note(title)
+        local vault = _P.get_workspace_path()
+        local identifier = _P.get_note_identifier(title)
+        local path = vim.fs.joinpath(vault, identifier .. ".md")
+
+        if vim.fn.filereadable(path) == 1 then
+            vim.notify(string.format('Note "%s" already exists.', identifier), vim.log.levels.INFO)
+            vim.cmd.edit(path)
+
+            return
+        end
+
+        local date = os.date("%Y-%m-%d")
+        local time = os.date("%H:%M")
+
+        local lines = {
+            "---",
+            "id: " .. identifier,
+            "date: " .. date,
+            "time: " .. time,
+            "aliases:",
+            "  - " .. title,
+            "tags: []",
+            "---",
+            "",
+            "# " .. title,
+            "",
+        }
+
+        vim.fn.mkdir(vim.fs.dirname(path), "p")
+        vim.fn.writefile(lines, path)
+        vim.cmd.edit(path)
+    end
+
     --- Search all Obsidian notes across all vaults by-alias (basically by-title).
     function _P.search_notes_by_aliases()
-        local template = vim.fs.joinpath(_VAULTS_DIRECTORY, "**", "*.md")
+        local template = vim.fs.joinpath(_ROOT, "**", "*.md")
         ---@type _my.selector_gui.entry.Deserialized[]
         local found = {}
 
@@ -4918,11 +5004,73 @@ do -- NOTE: Basic [obsidian](https://obsidian.md) support
         })
     end
 
+    --- Change Obsidian's workspace to `name`.
+    ---
+    ---@param name string The workspace on-disk to point to. e.g. `"personal"`.
+    ---
+    function _P.set_workspace_name(name)
+        _CURRENT_WORKSPACE = name
+    end
+
+    --- Select a new current Obsidian workspace in a pop-up GUI.
+    function _P.select_workspace()
+        local vault_root = _P.get_vaults_root_path()
+
+        ---@type string[]
+        local directories = {}
+
+        -- TODO: Make this async later
+        local entries = vim.fn.readdir(vault_root, nil)
+
+        for _, name in ipairs(entries) do
+            local full = vim.fs.joinpath(vault_root, name)
+
+            if vim.fn.isdirectory(full) == 1 then
+                table.insert(directories, full)
+            end
+        end
+
+        if vim.tbl_isempty(directories) then
+            vim.notify(string.format('No vaults found in "%s" directory.', vault_root), vim.log.levels.WARN)
+
+            return
+        end
+
+        table.sort(directories)
+
+        vim.ui.select(directories, {
+            prompt = "Select Obsidian workspace:",
+        }, function(choice)
+            if not choice then
+                return
+            end
+
+            _P.set_workspace_name(choice)
+
+            vim.notify("Obsidian workspace set to: " .. choice, vim.log.levels.INFO)
+        end)
+    end
+
     vim.api.nvim_create_user_command(
         "ObsidianAliases",
         _P.search_notes_by_aliases,
         { nargs = 0, desc = "Load obsidian.nvim notes in using their alias name." }
     )
+
+    vim.api.nvim_create_user_command(
+        "ObsidianSetWorkspace",
+        _P.select_workspace,
+        { desc = "Select a persistent Obsidian workspace" }
+    )
+
+    vim.api.nvim_create_user_command("Note", function(opts)
+        local _strip_whitespace = function(text)
+            return (text:match("^%s*(.-)%s*$"))
+        end
+
+        local title = _strip_whitespace(table.concat(opts.fargs, " "))
+        _P.create_note(title)
+    end, { nargs = "?", desc = "Make a new Obsidian note." })
 end
 
 do -- NOTE: Print the current word (It's https://github.com/andrewferrier/debugprint.nvim, basically)

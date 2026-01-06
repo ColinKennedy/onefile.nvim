@@ -791,7 +791,6 @@ function _P.get_deferred_shell_command_results(command, on_fail)
         end
     end)
 
-    -- TODO: Inline this later?
     local function generate_value(i)
         return options[i]
     end
@@ -2917,12 +2916,10 @@ function _P.get_git_branch_label_safe()
         return "<No git branch found>"
     end
 
-    local git_prefix
+    local git_prefix = "git "
 
     if _IS_NERDFONT_ALLOWED then
         git_prefix = " "
-    else
-        git_prefix = "git "
     end
 
     return git_prefix .. branch
@@ -4982,6 +4979,11 @@ do -- NOTE: Basic [obsidian](https://obsidian.md) support
         vim.cmd.edit(path)
     end
 
+    --- Show the Obsidian workspace that notes will be created / searched / etc within.
+    function _P.print_current_workspace()
+        vim.notify(string.format('Current Workspace: "%s"', _CURRENT_WORKSPACE), vim.log.levels.INFO)
+    end
+
     --- Search all Obsidian notes across all vaults by-alias (basically by-title).
     function _P.search_notes_by_aliases()
         local template = vim.fs.joinpath(_ROOT, "**", "*.md")
@@ -5055,6 +5057,12 @@ do -- NOTE: Basic [obsidian](https://obsidian.md) support
         "ObsidianAliases",
         _P.search_notes_by_aliases,
         { nargs = 0, desc = "Load obsidian.nvim notes in using their alias name." }
+    )
+
+    vim.api.nvim_create_user_command(
+        "ObsidianGetWorkspace",
+        _P.print_current_workspace,
+        { desc = "Select a persistent Obsidian workspace" }
     )
 
     vim.api.nvim_create_user_command(

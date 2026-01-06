@@ -4625,35 +4625,63 @@ do -- NOTE: Statusline definition
     vim.api.nvim_set_hl(0, "StatusMode", {}) -- NOTE: We auto-replace the `bg` in another section.
     vim.api.nvim_set_hl(0, "StatusLine", { fg = "#dddddd", bg = dark_lefthand_background })
     vim.api.nvim_set_hl(0, "StatusGit", { bg = lighter_background })
+    vim.api.nvim_set_hl(0, "StatusLightArrow", { fg = lighter_background, bg = dark_lefthand_background })
 
     _P.clone_highlight("StatusPosition", "Comment", { fg = "#aaaaaa", bg = lighter_background })
     _P.clone_highlight("StatusProgress", "Comment", { fg = "#aaaaaa", bg = lighter_background })
     _P.clone_highlight("StatusGrappleInactive", "Comment", { bg = dark_lefthand_background })
     _P.clone_highlight("StatusGrappleActive", "Special", { bold = true, bg = dark_lefthand_background })
 
+    local left_arrow = ">"
+    local right_arrow = "<"
+
+    if _IS_NERDFONT_ALLOWED then
+        -- NOTE: Technically these are regular unicodes, not nerd font. But whatever.
+        left_arrow = ""
+        right_arrow = ""
+    end
+
     -- NOTE: This redefines `_P.get_git_branch_label_safe` as a global function.
     _G.get_git_branch_label_safe = _P.get_git_branch_label_safe
 
     vim.o.statusline = table.concat({
         "%#StatusMode#   ",
+        "%#StatusModeArrow#",
+        left_arrow,
         "%#StatusGit# ",
         "%{%v:lua.get_git_branch_label_safe()%} ",
-        "%#StatusGitAfter# ",
+        "%#StatusLightArrow#",
+        left_arrow,
         "%{%v:lua.get_grapple_statusline()%} ",
         "%=", -- Spacer
+        "%#StatusLightArrow# ",
+        right_arrow,
         "%#StatusLine#",
         "%#StatusPosition# %l:%c",
         "%#StatusProgress# [%{v:lua.get_window_line_progress()}] ",
+        "%#StatusModeArrow#",
+        right_arrow,
         "%#StatusMode#   ",
     })
+
+    --- Set the statusbar colors according to `mode`.
+    ---
+    ---@param mode string The Neovim mode to display. e.g. `"n"` shows NORMAL mode colors.
+    ---
+    local function update_status_mode_colors(mode)
+        local color = _ModeColor[mode] or _ModeColor.n
+        _P.clone_highlight("StatusMode", "StatusMode", { bg = color })
+        _P.clone_highlight("StatusModeArrow", "StatusMode", { fg = color, bg = lighter_background })
+    end
 
     vim.api.nvim_create_autocmd({ "ModeChanged", "InsertEnter" }, {
         callback = function(args)
             local mode = args.match:sub(3, 3)
-            local color = _ModeColor[mode] or _ModeColor.n
-            _P.clone_highlight("StatusMode", "StatusMode", { bg = color })
+            update_status_mode_colors(mode)
         end,
     })
+
+    update_status_mode_colors(vim.api.nvim_get_mode().mode)
 end
 
 do -- NOTE: auto-pairs functionality

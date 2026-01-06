@@ -5050,13 +5050,13 @@ do -- NOTE: Basic [obsidian](https://obsidian.md) support
         local directories = {}
 
         -- TODO: Make this async later
-        local entries = vim.fn.readdir(vault_root, nil)
+        local entries = vim.fn.readdir(vault_root)
 
         for _, name in ipairs(entries) do
             local full = vim.fs.joinpath(vault_root, name)
 
             if vim.fn.isdirectory(full) == 1 then
-                table.insert(directories, full)
+                table.insert(directories, name)
             end
         end
 

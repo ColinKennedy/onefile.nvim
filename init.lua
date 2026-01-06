@@ -6062,7 +6062,7 @@ do -- NOTE: Add mksession support.
 end
 
 -- TODO: Once `SessionLoadPre` exists, use that instead of this
-_SESSION_MANAGER:sync_current_session()
+pcall(function() _SESSION_MANAGER:sync_current_session() end)
 
 do -- NOTE: A really basic git command wrapper.
     vim.api.nvim_create_user_command("Git", function(opts)

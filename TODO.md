@@ -1,3 +1,4 @@
+- Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
 - Add quickscope support
 - Add tmux pane swapper logic
 
@@ -5,12 +6,6 @@
 
 - Add gp mapping
  - It exists but doesn't work with ]p or [p yet. And probably doesn't work with `>p` / `<p` yet. Fix.
-
-- Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
-
-- Need a better "delete tailing whitespace" thing
-
-- when auto-completing, add a mapping to be able to show the documentation of the currently-selected auto-complete thing
 
 - Make startup faster
 

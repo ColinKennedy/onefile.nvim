@@ -4123,14 +4123,14 @@ do -- NOTE: Remove trailing whitespace but only on lines you've modified.
             vim.api.nvim_buf_attach(0, false, {
                 on_lines = function(_, buffer, _, first_line, _, last_line)
                     vim.schedule(function()
-                        for index=first_line + 1,last_line do
+                        for index = first_line + 1, last_line do
                             _LINES[buffer] = _LINES[buffer] or {}
                             _LINES[buffer][index] = true
                         end
                     end)
                 end,
             })
-        end
+        end,
     })
 
     vim.api.nvim_create_autocmd("BufWritePre", {
@@ -6136,7 +6136,9 @@ do -- NOTE: Add mksession support.
 end
 
 -- TODO: Once `SessionLoadPre` exists, use that instead of this
-pcall(function() _SESSION_MANAGER:sync_current_session() end)
+pcall(function()
+    _SESSION_MANAGER:sync_current_session()
+end)
 
 do -- NOTE: A really basic git command wrapper.
     vim.api.nvim_create_user_command("Git", function(opts)

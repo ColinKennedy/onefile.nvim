@@ -4742,7 +4742,7 @@ do -- NOTE: Statusline definition
     ---
     ---@param mode string The Neovim mode to display. e.g. `"n"` shows NORMAL mode colors.
     ---
-    local function update_status_mode_colors(mode)
+    function _P.update_status_mode_colors(mode)
         local color = _ModeColor[mode] or _ModeColor.n
         _P.clone_highlight("StatusMode", "StatusMode", { bg = color })
         _P.clone_highlight("StatusModeArrow", "StatusMode", { fg = color, bg = lighter_background })
@@ -4751,11 +4751,11 @@ do -- NOTE: Statusline definition
     vim.api.nvim_create_autocmd({ "ModeChanged", "InsertEnter" }, {
         callback = function(args)
             local mode = args.match:sub(3, 3)
-            update_status_mode_colors(mode)
+            _P.update_status_mode_colors(mode)
         end,
     })
 
-    update_status_mode_colors(vim.api.nvim_get_mode().mode)
+    _P.update_status_mode_colors(vim.api.nvim_get_mode().mode)
 end
 
 do -- NOTE: auto-pairs functionality

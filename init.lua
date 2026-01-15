@@ -832,7 +832,6 @@ function _P.get_elided_left_text(text, maximum)
     return "..." .. text:sub(count - maximum, count)
 end
 
-
 --- Compute the levenshtein distance between `a` and `b`.
 ---
 ---@param a string
@@ -886,7 +885,6 @@ end
 ---@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
 ---
 function _P.get_fuzzy_match_score(query, candidate)
-
     --- Remove all punctuation and special characters and lowercase `text`.
     ---
     ---@param text string The user input string to simplify.
@@ -1017,7 +1015,6 @@ end
 --
 --     return score
 -- end
-
 
 ---@return string[] # Every file or directory on-disk that could be helpfiles.
 function _P.get_helptag_search_paths()
@@ -2371,7 +2368,9 @@ function _P.serialize_mark_code(directory)
             local path = vim.fn.expand(mark.file)
 
             if directory then
-                local success, relative = pcall(function() return vim.fs.relpath(directory, path) end)
+                local success, relative = pcall(function()
+                    return vim.fs.relpath(directory, path)
+                end)
 
                 if success and relative then
                     path = relative

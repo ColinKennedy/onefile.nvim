@@ -2219,6 +2219,10 @@ end
 ---@return string[] # All of the Lua source-code.
 ---
 function _P.serialize_mark_code(directory)
+    if directory then
+        directory = vim.fn.expand(directory)
+    end
+
     ---@type string[]
     local output = {}
     local marks = _P.get_marks_mapping()
@@ -2229,18 +2233,14 @@ function _P.serialize_mark_code(directory)
         local mark = marks["'" .. mark_character]
 
         if mark and mark.file ~= "" then
-            local path = mark.file
+            local path = vim.fn.expand(mark.file)
 
             if directory then
-                local relative = vim.fs.relpath(directory, mark.file)
+                local success, relative = pcall(function() return vim.fs.relpath(directory, path) end)
 
-                if not relative then
-                    error(
-                        string.format('Path "%s" could not be made relative to "%s" directory.', mark.file, directory)
-                    )
+                if success and relative then
+                    path = relative
                 end
-
-                path = relative
             end
 
             local _, line, column, _ = unpack(mark.pos)

@@ -832,73 +832,192 @@ function _P.get_elided_left_text(text, maximum)
     return "..." .. text:sub(count - maximum, count)
 end
 
---- Rate how closely `target` matches `input`.
+
+--- Compute the levenshtein distance between `a` and `b`.
 ---
----@param input string
----    Some user text to look for. e.g. `"fb"`.
----@param target string
----    The possible text to match against. e.g. `"football"`.
----@return integer?
----    If no match, return `nil`. If a strong match, return `0`. Weaker matches
----    will be higher numbers.
+---@param a string
+---    A word or phrase to match against.
+---@param b string
+---    A word or phrase to match against.
+---@return number
+---    Some number indicating similarity between `a` and `b`. Higher values
+---    means they are not similar and 0 means "it's an exact match".
 ---
-function _P.get_fuzzy_match_score(input, target)
-    local input_lower = input:lower()
-    local target_lower = target:lower()
-    local position = 1
-    local score = 0
-    local last_match = 0
-    local first_match = nil
+function _P.levenshtein(a, b)
+    local len_a, len_b = #a, #b
 
-    local input_length = #input_lower
-
-    for index = 1, input_length do
-        local character = input_lower:sub(index, index)
-        local found = false
-
-        while position <= #target_lower do
-            if target_lower:sub(position, position) == character then
-                if not first_match then
-                    first_match = position
-                end
-
-                if last_match > 0 then
-                    score = score + (position - last_match)
-                end
-
-                last_match = position
-                position = position + 1
-                found = true
-
-                break
-            end
-
-            position = position + 1
-        end
-
-        if not found then
-            return nil
-        end
+    if len_a == 0 then
+        return len_b
     end
 
-    first_match = first_match or 1
-    -- NOTE: Late start penalty
-    score = score + (first_match - 1)
-
-    -- NOTE: The span penalty can be pretty harsh whenever `target` is a long
-    -- string. To prevent any problems, we "normalize" it so short strings
-    -- don't have an advantage.
-    --
-    local span = last_match - first_match
-    local ideal_span = input_length - 1
-
-    if span > ideal_span then
-        local normalized_spread = (span - ideal_span) / #target_lower
-        score = score + normalized_spread * input_length
+    if len_b == 0 then
+        return len_a
     end
 
-    return score
+    local previous = {}
+
+    for index_b = 0, len_b do
+        previous[index_b] = index_b
+    end
+
+    for index_a = 1, len_a do
+        local current = {}
+
+        current[0] = index_a
+
+        local character_a = a:sub(index_a, index_a)
+
+        for index_b = 1, len_b do
+            local character_b = b:sub(index_b, index_b)
+            local cost = (character_a == character_b) and 0 or 1
+            current[index_b] = math.min(current[index_b - 1] + 1, previous[index_b] + 1, previous[index_b - 1] + cost)
+        end
+
+        previous = current
+    end
+
+    return previous[len_b]
 end
+
+--- Score how well a single query matches a single candidate token.
+---
+---@param query string Some user input to check.
+---@param candidate string A possible match to consider.
+---@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
+---
+function _P.get_fuzzy_match_score(query, candidate)
+
+    --- Remove all punctuation and special characters and lowercase `text`.
+    ---
+    ---@param text string The user input string to simplify.
+    ---@return string # The simplified, basic-ASCII-only string.
+    ---
+    local function normalize(text)
+        text = text:lower()
+
+        return (text:gsub("[^%w%s]", ""))
+    end
+
+    --- Score how well a single query matches a single candidate token.
+    ---
+    ---@param query string Some user input to check.
+    ---@param candidate string A possible match to consider.
+    ---@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
+    ---
+    local function token_score(query, candidate)
+        -- NOTE: Check for an exact or substring match.
+        if candidate:find(query, 1, true) then
+            return 1.0
+        end
+
+        -- NOTE: Typo tolerance by checking the distance between our numbers.
+        local distance = _P.levenshtein(query, candidate)
+        local maximum = math.max(#query, #candidate)
+        local similarity = 1.0 - (distance / maximum)
+
+        -- NOTE: Discard very weak matches.
+        if similarity < 0.4 then
+            return 0
+        end
+
+        return similarity
+    end
+
+    local query_words = _P.get_split_words(normalize(query))
+    local candidate_words = _P.get_split_words(normalize(candidate))
+
+    local score = 0
+    local matched = 0
+
+    for _, query_word in ipairs(query_words) do
+        local best = 0
+
+        for _, cw in ipairs(candidate_words) do
+            best = math.max(best, token_score(query_word, cw))
+        end
+
+        if best > 0 then
+            matched = matched + 1
+            score = score + best
+        else
+            -- strong penalty for missing query tokens
+            score = score - 1.5
+        end
+    end
+
+    -- normalize by query length
+    return score / #query_words
+end
+
+-- TODO: Remove this later
+-- --- Rate how closely `target` matches `input`.
+-- ---
+-- ---@param input string
+-- ---    Some user text to look for. e.g. `"fb"`.
+-- ---@param target string
+-- ---    The possible text to match against. e.g. `"football"`.
+-- ---@return integer?
+-- ---    If no match, return `nil`. If a strong match, return `0`. Weaker matches
+-- ---    will be higher numbers.
+-- ---
+-- function _P.get_fuzzy_match_score(input, target)
+--     local input_lower = input:lower()
+--     local target_lower = target:lower()
+--     local position = 1
+--     local score = 0
+--     local last_match = 0
+--     local first_match = nil
+--
+--     local input_length = #input_lower
+--
+--     for index = 1, input_length do
+--         local character = input_lower:sub(index, index)
+--         local found = false
+--
+--         while position <= #target_lower do
+--             if target_lower:sub(position, position) == character then
+--                 if not first_match then
+--                     first_match = position
+--                 end
+--
+--                 if last_match > 0 then
+--                     score = score + (position - last_match)
+--                 end
+--
+--                 last_match = position
+--                 position = position + 1
+--                 found = true
+--
+--                 break
+--             end
+--
+--             position = position + 1
+--         end
+--
+--         if not found then
+--             return nil
+--         end
+--     end
+--
+--     first_match = first_match or 1
+--     -- NOTE: Late start penalty
+--     score = score + (first_match - 1)
+--
+--     -- NOTE: The span penalty can be pretty harsh whenever `target` is a long
+--     -- string. To prevent any problems, we "normalize" it so short strings
+--     -- don't have an advantage.
+--     --
+--     local span = last_match - first_match
+--     local ideal_span = input_length - 1
+--
+--     if span > ideal_span then
+--         local normalized_spread = (span - ideal_span) / #target_lower
+--         score = score + normalized_spread * input_length
+--     end
+--
+--     return score
+-- end
+
 
 ---@return string[] # Every file or directory on-disk that could be helpfiles.
 function _P.get_helptag_search_paths()
@@ -947,6 +1066,22 @@ function _P.get_nearest_project_root(source)
     ---@cast source string
 
     return _P.get_topmost_contiguous_project_root_marker(source, _ALL_CONTIGUOUS_PROJECT_ROOT_MARKERS)
+end
+
+--- Tokenize `text`, ignoring all whitespace.
+---
+---@param text string Some user input to separate.
+---@return string[] # The tokenized values.
+---
+function _P.get_split_words(text)
+    ---@type string[]
+    local output = {}
+
+    for word in text:gmatch("%S+") do
+        table.insert(output, word)
+    end
+
+    return output
 end
 
 --- Starting from `directory`, look for `names` to indicate a project root.
@@ -2119,7 +2254,7 @@ function _P.select_from_options(values, options)
         end
 
         table.sort(matches, function(left, right)
-            return left.score < right.score
+            return left.score > right.score
         end)
 
         for _, entry in ipairs(matches) do

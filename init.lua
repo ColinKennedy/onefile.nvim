@@ -2868,7 +2868,7 @@ function SessionManager:write_current_session()
 
     for name, callback in pairs(self._callbacks) do
         local destination = _P.get_branch_path(name, root)
-        vim.uv.fs_mkdir(vim.fs.dirname(destination), 448) -- NOTE: 448 = 0700
+        vim.fn.mkdir(vim.fs.dirname(destination), "p")
         write_file(destination, callback())
         table.insert(paths, destination)
     end

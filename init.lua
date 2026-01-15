@@ -4223,6 +4223,17 @@ do -- NOTE: Remove trailing whitespace but only on lines you've modified.
     --- Remove all trailing whitespaces for all changed lines in the current buffer.
     function _P.strip_trailing_whitespaces()
         local buffer = vim.api.nvim_get_current_buf()
+
+        if not _LINES[buffer] then
+            -- NOTE: This should only happen if we enter a buffer and immediately
+            -- save the file but without making any changes to the buffer.
+            --
+            -- The above situation could be thought of as "accidental" which is
+            -- why we ignore it.
+            --
+            return
+        end
+
         local lines = vim.tbl_keys(_LINES[buffer])
         table.sort(lines)
 

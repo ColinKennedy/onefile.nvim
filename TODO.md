@@ -2,6 +2,9 @@
 - Add quickscope support
 - Add tmux pane swapper logic
 
+- trailing whitespace bug
+ - adding prefix > lines does not delete trailing whitespace
+
 - Add a <CR> mapping in normal mode in the selection GUI buffer. It's annoying to have to switch to insert mode to confirm the selection every time
 
 - Add gp mapping
@@ -121,3 +124,51 @@ for _, mode in ipairs(modes) do
 end
 end
 ```
+
+
+
+write_current_session fails on windows due to path mismatch issues
+- e.g. one file has ~, another doesn't
+
+Need _LINES[buffer] check, for strip_trailing_whitespace
+
+Need Gcd command
+
+the default terminal goes to WSL, it needs to go to pwsh (make this configurable)
+
+remove trailing whitespace syntax highlighting for terminal buffers
+
+ObsidianToday / Yesterday / Tomorrow commands
+
+Make the git statusline prefer the focused file's git repository first, before falling back to cwd
+
+Git pull isn't working on windows. It could be terminal-related again
+
+Change my company GIT_EDITOR to be neovim
+
+One windows, I don't see the name of the current file anyway. Not even in the buffer line. Fix that
+
+Add any "only these lines" command that is available only during `git add -p`'s `e` mode
+
+the >p <p [p ]p are slightly broken and need fixing
+
+Add il operator
+
+Git statusline should elide a long branch name. Show the jira ticket prefix and the last characters
+
+`<leader>sa` - should be able to inline / outline
+
+- The DEBUGPRINT doesn't give line numbers on Windows, for some reason
+- Also the formatter should be `rf""`, not `f""`, because Windows can have backslashes
+
+Rg command takes a long time if there's a really long line. Maybe there's a way to make it faster? e.g. ellide the text?
+
+Rg command doesn't sort the output by path and by line number / column number
+
+Add `:Gcd` command, for git
+
+- `piw` just doesn't work quite right
+
+- Make Vim terminals default to `pwsh`
+
+- `PP` doesn't paste to the line above sometimes

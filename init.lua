@@ -167,6 +167,8 @@ local _SESSIONX_NAME = "Sessionx.vim"
 
 local _IS_NERDFONT_ALLOWED = false
 
+local _MAXIMUM_QUICK_FIX_LENGTH = 55
+
 -- luacheck: push ignore
 unpack = unpack or table.unpack
 -- luacheck: pop
@@ -832,6 +834,23 @@ function _P.get_elided_left_text(text, maximum)
     return "..." .. text:sub(count - maximum, count)
 end
 
+--- Elide-right the `text`. Make `"something long here"` into `"something long..."`.
+---
+---@param text string The text to possibly crop.
+---@param maximum integer A 3-or-more value indicating the crop position.
+---@return string # The `text` is long, it is elided.
+---
+function _P.get_elided_right_text(text, maximum)
+    maximum = maximum or 40
+    local count = #text
+
+    if count <= maximum then
+        return text
+    end
+
+    return text:sub(1, maximum - 3) .. "..."
+end
+
 --- Compute the levenshtein distance between `a` and `b`.
 ---
 ---@param a string
@@ -878,6 +897,10 @@ function _P.levenshtein(a, b)
     return previous[len_b]
 end
 
+-- TODO: I think the code below make not scale well. Consider replacing with
+-- a "tris" algorithm where text blobs are split into 3-letter-chunks and then
+-- matched. So that we're typo-tolerant but still fast.
+--
 --- Score how well a single query matches a single candidate token.
 ---
 ---@param query string Some user input to check.
@@ -898,19 +921,19 @@ function _P.get_fuzzy_match_score(query, candidate)
 
     --- Score how well a single query matches a single candidate token.
     ---
-    ---@param query string Some user input to check.
-    ---@param candidate string A possible match to consider.
+    ---@param query_ string Some user input to check.
+    ---@param candidate_ string A possible match to consider.
     ---@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
     ---
-    local function token_score(query, candidate)
+    local function token_score(query_, candidate_)
         -- NOTE: Check for an exact or substring match.
-        if candidate:find(query, 1, true) then
+        if candidate_:find(query_, 1, true) then
             return 1.0
         end
 
         -- NOTE: Typo tolerance by checking the distance between our numbers.
-        local distance = _P.levenshtein(query, candidate)
-        local maximum = math.max(#query, #candidate)
+        local distance = _P.levenshtein(query_, candidate_)
+        local maximum = math.max(#query_, #candidate_)
         local similarity = 1.0 - (distance / maximum)
 
         -- NOTE: Discard very weak matches.
@@ -1711,7 +1734,10 @@ function _P.run_ripgrep(command)
         end)
 
         vim.schedule(function()
-            vim.fn.setqflist({}, " ", { title = vim.fn.join(commands, " "), items = entries })
+            local full_title = vim.fn.join(commands, " ")
+            local title = _P.get_elided_right_text(full_title, _MAXIMUM_QUICK_FIX_LENGTH)
+
+            vim.fn.setqflist({}, " ", { title = title, items = entries })
             vim.cmd.copen()
         end)
     end)
@@ -2312,6 +2338,7 @@ function _P.select_from_options(values, options)
 
         local cancel_options = vim.tbl_deep_extend("force", opts, { desc = "Cancel and quit." })
         vim.keymap.set("n", "q", _cancel, cancel_options)
+        vim.keymap.set("n", "<C-c>", _cancel, cancel_options)
         vim.keymap.set("n", "<Esc>", _cancel, cancel_options)
 
         local select_down = function()
@@ -2439,8 +2466,13 @@ function _P.setup_lsp_details(args)
         -- to trigger manually (because we have `:set omnifunc=v:lua.vim.lsp.omnifunc`)
         --
         vim.lsp.completion.enable(true, client.id, args.buf, { autotrigger = true })
-        vim.opt_local.completeopt = "fuzzy,menuone,noinsert"
+        vim.opt_local.completeopt = { "fuzzy", "menuone", "noinsert", "noselect" }
+        -- NOTE: This line adds omnifunc (LSP) as a completion source.
+        vim.opt_local.complete:append("o")
     end
+
+    vim.o.pumheight = 5 -- NOTE: Only the top 5 suggestions are shown
+    vim.o.winborder = "rounded"
 end
 
 --- Assign a range selection in Vim (a 2-cursor bounding box).
@@ -3900,11 +3932,90 @@ do -- NOTE: Autocommands
 end
 
 do -- NOTE: Commands
+    local _REPOSITORY_ROOT = { ".git" }
+    local _REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
+    table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
+
     vim.api.nvim_create_user_command("Rg", _P.run_ripgrep_command, { nargs = 1, desc = "Search using ripgrep." })
+
+    --- Find the nearest directory that matches `pattern`.
+    ---
+    ---@param pattern string[] a file name. e.g. `"tox.ini"`.
+    ---@return string? # The found directory, if any.
+    ---
+    local function _get_directory(pattern)
+        local directory = vim.fs.root(0, pattern) or vim.fs.root(vim.fn.getcwd(), pattern)
+
+        if directory then
+            return directory
+        end
+
+        vim.notify(
+            string.format('No "%s" root could be found from this buffer or from "%s" directory.', vim.fn.getcwd()),
+            vim.log.levels.ERROR
+        )
+
+        return nil
+    end
+
+    --- Run ripgrep from `directory` with `options`.
+    ---
+    ---@param directory string The path on-disk to start searching from within.
+    ---@param options {fargs: string[]} User-provided arguments to add to the `rg` command.
+    ---
+    local function _run_rg(directory, options)
+        local command = { "Rg" }
+        vim.list_extend(command, options.fargs)
+        table.insert(command, directory)
+        vim.cmd(vim.fn.join(command, " "))
+    end
+
+    vim.api.nvim_create_user_command("Crg", function(options)
+        local path = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
+        local directory
+
+        if path == "" then
+            directory = vim.fn.getcwd()
+        else
+            directory = vim.fs.dirname(path)
+        end
+
+        _run_rg(directory, options)
+    end, {
+        desc = "From the [C]urrent file, search with [r]ip[g]rep.",
+        nargs = "*",
+    })
+
+    vim.api.nvim_create_user_command("Rrg", function(options)
+        local directory = _get_directory(_REPOSITORY_ROOT)
+
+        if not directory then
+            return
+        end
+
+        _run_rg(directory, options)
+    end, {
+        desc = "From the [R]repository, search with [r]ip[g]rep.",
+        nargs = "*",
+    })
+
+    vim.api.nvim_create_user_command("Prg", function(options)
+        local directory = _get_directory(_REPOSITORY_OR_PROJECT_ROOT)
+
+        if not directory then
+            return
+        end
+
+        _run_rg(directory, options)
+    end, {
+        desc = "From the [P]roject directory, search with [r]ip[g]rep.",
+        nargs = "*",
+    })
+
     vim.api.nvim_create_user_command(
         "Pcd",
         _P.cd_to_parent_project_root,
-        { nargs = 0, desc = "Change directory to the top of the project." }
+        { nargs = 0, desc = "From the [P]roject, [c]hange [d]irectory." }
     )
     vim.api.nvim_create_user_command("Cedit", function(opts)
         _P.open_relative(opts.args)
@@ -4782,14 +4893,54 @@ do -- NOTE: Colorscheme
 end
 
 do -- NOTE: Statusline definition
-    local _ModeColor = {
-        c = "#e5c07b", -- NOTE: Sand
-        i = "#61afef", -- NOTE: Cyan
-        n = "#98c379", -- NOTE: Pale-ish green
+    -- TODO: Make these colors better later
+    local _Color = {
+        command = "#e5c07b",
+        normal = "#98c379",
+        pending = "#98f390",
+        visual = "#803a95",
+        insert = "#61afef",
+        replace = "#11d0ef",
+    }
 
-        V = "#803a95", -- NOTE: Saturated purple
-        v = "#c678dd", -- NOTE: Light purple
-        ["\22"] = "#a37eae", -- NOTE: This is CTRL-V mode. It's pale purple
+    -- Note: termcodes \19 and \22 are ^S and ^V
+    local _ModeColor = {
+        ["n"] = { name = "NORMAL", hl = _Color.normal },
+        ["no"] = { name = "OP-PENDING", hl = _Color.pending },
+        ["nov"] = { name = "OP-PENDING", hl = _Color.pending },
+        ["noV"] = { name = "OP-PENDING", hl = _Color.pending },
+        ["no\22"] = { name = "OP-PENDING", hl = _Color.pending },
+        ["niI"] = { name = "NORMAL", hl = _Color.normal },
+        ["niR"] = { name = "NORMAL", hl = _Color.normal },
+        ["niV"] = { name = "NORMAL", hl = _Color.normal },
+        ["nt"] = { name = "NORMAL", hl = _Color.normal },
+        ["ntT"] = { name = "NORMAL", hl = _Color.normal },
+        ["v"] = { name = "VISUAL", hl = _Color.visual },
+        ["vs"] = { name = "VISUAL", hl = _Color.visual },
+        ["V"] = { name = "V-LINE", hl = _Color.visual },
+        ["Vs"] = { name = "V-LINE", hl = _Color.visual },
+        ["\22"] = { name = "V-BLOCK", hl = _Color.visual },
+        ["\22s"] = { name = "V-BLOCK", hl = _Color.visual },
+        ["s"] = { name = "SELECT", hl = _Color.insert },
+        ["S"] = { name = "S-LINE", hl = _Color.normal },
+        ["\19"] = { name = "S-BLOCK", hl = _Color.normal },
+        ["i"] = { name = "INSERT", hl = _Color.insert },
+        ["ic"] = { name = "INSERT", hl = _Color.insert },
+        ["ix"] = { name = "INSERT", hl = _Color.insert },
+        ["R"] = { name = "REPLACE", hl = _Color.replace },
+        ["Rc"] = { name = "REPLACE", hl = _Color.replace },
+        ["Rx"] = { name = "REPLACE", hl = _Color.replace },
+        ["Rv"] = { name = "V-REPLACE", hl = _Color.replace },
+        ["Rvc"] = { name = "V-REPLACE", hl = _Color.replace },
+        ["Rvx"] = { name = "V-REPLACE", hl = _Color.replace },
+        ["c"] = { name = "COMMAND", hl = _Color.command },
+        ["cv"] = { name = "EX", hl = _Color.command },
+        ["ce"] = { name = "EX", hl = _Color.command },
+        ["r"] = { name = "REPLACE", hl = _Color.normal },
+        ["rm"] = { name = "MORE", hl = _Color.normal },
+        ["r?"] = { name = "CONFIRM", hl = _Color.normal },
+        ["!"] = { name = "SHELL", hl = _Color.normal },
+        ["t"] = { name = "TERMINAL", hl = _Color.command },
     }
 
     --- Define a new `name` highlight based on `source` + `overrides`.
@@ -4814,7 +4965,7 @@ do -- NOTE: Statusline definition
     end
 
     ---@return string # The Neovim statusline for saved grapple buffers
-    function get_grapple_statusline()
+    function _G.get_grapple_statusline()
         ---@type string[]
         local output = {}
         local current_buffer = vim.api.nvim_get_current_buf()
@@ -4888,7 +5039,13 @@ do -- NOTE: Statusline definition
     ---@param mode string The Neovim mode to display. e.g. `"n"` shows NORMAL mode colors.
     ---
     function _P.update_status_mode_colors(mode)
-        local color = _ModeColor[mode] or _ModeColor.n
+        local color = _ModeColor.n.hl
+        local mode_color = _ModeColor[mode]
+
+        if mode_color then
+            color = mode_color.hl
+        end
+
         _P.clone_highlight("StatusMode", "StatusMode", { bg = color })
         _P.clone_highlight("StatusModeArrow", "StatusMode", { fg = color, bg = lighter_background })
     end
@@ -6148,12 +6305,13 @@ do
         _highlight_comments()
     end
 
-    vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile", "BufWritePost", "TextChanged", "TextChangedI" }, {
-        -- TODO: Fix this later. It's broken. The colors are often wrong and don't apply correctly
-        callback = _P.debounce_trailing(_highlight_comments_if_needed, 300),
-    })
-
-    vim.schedule(_highlight_comments_if_needed)
+    -- TODO: This code doesn't work. Fix it later.
+    -- vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile", "BufWritePost", "TextChanged", "TextChangedI" }, {
+    --     -- TODO: Fix this later. It's broken. The colors are often wrong and don't apply correctly
+    --     callback = _P.debounce_trailing(_highlight_comments_if_needed, 300),
+    -- })
+    --
+    -- vim.schedule(_highlight_comments_if_needed)
 end
 
 do -- NOTE: Add mksession support.
@@ -6377,3 +6535,7 @@ do -- NOTE: Make []q/[]l mappings auto-wrap. Seriously why are these not the def
         end
     end, { desc = "Go to the next Location List entry or wrap around to the start.", silent = true })
 end
+
+vim.api.nvim_create_user_command("LspLog", function()
+    vim.cmd("edit " .. vim.lsp.log.get_filename())
+end, { desc = "Open Neovim's LSP log file.", nargs = 0 })

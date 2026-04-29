@@ -4888,14 +4888,54 @@ do -- NOTE: Colorscheme
 end
 
 do -- NOTE: Statusline definition
-    local _ModeColor = {
-        c = "#e5c07b", -- NOTE: Sand
-        i = "#61afef", -- NOTE: Cyan
-        n = "#98c379", -- NOTE: Pale-ish green
+    -- TODO: Make these colors better later
+    local _Color = {
+        command = "#e5c07b",
+        normal = "#98c379",
+        pending = "#98f390",
+        visual = "#803a95",
+        insert = "#61afef",
+        replace = "#11d0ef",
+    }
 
-        V = "#803a95", -- NOTE: Saturated purple
-        v = "#c678dd", -- NOTE: Light purple
-        ["\22"] = "#a37eae", -- NOTE: This is CTRL-V mode. It's pale purple
+    -- Note: termcodes \19 and \22 are ^S and ^V
+    local _ModeColor = {
+        ["n"] = { name = "NORMAL", hl = _Color.normal },
+        ["no"] = { name = "OP-PENDING", hl = _Color.pending },
+        ["nov"] = { name = "OP-PENDING", hl = _Color.pending },
+        ["noV"] = { name = "OP-PENDING", hl = _Color.pending },
+        ["no\22"] = { name = "OP-PENDING", hl = _Color.pending },
+        ["niI"] = { name = "NORMAL", hl = _Color.normal },
+        ["niR"] = { name = "NORMAL", hl = _Color.normal },
+        ["niV"] = { name = "NORMAL", hl = _Color.normal },
+        ["nt"] = { name = "NORMAL", hl = _Color.normal },
+        ["ntT"] = { name = "NORMAL", hl = _Color.normal },
+        ["v"] = { name = "VISUAL", hl = _Color.visual },
+        ["vs"] = { name = "VISUAL", hl = _Color.visual },
+        ["V"] = { name = "V-LINE", hl = _Color.visual },
+        ["Vs"] = { name = "V-LINE", hl = _Color.visual },
+        ["\22"] = { name = "V-BLOCK", hl = _Color.visual },
+        ["\22s"] = { name = "V-BLOCK", hl = _Color.visual },
+        ["s"] = { name = "SELECT", hl = _Color.insert },
+        ["S"] = { name = "S-LINE", hl = _Color.normal },
+        ["\19"] = { name = "S-BLOCK", hl = _Color.normal },
+        ["i"] = { name = "INSERT", hl = _Color.insert },
+        ["ic"] = { name = "INSERT", hl = _Color.insert },
+        ["ix"] = { name = "INSERT", hl = _Color.insert },
+        ["R"] = { name = "REPLACE", hl = _Color.replace },
+        ["Rc"] = { name = "REPLACE", hl = _Color.replace },
+        ["Rx"] = { name = "REPLACE", hl = _Color.replace },
+        ["Rv"] = { name = "V-REPLACE", hl = _Color.replace },
+        ["Rvc"] = { name = "V-REPLACE", hl = _Color.replace },
+        ["Rvx"] = { name = "V-REPLACE", hl = _Color.replace },
+        ["c"] = { name = "COMMAND", hl = _Color.command },
+        ["cv"] = { name = "EX", hl = _Color.command },
+        ["ce"] = { name = "EX", hl = _Color.command },
+        ["r"] = { name = "REPLACE", hl = _Color.normal },
+        ["rm"] = { name = "MORE", hl = _Color.normal },
+        ["r?"] = { name = "CONFIRM", hl = _Color.normal },
+        ["!"] = { name = "SHELL", hl = _Color.normal },
+        ["t"] = { name = "TERMINAL", hl = _Color.command },
     }
 
     --- Define a new `name` highlight based on `source` + `overrides`.
@@ -4920,7 +4960,7 @@ do -- NOTE: Statusline definition
     end
 
     ---@return string # The Neovim statusline for saved grapple buffers
-    function get_grapple_statusline()
+    function _G.get_grapple_statusline()
         ---@type string[]
         local output = {}
         local current_buffer = vim.api.nvim_get_current_buf()
@@ -4994,7 +5034,13 @@ do -- NOTE: Statusline definition
     ---@param mode string The Neovim mode to display. e.g. `"n"` shows NORMAL mode colors.
     ---
     function _P.update_status_mode_colors(mode)
-        local color = _ModeColor[mode] or _ModeColor.n
+        local color = _ModeColor.n.hl
+        local mode_color = _ModeColor[mode]
+
+        if mode_color then
+            color = mode_color.hl
+        end
+
         _P.clone_highlight("StatusMode", "StatusMode", { bg = color })
         _P.clone_highlight("StatusModeArrow", "StatusMode", { fg = color, bg = lighter_background })
     end

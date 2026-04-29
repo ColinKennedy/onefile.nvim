@@ -2312,6 +2312,7 @@ function _P.select_from_options(values, options)
 
         local cancel_options = vim.tbl_deep_extend("force", opts, { desc = "Cancel and quit." })
         vim.keymap.set("n", "q", _cancel, cancel_options)
+        vim.keymap.set("n", "<C-c>", _cancel, cancel_options)
         vim.keymap.set("n", "<Esc>", _cancel, cancel_options)
 
         local select_down = function()

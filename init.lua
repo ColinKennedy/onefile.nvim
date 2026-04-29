@@ -167,6 +167,8 @@ local _SESSIONX_NAME = "Sessionx.vim"
 
 local _IS_NERDFONT_ALLOWED = false
 
+local _MAXIMUM_QUICK_FIX_LENGTH = 55
+
 -- luacheck: push ignore
 unpack = unpack or table.unpack
 -- luacheck: pop
@@ -832,6 +834,23 @@ function _P.get_elided_left_text(text, maximum)
     return "..." .. text:sub(count - maximum, count)
 end
 
+--- Elide-right the `text`. Make `"something long here"` into `"something long..."`.
+---
+---@param text string The text to possibly crop.
+---@param maximum integer A 3-or-more value indicating the crop position.
+---@return string # The `text` is long, it is elided.
+---
+function _P.get_elided_right_text(text, maximum)
+    maximum = maximum or 40
+    local count = #text
+
+    if count <= maximum then
+        return text
+    end
+
+    return text:sub(1, maximum - 3) .. "..."
+end
+
 --- Compute the levenshtein distance between `a` and `b`.
 ---
 ---@param a string
@@ -878,6 +897,10 @@ function _P.levenshtein(a, b)
     return previous[len_b]
 end
 
+-- TODO: I think the code below make not scale well. Consider replacing with
+-- a "tris" algorithm where text blobs are split into 3-letter-chunks and then
+-- matched. So that we're typo-tolerant but still fast.
+--
 --- Score how well a single query matches a single candidate token.
 ---
 ---@param query string Some user input to check.
@@ -898,19 +921,19 @@ function _P.get_fuzzy_match_score(query, candidate)
 
     --- Score how well a single query matches a single candidate token.
     ---
-    ---@param query string Some user input to check.
-    ---@param candidate string A possible match to consider.
+    ---@param query_ string Some user input to check.
+    ---@param candidate_ string A possible match to consider.
     ---@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
     ---
-    local function token_score(query, candidate)
+    local function token_score(query_, candidate_)
         -- NOTE: Check for an exact or substring match.
-        if candidate:find(query, 1, true) then
+        if candidate_:find(query_, 1, true) then
             return 1.0
         end
 
         -- NOTE: Typo tolerance by checking the distance between our numbers.
-        local distance = _P.levenshtein(query, candidate)
-        local maximum = math.max(#query, #candidate)
+        local distance = _P.levenshtein(query_, candidate_)
+        local maximum = math.max(#query_, #candidate_)
         local similarity = 1.0 - (distance / maximum)
 
         -- NOTE: Discard very weak matches.
@@ -1711,7 +1734,10 @@ function _P.run_ripgrep(command)
         end)
 
         vim.schedule(function()
-            vim.fn.setqflist({}, " ", { title = vim.fn.join(commands, " "), items = entries })
+            local full_title = vim.fn.join(commands, " ")
+            local title = _P.get_elided_right_text(full_title, _MAXIMUM_QUICK_FIX_LENGTH)
+
+            vim.fn.setqflist({}, " ", { title = title, items = entries })
             vim.cmd.copen()
         end)
     end)
@@ -3901,11 +3927,90 @@ do -- NOTE: Autocommands
 end
 
 do -- NOTE: Commands
+    local _REPOSITORY_ROOT = { ".git" }
+    local _REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
+    table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
+
     vim.api.nvim_create_user_command("Rg", _P.run_ripgrep_command, { nargs = 1, desc = "Search using ripgrep." })
+
+    --- Find the nearest directory that matches `pattern`.
+    ---
+    ---@param pattern string[] a file name. e.g. `"tox.ini"`.
+    ---@return string? # The found directory, if any.
+    ---
+    local function _get_directory(pattern)
+        local directory = vim.fs.root(0, pattern) or vim.fs.root(vim.fn.getcwd(), pattern)
+
+        if directory then
+            return directory
+        end
+
+        vim.notify(
+            string.format('No "%s" root could be found from this buffer or from "%s" directory.', vim.fn.getcwd()),
+            vim.log.levels.ERROR
+        )
+
+        return nil
+    end
+
+    --- Run ripgrep from `directory` with `options`.
+    ---
+    ---@param directory string The path on-disk to start searching from within.
+    ---@param options {fargs: string[]} User-provided arguments to add to the `rg` command.
+    ---
+    local function _run_rg(directory, options)
+        local command = { "Rg" }
+        vim.list_extend(command, options.fargs)
+        table.insert(command, directory)
+        vim.cmd(vim.fn.join(command, " "))
+    end
+
+    vim.api.nvim_create_user_command("Crg", function(options)
+        local path = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
+        local directory
+
+        if path == "" then
+            directory = vim.fn.getcwd()
+        else
+            directory = vim.fs.dirname(path)
+        end
+
+        _run_rg(directory, options)
+    end, {
+        desc = "From the [C]urrent file, search with [r]ip[g]rep.",
+        nargs = "*",
+    })
+
+    vim.api.nvim_create_user_command("Rrg", function(options)
+        local directory = _get_directory(_REPOSITORY_ROOT)
+
+        if not directory then
+            return
+        end
+
+        _run_rg(directory, options)
+    end, {
+        desc = "From the [R]repository, search with [r]ip[g]rep.",
+        nargs = "*",
+    })
+
+    vim.api.nvim_create_user_command("Prg", function(options)
+        local directory = _get_directory(_REPOSITORY_OR_PROJECT_ROOT)
+
+        if not directory then
+            return
+        end
+
+        _run_rg(directory, options)
+    end, {
+        desc = "From the [P]roject directory, search with [r]ip[g]rep.",
+        nargs = "*",
+    })
+
     vim.api.nvim_create_user_command(
         "Pcd",
         _P.cd_to_parent_project_root,
-        { nargs = 0, desc = "Change directory to the top of the project." }
+        { nargs = 0, desc = "From the [P]roject, [c]hange [d]irectory." }
     )
     vim.api.nvim_create_user_command("Cedit", function(opts)
         _P.open_relative(opts.args)

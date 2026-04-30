@@ -6991,7 +6991,7 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
         local entries = _P.get_git_diff_quickfix_entries(directory)
 
         if not entries or vim.tbl_isempty(entries) then
-            vim.notify(string.format('Repository "%s" has no changed lines.', directory), vim.log.levels.INFO)
+            vim.notify(string.format('Repository "%s" has no changed lines.', _P.get_elided_left_text(directory)), vim.log.levels.INFO)
 
             return
         end

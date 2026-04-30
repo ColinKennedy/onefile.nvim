@@ -814,7 +814,7 @@ function _P.get_deferred_shell_command_results(command, on_fail)
     return output
 end
 
---- Crop `text` if it is longer than `maximum`.
+--- Elide-left the `text`. Make `"something long here"` into `"...long here"`.
 ---
 ---@param text string A long message that possibly crop.
 ---@param maximum integer? A 1-or-more value. If not given, a "good" default value is used.
@@ -2389,7 +2389,7 @@ end
 ---
 function _P.serialize_mark_code(directory)
     if directory then
-        directory = vim.fn.expand(directory)
+        directory = vim.fs.normalize(vim.fs.abspath(directory))
     end
 
     ---@type string[]
@@ -5445,8 +5445,6 @@ do -- NOTE: Basic [obsidian](https://obsidian.md) support
         -- TODO: Make this async later
         local entries = vim.fn.readdir(vault_root)
 
-        vim.api.nvim_buf_del_extmark()
-
         for _, name in ipairs(entries) do
             local full = vim.fs.joinpath(vault_root, name)
 
@@ -6180,10 +6178,10 @@ do
     ---
     function _P.highlight_matching_line(buffer, highlight_groups, line, columns)
         local priority = 200
-        local match_end_column = columns.tag_text.last - 1
+        local match_end_column = columns.tag_bounds.last - 1
 
         -- "NOTE: This highlights the tag prefix.
-        vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, columns.tag_text.first, {
+        vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, columns.tag_bounds.first, {
             end_col = match_end_column,
             hl_group = highlight_groups.match_highlight_name,
             priority = priority,
@@ -6196,14 +6194,14 @@ do
         --     priority = priority,
         -- })
         vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, match_end_column, {
-            end_col = columns.tag_text.last,
+            end_col = columns.tag_bounds.last,
             hl_group = highlight_groups.match_conceal_highlight_name,
             priority = priority,
         })
 
         -- NOTE: This highlights the actual comment (the text that comes after the tag).
-        vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, columns.tag_text.first, {
-            end_col = columns.tag_text.last,
+        vim.api.nvim_buf_set_extmark(buffer, _COMMENT_HIGHLIGHT, line, columns.tag_bounds.first, {
+            end_col = columns.tag_bounds.last,
             hl_group = highlight_groups.text_highlight_name,
             priority = priority,
         })
@@ -6786,9 +6784,24 @@ end
 
 do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
 
+    ---@class _my.git_quickfix.GitDiffEntry
+    ---    A struct that summarizes all of the git + Neovim data that we found
+    ---    during `git diff`.
+    ---@field quickfix vim.quickfix.entry[]
+    ---    The raw Neovim quickfix data to display.
+    ---@field git {mode: _my.git_quickfix.HunkMode, range: {[0]: integer, [1]: integer}}
+    ---    Extra git-related information that may be useful in other contexts.
+
+    ---@enum _my.git_quickfix.HunkMode
+    _P.HunkMode = {
+        added = "added",
+        changed = "changed",
+        deleted = "deleted",
+    }
+
     --- Get all `git diff` hunks as Vim quickfix lines.
     ---@param directory string absolute or relative path to git repo
-    ---@return vim.quickfix.entry[]? # All found hunks, if any.
+    ---@return _my.git_quickfix.GitDiffEntry[]? # All found hunks, if any.
     function _P.get_git_diff_quickfix_entries(directory)
 
         ---@param line string
@@ -6824,6 +6837,7 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
         ---@param output_count_ integer
         ---@return integer?
         ---@return string?
+        ---@return _my.git_quickfix.HunkMode?
         local function _seek_ahead_for_line_text(index_, output_, output_count_)
             ---@type integer?
             local suggested_index = nil
@@ -6859,7 +6873,13 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
                     --
                     line = _get_next_non_empty_line(index_, output_)
 
-                    return index_, _remove_prefix(line)
+                    local mode = _P.HunkMode.added
+
+                    if suggested_line then
+                        mode = _P.HunkMode.changed
+                    end
+
+                    return index_, _remove_prefix(line), mode
                 end
 
                 if line:match("^@@") then
@@ -6878,7 +6898,7 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
                 suggested_line = _remove_prefix(suggested_line)
             end
 
-            return suggested_index, suggested_line
+            return suggested_index, suggested_line, _P.HunkMode.deleted
         end
 
         directory = vim.fs.abspath(directory)
@@ -6899,7 +6919,7 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
             return nil
         end
 
-        ---@type vim.quickfix.entry[]
+        ---@type _my.git_quickfix.GitDiffEntry[]
         local quickfix_entries = {}
         ---@type string?
         local current_file = nil
@@ -6919,7 +6939,7 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
             local start_line, line_count = line:match("^@@ %-%d+,?%d* %+(%d+),?(%d*) @@")
 
             if current_file and start_line then
-                local next_index, line_text = _seek_ahead_for_line_text(index + 1, output, output_count)
+                local next_index, line_text, mode = _seek_ahead_for_line_text(index + 1, output, output_count)
 
                 if next_index then
                     index = next_index
@@ -6936,14 +6956,20 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
                 table.insert(
                     quickfix_entries,
                     {
-                        filename = current_file,
-                        lnum = first_line,
-                        col = 1,
-                        text = string.format(
-                            "(%d line%s) - ",
-                            changed_line_count,
-                            changed_line_count == 1 and "" or "s"
-                        ) .. (line_text or "<missing>"),
+                        quickfix = {
+                            filename = current_file,
+                            lnum = first_line,
+                            col = 1,
+                            text = string.format(
+                                "(%d line%s) - ",
+                                changed_line_count,
+                                changed_line_count == 1 and "" or "s"
+                            ) .. (line_text or "<missing>"),
+                        },
+                        git = {
+                            mode=mode,
+                            range={first_line, first_line + changed_line_count},
+                        }
                     }
                 )
             end
@@ -6960,19 +6986,31 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
 
     --- Load git diff hunks into the quickfix list
     ---@param directory string absolute or relative path to git repo
+    ---
     function _P.load_git_diff_to_quickfix(directory)
-        local quickfix_entries = _P.get_git_diff_quickfix_entries(directory)
+        local entries = _P.get_git_diff_quickfix_entries(directory)
 
-        if vim.tbl_isempty(quickfix_entries) then
+        if not entries or vim.tbl_isempty(entries) then
             vim.notify(string.format('Repository "%s" has no changed lines.', directory), vim.log.levels.INFO)
 
             return
         end
 
-        vim.fn.setqflist({}, " ", {
-            title = "Git Diff",
-            items = quickfix_entries,
-        })
+        ---@type vim.quickfix.entry[]
+        local quickfix_entries = {}
+
+        for _, entry in ipairs(entries) do
+            table.insert(quickfix_entries, entry.quickfix)
+        end
+
+        vim.fn.setqflist(
+            {},
+            " ",
+            {
+                title = string.format('Git Diff %s', _P.get_elided_left_text(directory)),
+                items = quickfix_entries,
+            }
+        )
 
         vim.cmd.copen()
     end

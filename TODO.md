@@ -1,3 +1,6 @@
+- Make sure the git diff tool works with renamed files (which may not have git diff chunks) and added files
+- Add [-, ]-, [=, ]=, [+, ]+ mappings
+
 - Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
 - Add quickscope support
 - Add tmux pane swapper logic

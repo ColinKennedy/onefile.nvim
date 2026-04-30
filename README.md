@@ -1,4 +1,7 @@
-This is a "no plugins" Neovim configuration. You run it by calling:
+This is a "no plugins" Neovim configuration.
+
+## Requires
+- Neovim 0.13+
 
 
 ## Install

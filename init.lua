@@ -898,19 +898,19 @@ function _P.get_fuzzy_match_score(query, candidate)
 
     --- Score how well a single query matches a single candidate token.
     ---
-    ---@param query string Some user input to check.
-    ---@param candidate string A possible match to consider.
+    ---@param token_query string Some user input to check.
+    ---@param token_candidate string A possible match to consider.
     ---@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
     ---
-    local function token_score(query, candidate)
+    local function token_score(token_query, token_candidate)
         -- NOTE: Check for an exact or substring match.
-        if candidate:find(query, 1, true) then
+        if token_candidate:find(token_query, 1, true) then
             return 1.0
         end
 
         -- NOTE: Typo tolerance by checking the distance between our numbers.
-        local distance = _P.levenshtein(query, candidate)
-        local maximum = math.max(#query, #candidate)
+        local distance = _P.levenshtein(token_query, token_candidate)
+        local maximum = math.max(#token_query, #token_candidate)
         local similarity = 1.0 - (distance / maximum)
 
         -- NOTE: Discard very weak matches.
@@ -3064,6 +3064,61 @@ function _P.get_git_branch_label_safe()
     return git_prefix .. branch
 end
 
+--- Parse `git diff --unified=0` output into Git gutter signs.
+---
+---@param text string The stdout from a unified-zero `git diff` command.
+---@return {kind: "add" | "change" | "delete", line: integer}[] # Sign placement details.
+---
+function _P.parse_git_gutter_diff(text)
+    ---@type {kind: "add" | "change" | "delete", line: integer}[]
+    local output = {}
+
+    for line in text:gmatch("[^\r\n]+") do
+        local old_start, old_count, new_start, new_count =
+            line:match("^@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@")
+
+        if old_start and new_start then
+            old_count = old_count == "" and "1" or old_count
+            new_count = new_count == "" and "1" or new_count
+
+            ---@cast old_start string
+            ---@cast old_count string
+            ---@cast new_start string
+            ---@cast new_count string
+
+            local removed = tonumber(old_count) or 0
+            local added = tonumber(new_count) or 0
+            local first_line = tonumber(new_start) or 1
+
+            if removed == 0 then
+                for index = 0, added - 1 do
+                    table.insert(output, { kind = "add", line = first_line + index })
+                end
+            elseif added == 0 then
+                table.insert(output, { kind = "delete", line = math.max(first_line, 1) })
+            else
+                local changed = math.min(removed, added)
+
+                for index = 0, changed - 1 do
+                    table.insert(output, { kind = "change", line = first_line + index })
+                end
+
+                for index = changed, added - 1 do
+                    table.insert(output, { kind = "add", line = first_line + index })
+                end
+
+                if removed > added then
+                    table.insert(output, { kind = "delete", line = math.max(first_line + added - 1, 1) })
+                end
+            end
+        end
+    end
+
+    return output
+end
+
+_G._onefile_parse_git_gutter_diff = _P.parse_git_gutter_diff
+
 ---@return string # Get the position in the current file.
 -- luacheck: push ignore
 function get_window_line_progress()
@@ -4080,6 +4135,288 @@ do -- NOTE: git-related keymaps
     )
 end
 
+do -- NOTE: Git gutter
+    local _GROUP = vim.api.nvim_create_augroup("my.git_gutter", { clear = true })
+    local _SIGN_GROUP = "my.git_gutter"
+    local _SIGN_NAMES = {
+        add = "MyGitGutterAdd",
+        change = "MyGitGutterChange",
+        delete = "MyGitGutterDelete",
+    }
+    local _SIGN_PRIORITIES = {
+        add = 10,
+        change = 11,
+        delete = 12,
+    }
+
+    ---@type table<integer, integer>
+    local _GENERATIONS = {}
+
+    ---@type table<integer, any>
+    local _TIMERS = {}
+
+    --- Remove all Git gutter signs from `buffer`.
+    ---
+    ---@param buffer integer The 0-or-more Vim buffer to clear.
+    ---
+    local function _clear_signs(buffer)
+        pcall(vim.fn.sign_unplace, _SIGN_GROUP, { buffer = buffer })
+    end
+
+    --- Get `text` without using Vim's line-based writefile behavior.
+    ---
+    ---@param path string The path to write.
+    ---@param text string The text to write into `path`.
+    ---@return boolean # If `true`, the file was written.
+    ---@return string? # The error message, if any.
+    ---
+    local function _write_text(path, text)
+        local file, open_error = vim.uv.fs_open(path, "w", 438)
+
+        if not file then
+            return false, open_error
+        end
+
+        local ok, write_error = vim.uv.fs_write(file, text, 0)
+        vim.uv.fs_close(file)
+
+        return ok ~= nil, write_error
+    end
+
+    --- Check if an async Git gutter callback still belongs to the latest request.
+    ---
+    ---@param buffer integer The 0-or-more Vim buffer to check.
+    ---@param generation integer The expected generation for `buffer`.
+    ---@return boolean # If `true`, the callback may still mutate signs.
+    ---
+    local function _is_current(buffer, generation)
+        return vim.api.nvim_buf_is_valid(buffer) and _GENERATIONS[buffer] == generation
+    end
+
+    --- Place `signs` onto `buffer`.
+    ---
+    ---@param buffer integer The 0-or-more Vim buffer where signs should be placed.
+    ---@param signs {kind: "add" | "change" | "delete", line: integer}[] Sign placement details.
+    ---
+    local function _place_signs(buffer, signs)
+        _clear_signs(buffer)
+
+        local line_count = vim.api.nvim_buf_line_count(buffer)
+
+        for index, sign in ipairs(signs) do
+            if sign.line >= 1 and sign.line <= line_count then
+                vim.fn.sign_place(index, _SIGN_GROUP, _SIGN_NAMES[sign.kind], buffer, {
+                    lnum = sign.line,
+                    priority = _SIGN_PRIORITIES[sign.kind],
+                })
+            end
+        end
+    end
+
+    --- Get all current buffer text as a single string.
+    ---
+    ---@param buffer integer The 0-or-more Vim buffer to inspect.
+    ---@return string # The buffer text.
+    ---
+    local function _get_buffer_text(buffer)
+        local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+        local text = table.concat(lines, "\n")
+
+        if vim.bo[buffer].endofline then
+            text = text .. "\n"
+        end
+
+        return text
+    end
+
+    --- Refresh the Git gutter signs for `buffer`.
+    ---
+    ---@param buffer integer? The 0-or-more Vim buffer to refresh.
+    ---
+    function _P.refresh_git_gutter(buffer)
+        buffer = buffer or vim.api.nvim_get_current_buf()
+
+        if not vim.api.nvim_buf_is_valid(buffer) then
+            return
+        end
+
+        local path = vim.api.nvim_buf_get_name(buffer)
+
+        if
+            path == ""
+            or vim.bo[buffer].buftype ~= ""
+            or not vim.system
+            or not _P.exists_command(_GIT_EXECUTABLE)
+        then
+            _clear_signs(buffer)
+
+            return
+        end
+
+        local directory = vim.fs.dirname(path)
+
+        if not directory then
+            _clear_signs(buffer)
+
+            return
+        end
+
+        _GENERATIONS[buffer] = (_GENERATIONS[buffer] or 0) + 1
+        local generation = _GENERATIONS[buffer]
+        local buffer_text = _get_buffer_text(buffer)
+
+        vim.system({ _GIT_EXECUTABLE, "-C", directory, "rev-parse", "--show-toplevel" }, { text = true }, function(root_object)
+            vim.schedule(function()
+                if not _is_current(buffer, generation) then
+                    return
+                end
+
+                if root_object.code ~= 0 then
+                    _clear_signs(buffer)
+
+                    return
+                end
+
+                local root = (root_object.stdout or ""):gsub("%s+$", "")
+                local relative = vim.fs.relpath(root, path)
+
+                if not relative then
+                    _clear_signs(buffer)
+
+                    return
+                end
+
+                relative = relative:gsub("\\", "/")
+
+                vim.system({ _GIT_EXECUTABLE, "-C", root, "show", ":" .. relative }, { text = true }, function(show_object)
+                    vim.schedule(function()
+                        if not _is_current(buffer, generation) then
+                            return
+                        end
+
+                        if show_object.code ~= 0 then
+                            _clear_signs(buffer)
+
+                            return
+                        end
+
+                        local before = vim.fn.tempname()
+                        local after = vim.fn.tempname()
+                        local ok, message = _write_text(before, show_object.stdout or "")
+
+                        if ok then
+                            ok, message = _write_text(after, buffer_text)
+                        end
+
+                        if not ok then
+                            pcall(vim.uv.fs_unlink, before)
+                            pcall(vim.uv.fs_unlink, after)
+                            _clear_signs(buffer)
+                            vim.notify(
+                                string.format("Git gutter could not write temporary diff files: %s", message or ""),
+                                vim.log.levels.ERROR
+                            )
+
+                            return
+                        end
+
+                        vim.system(
+                            { _GIT_EXECUTABLE, "diff", "--no-index", "--unified=0", "--no-color", "--", before, after },
+                            { text = true },
+                            function(diff_object)
+                                pcall(vim.uv.fs_unlink, before)
+                                pcall(vim.uv.fs_unlink, after)
+
+                                vim.schedule(function()
+                                    if not _is_current(buffer, generation) then
+                                        return
+                                    end
+
+                                    if diff_object.code ~= 0 and diff_object.code ~= 1 then
+                                        _clear_signs(buffer)
+                                        vim.notify(
+                                            string.format(
+                                                "Git gutter diff failed: %s",
+                                                diff_object.stderr or "<No stderr found>"
+                                            ),
+                                            vim.log.levels.ERROR
+                                        )
+
+                                        return
+                                    end
+
+                                    _place_signs(buffer, _P.parse_git_gutter_diff(diff_object.stdout or ""))
+                                end)
+                            end
+                        )
+                    end)
+                end)
+            end)
+        end)
+    end
+
+    vim.fn.sign_define(_SIGN_NAMES.add, { text = "+", texthl = "GitGutterAdd" })
+    vim.fn.sign_define(_SIGN_NAMES.change, { text = "~", texthl = "GitGutterChange" })
+    vim.fn.sign_define(_SIGN_NAMES.delete, { text = "_", texthl = "GitGutterDelete" })
+
+    vim.api.nvim_create_autocmd(
+        {
+            "BufReadPost",
+            "BufNewFile",
+            "BufEnter",
+            "BufWritePost",
+            "TextChanged",
+            "TextChangedI",
+            "FocusGained",
+            "FileChangedShellPost",
+        },
+        {
+            callback = function(event)
+                local buffer = event.buf
+                local timer = _TIMERS[buffer]
+
+                if not timer or timer:is_closing() then
+                    timer = vim.uv.new_timer()
+                    _TIMERS[buffer] = timer
+                end
+
+                if not timer then
+                    _P.refresh_git_gutter(buffer)
+
+                    return
+                end
+
+                timer:stop()
+                timer:start(
+                    150,
+                    0,
+                    vim.schedule_wrap(function()
+                        _P.refresh_git_gutter(buffer)
+                    end)
+                )
+            end,
+            group = _GROUP,
+            pattern = "*",
+        }
+    )
+
+    vim.api.nvim_create_autocmd("BufWipeout", {
+        callback = function(event)
+            local timer = _TIMERS[event.buf]
+
+            if timer and not timer:is_closing() then
+                timer:stop()
+                timer:close()
+            end
+
+            _TIMERS[event.buf] = nil
+            _GENERATIONS[event.buf] = nil
+        end,
+        group = _GROUP,
+        pattern = "*",
+    })
+end
+
 -- Reference: https://github.com/vim/vim/issues/17187#issuecomment-2820531752
 do -- NOTE: Automatically call `:nohlsearch` when moving off of search text
     local _GROUP = vim.api.nvim_create_augroup("my.highlighter.word_search", { clear = true })
@@ -4720,8 +5057,8 @@ do -- NOTE: Colorscheme
 
     -- Plugin - https://github.com/airblade/vim-gitgutter
     vim.api.nvim_set_hl(0, "GitGutterAdd", _NOTE_DIFF_ADD_10_FG)
-    vim.api.nvim_set_hl(0, "GitGutterChange", _DIFF_CHANGE_FG)
-    vim.api.nvim_set_hl(0, "GitGutterDelete", _VERT_SPLIT_FG)
+    vim.api.nvim_set_hl(0, "GitGutterChange", _CYAN_10_FG)
+    vim.api.nvim_set_hl(0, "GitGutterDelete", _ERROR_FG)
     vim.api.nvim_set_hl(0, "GitGutterAddInvisible", { bg = "Grey", ctermbg = 242 })
     vim.api.nvim_set_hl(0, "GitGutterChangeInvisible", { bg = "Grey", ctermbg = 242 })
     vim.api.nvim_set_hl(0, "GitGutterDeleteInvisible", { bg = "Grey", ctermbg = 242 })

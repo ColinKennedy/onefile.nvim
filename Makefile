@@ -10,6 +10,13 @@ else
 endif
 
 CONFIGURATION = .luarc.json
+LOCAL_LUACHECK = .dependencies/bin/luacheck.exe
+
+ifneq ($(wildcard $(LOCAL_LUACHECK)),)
+    LUACHECK ?= $(LOCAL_LUACHECK)
+else
+    LUACHECK ?= luacheck
+endif
 
 download-dependencies:
 	git clone git@github.com:Bilal2453/luvit-meta.git .dependencies/luvit-meta $(IGNORE_EXISTING)
@@ -20,7 +27,7 @@ llscheck: download-dependencies
 	VIMRUNTIME="`nvim --clean --headless --cmd 'lua io.write(os.getenv("VIMRUNTIME"))' --cmd 'quit'`" llscheck --configpath $(CONFIGURATION) .
 
 luacheck:
-	luacheck init.lua spec
+	$(LUACHECK) init.lua spec
 
 check-stylua:
 	stylua init.lua spec --color always --check

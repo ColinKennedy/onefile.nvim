@@ -4683,7 +4683,6 @@ do -- NOTE: Colorscheme
     local _NON_TEXT_FG = { fg = _GRAY_50, ctermfg = 237 }
     local _NOTE_10_FG = { fg = _ACCENT_ATTENTION_NORMAL, ctermfg = 193 }
     local _NOTE_DIFF_ADD_10_FG = _NOTE_10_FG
-    local _SEARCH_BG = { bg = _BLACK_50, ctermbg = 234 }
     local _SEARCH_FG = { fg = _BLACK_50, ctermfg = 234 }
     local _SPECIAL_GRAY_FG = { fg = _GRAY_50, ctermfg = 238 }
     local _SPECIAL_VARIABLE = { fg = _ACCENT_CRITICAL_30, ctermfg = 96 }
@@ -4849,7 +4848,7 @@ do -- NOTE: Colorscheme
     -- Plugin - https://github.com/airblade/vim-gitgutter
     vim.api.nvim_set_hl(0, "GitGutterAdd", _NOTE_DIFF_ADD_10_FG)
     vim.api.nvim_set_hl(0, "GitGutterChange", _DIFF_CHANGE_FG)
-    vim.api.nvim_set_hl(0, "GitGutterDelete", _VERT_SPLIT_FG)
+    vim.api.nvim_set_hl(0, "GitGutterDelete", _ERROR_FG)
     vim.api.nvim_set_hl(0, "GitGutterAddInvisible", { bg = "Grey", ctermbg = 242 })
     vim.api.nvim_set_hl(0, "GitGutterChangeInvisible", { bg = "Grey", ctermbg = 242 })
     vim.api.nvim_set_hl(0, "GitGutterDeleteInvisible", { bg = "Grey", ctermbg = 242 })
@@ -6552,7 +6551,6 @@ do -- NOTE: Make []q/[]l mappings auto-wrap. Seriously why are these not the def
     end, { desc = "Go to the next Location List entry or wrap around to the start.", silent = true })
 end
 
-
 -- do
 --     --- Find and load all unstaged `git diff` commits as a Neovim QuickFix buffer.
 --     ---
@@ -6782,15 +6780,23 @@ end
 --     end
 -- end
 
-do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
-
+do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column.
     ---@class _my.git_quickfix.GitDiffEntry
     ---    A struct that summarizes all of the git + Neovim data that we found
     ---    during `git diff`.
     ---@field quickfix vim.quickfix.entry[]
     ---    The raw Neovim quickfix data to display.
-    ---@field git {mode: _my.git_quickfix.HunkMode, range: {[0]: integer, [1]: integer}}
+    ---@field git {mode: _my.git_quickfix.HunkMode, range: {start_end: integer, end_line: integer}}
+
     ---    Extra git-related information that may be useful in other contexts.
+    local _GIT_GUTTER_SIGN_GROUP = "my.gitgutter.sign_group"
+
+    ---@enum _my.gitgutter.Sign
+    _P.GitGutterSign = {
+        added = "GitGutterSignAdded",
+        changed = "GitGutterSignChanged",
+        deleted = "GitGutterSignDeleted",
+    }
 
     ---@enum _my.git_quickfix.HunkMode
     _P.HunkMode = {
@@ -6799,15 +6805,30 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
         deleted = "deleted",
     }
 
+    _P.GitHuntModeToGitGutterSign = {
+        [_P.HunkMode.added] = _P.GitGutterSign.added,
+        [_P.HunkMode.changed] = _P.GitGutterSign.changed,
+        [_P.HunkMode.deleted] = _P.GitGutterSign.deleted,
+    }
+
+    ---@type table<integer, integer[]>
+    _SIGNS_CACHE = {}
+
     --- Get all `git diff` hunks as Vim quickfix lines.
     ---@param directory string absolute or relative path to git repo
     ---@return _my.git_quickfix.GitDiffEntry[]? # All found hunks, if any.
+    ---
     function _P.get_git_diff_quickfix_entries(directory)
-
-        ---@param line string
-        ---@return string
+        --- Remove the +/- prefix + leading whitespace from `line`.
+        ---
+        ---@param line string The raw line. e.g. `" -       some_line()"`.
+        ---@return string # The formatted line. e.g. `"some_line()"`.
+        ---
         local function _remove_prefix(line)
-            return line:sub(2)
+            line = line:sub(2)
+            line = _P.lstrip(line)
+
+            return line
         end
 
         ---@param index_ integer
@@ -6905,7 +6926,8 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
 
         local cmd = {
             "git",
-            "-C", directory,
+            "-C",
+            directory,
             "diff",
             "--no-color",
             "--unified=0",
@@ -6953,25 +6975,22 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
                     changed_line_count = 1
                 end
 
-                table.insert(
-                    quickfix_entries,
-                    {
-                        quickfix = {
-                            filename = current_file,
-                            lnum = first_line,
-                            col = 1,
-                            text = string.format(
-                                "(%d line%s) - ",
-                                changed_line_count,
-                                changed_line_count == 1 and "" or "s"
-                            ) .. (line_text or "<missing>"),
-                        },
-                        git = {
-                            mode=mode,
-                            range={first_line, first_line + changed_line_count},
-                        }
-                    }
-                )
+                table.insert(quickfix_entries, {
+                    quickfix = {
+                        filename = current_file,
+                        lnum = first_line,
+                        col = 1,
+                        text = string.format(
+                            "(%d line%s) - ",
+                            changed_line_count,
+                            changed_line_count == 1 and "" or "s"
+                        ) .. (line_text or "<missing>"),
+                    },
+                    git = {
+                        mode = mode,
+                        range = { start_line = first_line, end_line = first_line + changed_line_count },
+                    },
+                })
             end
 
             index = index + 1
@@ -6984,6 +7003,16 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
         return quickfix_entries
     end
 
+    --- Delete all git-related signs from `buffer`.
+    ---
+    ---@param buffer integer A Vim buffer to modify.
+    ---
+    function _P.clear_marks(buffer)
+        for _, mark in ipairs((_SIGNS_CACHE[buffer] or {})) do
+            vim.fn.sign_unplace(_GIT_GUTTER_SIGN_GROUP, { id = mark, buffer = buffer })
+        end
+    end
+
     --- Load git diff hunks into the quickfix list
     ---@param directory string absolute or relative path to git repo
     ---
@@ -6991,7 +7020,10 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
         local entries = _P.get_git_diff_quickfix_entries(directory)
 
         if not entries or vim.tbl_isempty(entries) then
-            vim.notify(string.format('Repository "%s" has no changed lines.', _P.get_elided_left_text(directory)), vim.log.levels.INFO)
+            vim.notify(
+                string.format('Repository "%s" has no changed lines.', _P.get_elided_left_text(directory)),
+                vim.log.levels.INFO
+            )
 
             return
         end
@@ -7003,17 +7035,82 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer.
             table.insert(quickfix_entries, entry.quickfix)
         end
 
-        vim.fn.setqflist(
-            {},
-            " ",
-            {
-                title = string.format('Git Diff %s', _P.get_elided_left_text(directory)),
-                items = quickfix_entries,
-            }
-        )
+        vim.fn.setqflist({}, " ", {
+            title = string.format("Git Diff %s", _P.get_elided_left_text(directory)),
+            items = quickfix_entries,
+        })
 
         vim.cmd.copen()
     end
 
+    --- Clear and reload the Neovim signs for `buffer`.
+    ---
+    ---@param buffer integer A 0-or-more value for Vim's buffer location.
+    ---@param path string The full path to wherever the buffer lives on-disk.
+    ---
+    function _P.update_signs_for_window(buffer, path)
+        local directory = vim.fs.dirname(path)
+        local entries = _P.get_git_diff_quickfix_entries(directory)
+
+        _P.clear_marks(buffer)
+        _SIGNS_CACHE[buffer] = {}
+
+        for _, entry in ipairs(entries) do
+            for line_number = entry.git.range.start_line, entry.git.range.end_line do
+                local mark = vim.fn.sign_place(
+                    0,
+                    _GIT_GUTTER_SIGN_GROUP,
+                    _P.GitHuntModeToGitGutterSign[entry.git.mode],
+                    buffer,
+                    {
+                        lnum = line_number,
+                        priority = 8, -- NOTE: Some number that is higher than LSP signs.
+                    }
+                )
+
+                table.insert(_SIGNS_CACHE[buffer], mark)
+            end
+        end
+    end
+
+    -- TOOD: Add a command for this later.
     _P.load_git_diff_to_quickfix(vim.fn.getcwd())
+
+    vim.fn.sign_define(_P.GitGutterSign.added, {
+        icon = "┃",
+        text = (_IS_NERDFONT_ALLOWED and "┃") or "|",
+        texthl = "GitGutterAdd",
+    })
+
+    vim.fn.sign_define(_P.GitGutterSign.changed, {
+        icon = "┃",
+        text = (_IS_NERDFONT_ALLOWED and "┃") or "|",
+        texthl = "GitGutterChange",
+    })
+
+    vim.fn.sign_define(_P.GitGutterSign.deleted, {
+        icon = "▁",
+        text = (_IS_NERDFONT_ALLOWED and "▁") or "_",
+        texthl = "GitGutterDelete",
+    })
+
+    vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "FileChangedShellPost" }, {
+        callback = function()
+            local buffer = vim.api.nvim_get_current_buf()
+            local path = vim.api.nvim_buf_get_name(buffer)
+
+            if path == "" then
+                -- NOTE: The user is in some buffer that is not tied to
+                -- a directory. Just fail silently.
+                --
+                vim.notify(string.format('Skipped running signs for "%s" window.', window), vim.log.levels.DEBUG)
+
+                return
+            end
+
+            _P.debounce_trailing(vim.schedule(function()
+                _P.update_signs_for_window(buffer, path)
+            end), 200)
+        end,
+    })
 end

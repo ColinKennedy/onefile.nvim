@@ -6485,12 +6485,12 @@ do
         _highlight_comments()
     end
 
-    vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile", "BufWritePost", "TextChanged", "TextChangedI" }, {
-        -- TODO: Fix this later. It's broken. The colors are often wrong and don't apply correctly
-        callback = _P.debounce_trailing(_highlight_comments_if_needed, 300),
-    })
-
-    vim.schedule(_highlight_comments_if_needed)
+    -- vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile", "BufWritePost", "TextChanged", "TextChangedI" }, {
+    --     -- TODO: Fix this later. It's broken. The colors are often wrong and don't apply correctly
+    --     callback = _P.debounce_trailing(_highlight_comments_if_needed, 300),
+    -- })
+    --
+    -- vim.schedule(_highlight_comments_if_needed)
 end
 
 do -- NOTE: Add mksession support.

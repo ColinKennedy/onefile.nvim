@@ -1,5 +1,90 @@
 local _P = {}
 
+-- luacheck: push ignore
+unpack = unpack or table.unpack
+-- luacheck: pop
+
+do -- NOTE: Extend `vim.notify` to be more useful. (Why is this not just default behavior).
+    -- - DEBUG now doesn't show by default unless you opt-in.
+    -- - notifications now double as log messages that you can query whenever.
+    --
+    local _ORIGINAL_VIM_NOTIFY = vim.notify
+    _P.MINIMUM_LOG_LEVEL = tonumber(os.getenv("VIM_LOG_LEVEL") or "2")
+
+    _P.ENABLE_NOTIFY_LOGGING_VARIABLE = "VIM_ENABLE_NOTIFY_LOGGING"
+
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.notify = function(...)
+        local arguments = { ... }
+        local level = arguments[2]
+
+        if level < _P.MINIMUM_LOG_LEVEL then
+            return
+        end
+
+        _ORIGINAL_VIM_NOTIFY(...)
+    end
+
+    if (os.getenv(_P.ENABLE_NOTIFY_LOGGING_VARIABLE) or "0") ~= "0" then
+        local _ORIGINAL_VIM_NOTIFY2 = vim.notify
+
+        --- Convert `level` number into a real Neovim log level label (e.g. DEBUG).
+        ---
+        ---@param level integer Some raw log value.
+        ---@return string # The found level, if any.
+        ---
+        function _P.get_readable_log_level_label(level)
+            for name, value in pairs(vim.log.levels) do
+                if value == level then
+                    return name
+                end
+            end
+
+            return tostring(level)
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.notify = function(...)
+            local arguments = { ... }
+            local message, level = unpack(arguments)
+            local handler, error_ = io.open(_P.TEMPORARY_LOG_PATH, "a")
+
+            if not handler then
+                _ORIGINAL_VIM_NOTIFY2(
+                    string.format('Log path "%s" could not be written to. Error: %s', _P.TEMPORARY_LOG_PATH, error_),
+                    vim.log.levels.ERROR
+                )
+
+                return
+            end
+
+            local level_name = _P.get_readable_log_level_label(level)
+            handler:write(string.format("%s [%s]: %s\n", os.date("%Y-%m-%d:%X"), level_name, message))
+            handler:close()
+
+            _ORIGINAL_VIM_NOTIFY2(...)
+        end
+
+        _P.TEMPORARY_LOG_PATH = os.tmpname()
+    end
+
+    vim.api.nvim_create_user_command("OpenLogPath", function()
+        if not _P.TEMPORARY_LOG_PATH then
+            vim.notify(
+                string.format(
+                    "No logging was enabled for this Neovim. Use %s=1 and restart to turn it on.",
+                    _P.ENABLE_NOTIFY_LOGGING_VARIABLE
+                ),
+                vim.log.levels.ERROR
+            )
+
+            return
+        end
+
+        print(string.format('Opening "%s" log file.', _P.TEMPORARY_LOG_PATH))
+        vim.cmd(string.format("silent! edit %s", _P.TEMPORARY_LOG_PATH))
+    end, { nargs = "?", desc = "View/Edit the vim.notify(...) master log file." })
+end
+
 ---@class _my._datatypes.IntBounds An inclusive or exclusive pair of integers.
 ---@field first integer The starting value.
 ---@field last integer The ending value.
@@ -165,10 +250,6 @@ local _SESSIONX_NAME = "Sessionx.vim"
 local _IS_NERDFONT_ALLOWED = true
 
 local _MAXIMUM_QUICK_FIX_LENGTH = 55
-
--- luacheck: push ignore
-unpack = unpack or table.unpack
--- luacheck: pop
 
 --- Check if `executable` is a command found on `$PATH`.
 ---
@@ -6729,7 +6810,7 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
         local function on_exit(result)
             if result.code ~= 0 then
                 vim.schedule(function()
-                    vim.notify("git diff failed for: " .. directory, vim.log.levels.ERROR)
+                    vim.notify("git diff failed for: " .. directory, vim.log.levels.DEBUG)
                 end)
 
                 return
@@ -6912,10 +6993,15 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
         end
 
         _P.load_git_diff_to_quickfix({ directory = directory, branch = branch })
-    end, { nargs = "?", desc = "Run `git diff` Live-Grep and then search Neovim's :help command." })
+    end, { nargs = "?", desc = "Load `git diff <default branch>` as a quickfix window." })
 
-    vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "FileChangedShellPost" }, {
-        callback = _P.debounce_trailing(function()
+    --- Define a "update the git gutter at a specific time-out" callable function.
+    ---
+    ---@param timeout integer A 1-or-more milliseconds to wait. Usually you'll want 50+.
+    ---@return fun(): nil # The function that will do the git gutter update for some buffer.
+    ---
+    local function _create_git_gutter_updater_callback(timeout)
+        return _P.debounce_trailing(function()
             if vim.tbl_contains({ "terminal", "quickfix", "loclist" }, vim.bo.buftype) then
                 return
             end
@@ -6935,6 +7021,14 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
             vim.schedule(function()
                 _P.update_signs_for_window(buffer, path)
             end)
-        end, 200),
+        end, timeout)
+    end
+
+    vim.api.nvim_create_autocmd({ "FileChangedShellPost", "TextChanged", "TextChangedI" }, {
+        callback = _create_git_gutter_updater_callback(200),
+    })
+
+    vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost" }, {
+        callback = _create_git_gutter_updater_callback(50),
     })
 end

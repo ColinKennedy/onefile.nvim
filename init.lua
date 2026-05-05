@@ -3103,7 +3103,7 @@ end
 
 ---@return string # Get the position in the current file.
 -- luacheck: push ignore
-function get_window_line_progress()
+function _G.get_window_line_progress()
     -- luacheck: pop
     local current_line = vim.fn.line(".")
     local total_lines = vim.fn.line("$")
@@ -6557,7 +6557,7 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
     ---    during `git diff`.
     ---@field quickfix vim.quickfix.entry[]
     ---    The raw Neovim quickfix data to display.
-    ---@field git {mode: _my.git_quickfix.HunkMode, range: {start_end: integer, end_line: integer}}
+    ---@field git {mode: _my.git_quickfix.HunkMode, range: {start_line: integer, end_line: integer}}
 
     ---    Extra git-related information that may be useful in other contexts.
     local _GIT_GUTTER_SIGN_GROUP = "my.gitgutter.sign_group"

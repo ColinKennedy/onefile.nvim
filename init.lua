@@ -6551,235 +6551,6 @@ do -- NOTE: Make []q/[]l mappings auto-wrap. Seriously why are these not the def
     end, { desc = "Go to the next Location List entry or wrap around to the start.", silent = true })
 end
 
--- do
---     --- Find and load all unstaged `git diff` commits as a Neovim QuickFix buffer.
---     ---
---     --- Heavily inspired by `git jump`, which does the same thing.
---     ---
---     --- @source https://github.com/git/git/tree/master/contrib/git-jump
---     ---
---
---
---     --- @class _DiffDetails The line or row (line number) details that were found.
---     --- @field path string An absolute or relative path to a file or directory on-disk.
---     --- @field row integer A 1-or-more number indicating the line of some changed text.
---
---     --- @class _QuickFixEntry A description of file + line + text to send to `setqflist()`.
---     --- @field filename string An absolute / relative path on-disk.
---     --- @field lnum integer A 1-or-more number indicating the line of the quickfix entry.
---     --- @field text string The raw line text to display as part of the quickfix entry.
---
---     local M = {}
---
---
---     --- Check if `text` is an added / removed `git diff` line.
---     ---
---     --- @param text string Some raw `git diff` line to check.
---     --- @return boolean # If `text` is an added / removed line, return `true`.
---     ---
---     local function _is_changed(text)
---         return string.match(text, "^[-%+].*") ~= nil
---     end
---
---
---     --- Check if `text` has only whitespace.
---     ---
---     --- @param text string Some text which might contain just whitespace.
---     --- @return boolean # If `text` is whitespace-only, return `true`.
---     ---
---     local function _is_empty(text)
---         return string.match(text, "^%s*$") ~= nil
---     end
---
---
---     --- Check if `text` is not actually a `git diff` line but a surrounding context line.
---     ---
---     --- A `git diff` marks any added/removed lines with + or - so any line that
---     --- doesn't have it must just be there to help make viewing the diff easier.
---     ---
---     --- @param text string Some raw `git diff` line to check.
---     --- @return boolean # If `text` isn't part of the diff, return `true`.
---     ---
---     local function _is_not_part_of_the_diff(text)
---         return string.match(text, "^%s") ~= nil
---     end
---
---
---     --- Find a `git diff`-related file from `text`.
---     ---
---     --- The `git diff` line may look like:
---     ---
---     ---     @@ -1,6 +2,6 @@
---     ---
---     --- Where "+1" indicates the most up-to-date line number.
---     ---
---     --- @param text string Some raw `git diff` line to check.
---     --- @return integer? # The found, 1-or-more row number, if any.
---     ---
---     local function _get_row(text)
---         local result = string.match(text, "^@@.+%+(%d+).*@@")
---
---         if result == nil
---         then
---             return nil
---         end
---
---         return tonumber(result)
---     end
---
---
---     --- Find a `git diff`-related file from `text`.
---     ---
---     --- The `git diff` file may look like:
---     ---
---     ---     --- a/README.md
---     ---     +++ b/README.md
---     ---
---     --- Where "---" indicates the file's old name and "+++" is the file's
---     --- most current, on-disk name.
---     ---
---     --- @param text string Some raw `git diff` line to check.
---     --- @return string? # The found file path, if any.
---     ---
---     local function _get_path(text)
---         return string.match(text, "^%+%+%+ (.+)")
---     end
---
---
---     --- Parse `line` for any `git diff` related details.
---     ---
---     --- @param line string A raw `git diff` line to check for data.
---     --- @return _DiffDetails # The line or row (line number) details that were found.
---     ---
---     local function _get_details(line)
---         local row = _get_row(line)
---
---         if row ~= nil
---         then
---             return {row=row}
---         end
---
---         local path = _get_path(line)
---
---         if path ~= nil
---         then
---             return {path=path}
---         end
---
---         return {}
---     end
---
---
---     --- Strip all `git diff` related strings from `text.
---     ---
---     --- @param text string A line which (we assume) has some `git diff` notation applied.
---     --- @return string # The real source code of `text`.
---     ---
---     local function _get_source_line(text)
---         return string.match(text, ".(.*)")
---     end
---
---
---     --- Get the first line from `lines` that has text. Starting at `starting_index`.
---     ---
---     --- Git hunks very typically have leading whitespace / newlines. When a line like this:
---     ---
---     --- ```
---     ---
---     ---
---     ---     Some text.
---     ---     More text.
---     --- ```
---     ---
---     --- get loaded into a quickfix buffer, they end up looking like this:
---     ---
---     --- `file.txt|10|`
---     ---
---     --- This function helps find the first "    Some text." line.
---     ---
---     --- @param lines string[] Some source code / some git hunk to search within for text.
---     --- @param starting_index integer A 1-or-more index to start looking within.
---     --- @return string? The found line, if any.
---     ---
---     local function _get_first_non_empty_source_line(lines, starting_index)
---         local max = #lines
---
---         for index=starting_index, max
---         do
---             local line = _get_source_line(lines[index])
---
---             if not _is_empty(line)
---             then
---                 return line
---             end
---         end
---
---         return nil
---     end
---
---
---     --- Run `git diff` from `directory` and gather its results for a quickfix list.
---     ---
---     --- @param directory string An absolute or relative path to some git repository.
---     --- @return _QuickFixEntry[] # All of the found `git diff` results, if any.
---     ---
---     function M.get_git_diff(directory)
---         local command = "git diff --no-prefix --relative"
---         local row = nil
---         local path = nil
---         local output = {}
---
---         local lines = vim.fn.systemlist(command, directory)
---
---         for index, line in ipairs(lines)
---         do
---             local details = _get_details(line)
---
---             if details.path ~= nil
---             then
---                 path = details.path
---             elseif details.row ~= nil
---             then
---                 row = details.row
---             end
---
---             if path ~= nil and row ~= nil
---             then
---                 if _is_not_part_of_the_diff(line)
---                 then
---                     row = row + 1
---                 elseif _is_changed(line)
---                 then
---                     local source = _get_first_non_empty_source_line(lines, index) or ""
---                     table.insert(output, {filename=path, lnum=row, text=source})
---
---                     -- Reset the row so that only one entry is found per "git hunk"
---                     row = nil
---                 end
---             end
---         end
---
---         return output
---     end
---
---
---     --- Run `git diff` from `directory` and add set the quickfix list with the results.
---     ---
---     --- @param directory string An absolute or relative path to some git repository.
---     ---
---     function M.load_git_diff(directory)
---         local entries = M.get_git_diff(directory)
---
---         if not vim.tbl_isempty(entries)
---         then
---             vim.fn.setqflist(entries)
---             vim.cmd[[copen]]
---         else
---             vim.api.nvim_err_writeln('Directory "' .. directory .. '" as no git diff.')
---         end
---     end
--- end
-
 do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column.
     ---@class _my.git_quickfix.GitDiffEntry
     ---    A struct that summarizes all of the git + Neovim data that we found
@@ -6815,10 +6586,13 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
     _SIGNS_CACHE = {}
 
     --- Get all `git diff` hunks as Vim quickfix lines.
-    ---@param directory string absolute or relative path to git repo
-    ---@return _my.git_quickfix.GitDiffEntry[]? # All found hunks, if any.
     ---
-    function _P.get_git_diff_quickfix_entries(directory)
+    ---@param directory string
+    ---     An absolute or relative path to some git repository.
+    ---@param callback (fun(entries: _my.git_quickfix.GitDiffEntry[]?): any)
+    ---    The function to run once quickfix entries are found.
+    ---
+    function _P.get_git_diff_quickfix_entries(directory, callback)
         --- Remove the +/- prefix + leading whitespace from `line`.
         ---
         ---@param line string The raw line. e.g. `" -       some_line()"`.
@@ -6924,7 +6698,7 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
 
         directory = vim.fs.abspath(directory)
 
-        local cmd = {
+        local command = {
             "git",
             "-C",
             directory,
@@ -6933,74 +6707,82 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
             "--unified=0",
         }
 
-        local output = vim.fn.systemlist(cmd)
+        local function on_exit(result)
+            if result.code ~= 0 then
+                vim.schedule(function()
+                    vim.notify("git diff failed for: " .. directory, vim.log.levels.ERROR)
+                end)
 
-        if vim.v.shell_error ~= 0 then
-            vim.notify("git diff failed for: " .. directory, vim.log.levels.ERROR)
-
-            return nil
-        end
-
-        ---@type _my.git_quickfix.GitDiffEntry[]
-        local quickfix_entries = {}
-        ---@type string?
-        local current_file = nil
-
-        local index = 1
-        local output_count = #output
-
-        while index <= output_count do
-            local line = output[index]
-            local file = line:match("^%+%+%+ b/(.+)")
-
-            if file then
-                -- NOTE: This is the raw `git diff` header.
-                current_file = vim.fs.normalize(vim.fs.joinpath(directory, file))
+                return
             end
 
-            local start_line, line_count = line:match("^@@ %-%d+,?%d* %+(%d+),?(%d*) @@")
+            local output = vim.split(result.stdout, "\n")
 
-            if current_file and start_line then
-                local next_index, line_text, mode = _seek_ahead_for_line_text(index + 1, output, output_count)
+            ---@type _my.git_quickfix.GitDiffEntry[]
+            local quickfix_entries = {}
+            ---@type string?
+            local current_file = nil
 
-                if next_index then
-                    index = next_index
+            local index = 1
+            local output_count = #output
+
+            while index <= output_count do
+                local line = output[index]
+                local file = line:match("^%+%+%+ b/(.+)")
+
+                if file then
+                    -- NOTE: This is the raw `git diff` header.
+                    current_file = vim.fs.normalize(vim.fs.joinpath(directory, file))
                 end
 
-                -- NOTE: This is the git hunk header: `@@ -old,count +new,count @@`
-                local first_line = tonumber(start_line)
-                local changed_line_count = tonumber(line_count) or 1
+                local start_line, line_count = line:match("^@@ %-%d+,?%d* %+(%d+),?(%d*) @@")
 
-                if changed_line_count == 0 then
-                    changed_line_count = 1
+                if current_file and start_line then
+                    local next_index, line_text, mode = _seek_ahead_for_line_text(index + 1, output, output_count)
+
+                    if next_index then
+                        index = next_index
+                    end
+
+                    -- NOTE: This is the git hunk header: `@@ -old,count +new,count @@`
+                    local first_line = tonumber(start_line)
+                    local changed_line_count = tonumber(line_count) or 1
+
+                    if changed_line_count == 0 then
+                        changed_line_count = 1
+                    end
+
+                    table.insert(quickfix_entries, {
+                        quickfix = {
+                            filename = current_file,
+                            lnum = first_line,
+                            col = 1,
+                            text = string.format(
+                                "(%d line%s) - ",
+                                changed_line_count,
+                                changed_line_count == 1 and "" or "s"
+                            ) .. (line_text or "<missing>"),
+                        },
+                        git = {
+                            mode = mode,
+                            range = { start_line = first_line, end_line = first_line + changed_line_count },
+                        },
+                    })
                 end
 
-                table.insert(quickfix_entries, {
-                    quickfix = {
-                        filename = current_file,
-                        lnum = first_line,
-                        col = 1,
-                        text = string.format(
-                            "(%d line%s) - ",
-                            changed_line_count,
-                            changed_line_count == 1 and "" or "s"
-                        ) .. (line_text or "<missing>"),
-                    },
-                    git = {
-                        mode = mode,
-                        range = { start_line = first_line, end_line = first_line + changed_line_count },
-                    },
-                })
+                index = index + 1
             end
 
-            index = index + 1
+            if vim.tbl_isempty(quickfix_entries) then
+                return
+            end
+
+            vim.schedule(function()
+                callback(quickfix_entries)
+            end)
         end
 
-        if vim.tbl_isempty(quickfix_entries) then
-            return nil
-        end
-
-        return quickfix_entries
+        vim.system(command, { text = true }, on_exit)
     end
 
     --- Delete all git-related signs from `buffer`.
@@ -7017,30 +6799,30 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
     ---@param directory string absolute or relative path to git repo
     ---
     function _P.load_git_diff_to_quickfix(directory)
-        local entries = _P.get_git_diff_quickfix_entries(directory)
+        _P.get_git_diff_quickfix_entries(directory, function(entries)
+            if not entries or vim.tbl_isempty(entries) then
+                vim.notify(
+                    string.format('Repository "%s" has no changed lines.', _P.get_elided_left_text(directory)),
+                    vim.log.levels.INFO
+                )
 
-        if not entries or vim.tbl_isempty(entries) then
-            vim.notify(
-                string.format('Repository "%s" has no changed lines.', _P.get_elided_left_text(directory)),
-                vim.log.levels.INFO
-            )
+                return
+            end
 
-            return
-        end
+            ---@type vim.quickfix.entry[]
+            local quickfix_entries = {}
 
-        ---@type vim.quickfix.entry[]
-        local quickfix_entries = {}
+            for _, entry in ipairs(entries) do
+                table.insert(quickfix_entries, entry.quickfix)
+            end
 
-        for _, entry in ipairs(entries) do
-            table.insert(quickfix_entries, entry.quickfix)
-        end
+            vim.fn.setqflist({}, " ", {
+                title = string.format("Git Diff %s", _P.get_elided_left_text(directory)),
+                items = quickfix_entries,
+            })
 
-        vim.fn.setqflist({}, " ", {
-            title = string.format("Git Diff %s", _P.get_elided_left_text(directory)),
-            items = quickfix_entries,
-        })
-
-        vim.cmd.copen()
+            vim.cmd.copen()
+        end)
     end
 
     --- Clear and reload the Neovim signs for `buffer`.
@@ -7050,27 +6832,27 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
     ---
     function _P.update_signs_for_window(buffer, path)
         local directory = vim.fs.dirname(path)
-        local entries = _P.get_git_diff_quickfix_entries(directory)
+        _P.get_git_diff_quickfix_entries(directory, function(entries)
+            _P.clear_marks(buffer)
+            _SIGNS_CACHE[buffer] = {}
 
-        _P.clear_marks(buffer)
-        _SIGNS_CACHE[buffer] = {}
+            for _, entry in ipairs(entries) do
+                for line_number = entry.git.range.start_line, entry.git.range.end_line do
+                    local mark = vim.fn.sign_place(
+                        0,
+                        _GIT_GUTTER_SIGN_GROUP,
+                        _P.GitHuntModeToGitGutterSign[entry.git.mode],
+                        buffer,
+                        {
+                            lnum = line_number,
+                            priority = 8, -- NOTE: Some number that is higher than LSP signs.
+                        }
+                    )
 
-        for _, entry in ipairs(entries) do
-            for line_number = entry.git.range.start_line, entry.git.range.end_line do
-                local mark = vim.fn.sign_place(
-                    0,
-                    _GIT_GUTTER_SIGN_GROUP,
-                    _P.GitHuntModeToGitGutterSign[entry.git.mode],
-                    buffer,
-                    {
-                        lnum = line_number,
-                        priority = 8, -- NOTE: Some number that is higher than LSP signs.
-                    }
-                )
-
-                table.insert(_SIGNS_CACHE[buffer], mark)
+                    table.insert(_SIGNS_CACHE[buffer], mark)
+                end
             end
-        end
+        end)
     end
 
     -- TOOD: Add a command for this later.
@@ -7096,6 +6878,10 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
 
     vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "FileChangedShellPost" }, {
         callback = function()
+            if vim.tbl_contains({ "terminal", "quickfix", "loclist" }, vim.bo.buftype) then
+                return
+            end
+
             local buffer = vim.api.nvim_get_current_buf()
             local path = vim.api.nvim_buf_get_name(buffer)
 
@@ -7103,14 +6889,16 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
                 -- NOTE: The user is in some buffer that is not tied to
                 -- a directory. Just fail silently.
                 --
-                vim.notify(string.format('Skipped running signs for "%s" window.', window), vim.log.levels.DEBUG)
+                vim.notify(string.format('Skipped running signs for "%s" buffer.', buffer), vim.log.levels.DEBUG)
 
                 return
             end
 
-            _P.debounce_trailing(vim.schedule(function()
-                _P.update_signs_for_window(buffer, path)
-            end), 200)
+            _P.debounce_trailing(function()
+                return vim.schedule(function()
+                    _P.update_signs_for_window(buffer, path)
+                end)
+            end, 200)
         end,
     })
 end

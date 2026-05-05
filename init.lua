@@ -608,10 +608,10 @@ end
 ---
 ---@generic _Parameters : any
 ---@generic _Return : any
----@param caller (fun(...: _Parameters): _Return) A function to track and debounce.
+---@param caller (fun(...: _Parameters): _Return?) A function to track and debounce.
 ---@param timeout integer A 1-or-more milliseconds to wait. Usually you'll want 50+.
 ---@param first boolean? Whether to use the arguments of the first call to `caller` or not.
----@return fun(...: _Parameters): _Return # The wrapped function.
+---@return fun(...: _Parameters): _Return? # The wrapped function.
 ---
 function _P.debounce_trailing(caller, timeout, first)
     local timer = vim.uv.new_timer()
@@ -6585,14 +6585,33 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
     ---@type table<integer, integer[]>
     _SIGNS_CACHE = {}
 
+    --- Find the default git branch name and run `callback` once it is found.
+    ---
+    ---@param directory string
+    ---@param callback fun(branch: string): any
+    ---
+    function _P.get_default_git_branch(directory, callback)
+        directory = directory or vim.fn.getcwd()
+        local command = { "git", "-C", directory, "config", "--get", "init.defaultBranch" }
+
+        vim.system(command, { text = true }, function(result)
+            local branch = vim.trim(result.stdout)
+            callback(branch)
+        end)
+    end
+
     --- Get all `git diff` hunks as Vim quickfix lines.
     ---
     ---@param directory string
-    ---     An absolute or relative path to some git repository.
+    ---    An absolute or relative path to some git repository.
+    ---@param branch string?
+    ---    The git branch to compare against. If not given, the `"master"` branch is assumed.
     ---@param callback (fun(entries: _my.git_quickfix.GitDiffEntry[]?): any)
     ---    The function to run once quickfix entries are found.
     ---
-    function _P.get_git_diff_quickfix_entries(directory, callback)
+    function _P.get_git_diff_quickfix_entries(directory, branch, callback)
+        branch = branch or "master"
+
         --- Remove the +/- prefix + leading whitespace from `line`.
         ---
         ---@param line string The raw line. e.g. `" -       some_line()"`.
@@ -6796,10 +6815,14 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
     end
 
     --- Load git diff hunks into the quickfix list
-    ---@param directory string absolute or relative path to git repo
     ---
-    function _P.load_git_diff_to_quickfix(directory)
-        _P.get_git_diff_quickfix_entries(directory, function(entries)
+    ---@param data {branch: string?, directory: string}
+    ---    The git branch to diff against + the directory where to start a diff from.
+    ---
+    function _P.load_git_diff_to_quickfix(data)
+        local directory = data.directory
+
+        _P.get_git_diff_quickfix_entries(directory, data.branch, function(entries)
             if not entries or vim.tbl_isempty(entries) then
                 vim.notify(
                     string.format('Repository "%s" has no changed lines.', _P.get_elided_left_text(directory)),
@@ -6832,31 +6855,31 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
     ---
     function _P.update_signs_for_window(buffer, path)
         local directory = vim.fs.dirname(path)
-        _P.get_git_diff_quickfix_entries(directory, function(entries)
-            _P.clear_marks(buffer)
-            _SIGNS_CACHE[buffer] = {}
 
-            for _, entry in ipairs(entries) do
-                for line_number = entry.git.range.start_line, entry.git.range.end_line do
-                    local mark = vim.fn.sign_place(
-                        0,
-                        _GIT_GUTTER_SIGN_GROUP,
-                        _P.GitHuntModeToGitGutterSign[entry.git.mode],
-                        buffer,
-                        {
-                            lnum = line_number,
-                            priority = 8, -- NOTE: Some number that is higher than LSP signs.
-                        }
-                    )
+        _P.get_default_git_branch(directory, function(branch)
+            _P.get_git_diff_quickfix_entries(directory, branch, function(entries)
+                _P.clear_marks(buffer)
+                _SIGNS_CACHE[buffer] = {}
 
-                    table.insert(_SIGNS_CACHE[buffer], mark)
+                for _, entry in ipairs(entries) do
+                    for line_number = entry.git.range.start_line, entry.git.range.end_line do
+                        local mark = vim.fn.sign_place(
+                            0,
+                            _GIT_GUTTER_SIGN_GROUP,
+                            _P.GitHuntModeToGitGutterSign[entry.git.mode],
+                            buffer,
+                            {
+                                lnum = line_number,
+                                priority = 8, -- NOTE: Some number that is higher than LSP signs.
+                            }
+                        )
+
+                        table.insert(_SIGNS_CACHE[buffer], mark)
+                    end
                 end
-            end
+            end)
         end)
     end
-
-    -- TOOD: Add a command for this later.
-    _P.load_git_diff_to_quickfix(vim.fn.getcwd())
 
     vim.fn.sign_define(_P.GitGutterSign.added, {
         icon = "┃",
@@ -6876,8 +6899,23 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
         texthl = "GitGutterDelete",
     })
 
+    vim.api.nvim_create_user_command("LoadGitDiff", function(options)
+        local directory = vim.fn.getcwd()
+        local branch = options.fargs[1]
+
+        if not branch then
+            _P.get_default_git_branch(directory, function(branch)
+                _P.load_git_diff_to_quickfix({ directory = directory, branch = branch })
+            end)
+
+            return
+        end
+
+        _P.load_git_diff_to_quickfix({ directory = directory, branch = branch })
+    end, { nargs = "?", desc = "Run `git diff` Live-Grep and then search Neovim's :help command." })
+
     vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "FileChangedShellPost" }, {
-        callback = function()
+        callback = _P.debounce_trailing(function()
             if vim.tbl_contains({ "terminal", "quickfix", "loclist" }, vim.bo.buftype) then
                 return
             end
@@ -6894,11 +6932,9 @@ do -- NOTE: Load the current git diff in Neovim's quickfix buffer + signs column
                 return
             end
 
-            _P.debounce_trailing(function()
-                return vim.schedule(function()
-                    _P.update_signs_for_window(buffer, path)
-                end)
-            end, 200)
-        end,
+            vim.schedule(function()
+                _P.update_signs_for_window(buffer, path)
+            end)
+        end, 200),
     })
 end

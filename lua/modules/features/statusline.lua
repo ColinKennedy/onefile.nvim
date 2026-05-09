@@ -134,7 +134,7 @@ vim.o.statusline = table.concat({
     "%{v:lua.get_git_branch_label_safe()} ",
     "%#StatusLightArrow#",
     left_arrow,
-    "%{v:lua.get_grapple_statusline()} ",
+    "%{%v:lua.get_grapple_statusline()%} ",
     "%=", -- Spacer
     "%#StatusLightArrow# ",
     right_arrow,

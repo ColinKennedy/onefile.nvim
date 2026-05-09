@@ -1,0 +1,78 @@
+# If you have issues with `release.yml`, use this code to troubleshoot!
+#
+# ```sh
+# python3 .github/workflows/inline_init.py --input init.lua --output init.lua
+# make luacheck
+# make test
+# make llscheck CONFIGURATION=.github/workflows/.luarc_release.json
+# ```
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release bundled init
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          # TODO: Replace with a stable version once stable includes newer features (e.g. scrolloffpad)
+          version: nightly
+
+      - name: Install lua-language-server
+        uses: jdx/mise-action@v2
+        with:
+          tool_versions: |
+            lua-language-server latest
+
+      - name: Install Lua tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1 luarocks
+          sudo luarocks install busted
+          sudo luarocks install luacheck
+          sudo luarocks install llscheck
+
+      - name: Generate bundled init
+        run: |
+          python3 .github/workflows/inline_init.py --input init.lua --output init.lua
+
+      - name: Configure for local git cloning
+        run: |
+          # We use SSH in the `Makefile` but GitHub actions don't allow that. So
+          # we force git to clone using HTTP instead.
+          #
+          export GIT_CONFIG=~/.gitconfig
+          git config url."https://github.com/".insteadOf git@github.com:
+
+      - name: Luacheck bundled init tree
+        run: |
+          make luacheck
+
+      - name: llscheck bundled init tree
+        run: |
+          make llscheck CONFIGURATION=.github/workflows/.luarc_release.json
+
+      - name: Test bundled init tree
+        run: |
+          make test
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/noplugins-init.lua
+          generate_release_notes: true

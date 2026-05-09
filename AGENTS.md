@@ -73,8 +73,10 @@ Tracked workflows cover:
 ## Coding Style
 
 - Follow the existing Lua style: local `_P` helper table, typed LuaCATS annotations, small focused helper functions, and explicit `---@param` / `---@return` docs for nontrivial utilities.
+- Do not add `---@return nil` for functions that only use bare `return` statements or have no `return` statements. Only document returns when a function explicitly returns a value, such as `return nil`, `return false`, or `return value`.
 - Preserve the no-plugin philosophy and prefer built-in Neovim APIs, Lua standard library behavior, and shell commands already represented in the config.
-- Keep keymaps discoverable: new keymaps should have a clear `desc` unless there is a specific reason they cannot.
+- Defer Lua `require` calls as much as practical, especially in startup-loaded feature modules; prefer local requires inside the functions that need them to keep Neovim startup fast.
+- Keep keymaps and user commands discoverable: every new or modified keymap or user command should have a clear `desc` unless there is a specific reason it cannot.
 - Use `vim.api`, `vim.fn`, `vim.fs`, and `vim.tbl_*` consistently with nearby code.
 - Respect existing environment overrides such as `NEOVIM_GIT_EXECUTABLE_PATH`, `NEOVIM_RIPGREP_EXECUTABLE_PATH`, and `NEOVIM_SESSIONS_DIRECTORY_NAME`.
 - Avoid broad refactors in `init.lua`; it is a large personal config, so narrow behavior-driven changes are usually safer.

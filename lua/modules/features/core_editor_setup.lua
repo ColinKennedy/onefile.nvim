@@ -4,6 +4,107 @@ local M = {}
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
 
+--- Normalize a path for compact display logic.
+---
+---@param path string A filesystem path.
+---@return string # The path with forward slashes and no trailing slash.
+local function _normalize_display_path(path)
+    path = path:gsub("\\", "/")
+
+    if path ~= "/" then
+        path = path:gsub("/+$", "")
+    end
+
+    return path
+end
+
+--- Abbreviate a single directory segment for the selector header.
+---
+---@param segment string A directory name.
+---@return string # The shortened directory name.
+local function _shorten_directory_segment(segment)
+    if segment:sub(1, 1) == "." and #segment > 1 then
+        return "." .. segment:sub(2, 2)
+    end
+
+    return segment:sub(1, 1)
+end
+
+--- Shorten a directory path for the selector header.
+---
+--- Examples:
+---     `/home/me/repositories/personal/.config/noplugins` becomes
+---     `~/r/p/.c/noplugins`.
+---
+---@param path string The directory path to display.
+---@param home string? The home directory to replace with `~`.
+---@return string # A compact display-only path.
+function M.shorten_selector_directory_path(path, home)
+    path = _normalize_display_path(path)
+    home = _normalize_display_path(home or vim.uv.os_homedir() or "")
+
+    local comparable_path = path:lower()
+    local comparable_home = home:lower()
+    local is_path_in_home = comparable_path == comparable_home
+        or comparable_path:sub(1, #comparable_home + 1) == comparable_home .. "/"
+
+    if comparable_home ~= "" and is_path_in_home then
+        path = "~" .. path:sub(#home + 1)
+    end
+
+    local prefix = ""
+    local rest = path
+
+    if path:sub(1, 2) == "~/" then
+        prefix = "~/"
+        rest = path:sub(3)
+    elseif path:sub(1, 1) == "/" then
+        prefix = "/"
+        rest = path:sub(2)
+    elseif path:match("^%a:/") then
+        prefix = path:sub(1, 3)
+        rest = path:sub(4)
+    end
+
+    local segments = vim.split(rest, "/", { plain = true, trimempty = true })
+
+    if #segments <= 1 then
+        return prefix .. rest
+    end
+
+    for index = 1, #segments - 1 do
+        segments[index] = _shorten_directory_segment(segments[index])
+    end
+
+    return prefix .. table.concat(segments, "/")
+end
+
+--- Return the window that should receive selector results.
+---
+---@return integer # The window that should be targeted by the selector.
+function M.get_selector_target_window()
+    local window = vim.api.nvim_get_current_win()
+
+    if vim.bo.filetype ~= "aerial" then
+        return window
+    end
+
+    local ok, aerial = pcall(require, "modules.plugins.aerial")
+
+    if not ok then
+        return window
+    end
+
+    local source_window = aerial.get_current_source_window()
+
+    if source_window == nil then
+        return window
+    end
+
+    vim.api.nvim_set_current_win(source_window)
+
+    return source_window
+end
 
 --- Find, select, and replace the current window with a new file.
 ---
@@ -24,7 +125,7 @@ function M.select_file_in_directory(root)
     end
 
     root = root or vim.fn.getcwd()
-    local command = { core_helpers._RIPGREP_EXECUTABLE, "--files", root }
+    local command = { core_helpers._RIPGREP_EXECUTABLE, "--files", "--hidden", "--glob", "!.git", root }
 
     if not core_helpers.exists_command(command[1]) then
         vim.notify("Cannot do search. No `rg` command was found.", vim.log.levels.ERROR)
@@ -32,7 +133,11 @@ function M.select_file_in_directory(root)
         return
     end
 
-    local window = vim.api.nvim_get_current_win()
+    local window = M.get_selector_target_window()
+
+    ---@type (fun())?
+    local refresh_selector
+    local should_refresh_selector = false
 
     local options = core_helpers.get_deferred_shell_command_results(command, function(obj)
         if obj.stdout == "" then
@@ -42,16 +147,28 @@ function M.select_file_in_directory(root)
             return
         end
 
-        vim.notify(
-            string.format('Rg command failed. See "%s" for details.', vim.inspect(obj)),
-            vim.log.levels.ERROR
-        )
+        vim.notify(string.format('Rg command failed. See "%s" for details.', vim.inspect(obj)), vim.log.levels.ERROR)
+    end, function()
+        if refresh_selector then
+            refresh_selector()
+
+            return
+        end
+
+        should_refresh_selector = true
     end)
 
-    M.select_from_options(options, {
-        confirm = function(entry)
+    refresh_selector = M.select_from_options(options, {
+        header = {
+            { text = M.shorten_selector_directory_path(root), highlight = "Directory" },
+        },
+        multiple_selection = true,
+        confirm = function(entries)
             vim.api.nvim_set_current_win(window)
-            vim.cmd.edit(entry.value)
+
+            for _, entry in ipairs(entries) do
+                vim.cmd.edit(entry.value)
+            end
         end,
         deserialize = function(choice)
             ---@cast choice string
@@ -67,11 +184,16 @@ function M.select_file_in_directory(root)
             return { display = display, value = choice }
         end,
     })
+
+    if should_refresh_selector then
+        refresh_selector()
+    end
 end
 
 --- Find the top of the project, if any, and then search for files.
 function M.select_file_from_project_root()
-    local buffer = vim.api.nvim_get_current_buf()
+    local window = M.get_selector_target_window()
+    local buffer = vim.api.nvim_win_get_buf(window)
     local root = core_helpers.get_nearest_project_root(buffer)
 
     if not root then
@@ -91,6 +213,7 @@ end
 ---    The possible values to select from.
 ---@param options _my.selection_gui.GuiOptions
 ---    A function run to run on-selection. e.g. "open the file in a buffer".
+---@return fun(): nil # A callback that refreshes the visible filtered options.
 ---
 function M.select_from_options(values, options)
     --- Pass `value` through and just return it.
@@ -127,9 +250,6 @@ function M.select_from_options(values, options)
         end
     end
 
-    ---@type _my.selector_gui.State
-    local state = { input = "", all = values, filtered = {}, selected = 1 }
-
     local columns = vim.o.columns
     local lines = vim.o.lines
 
@@ -139,9 +259,14 @@ function M.select_from_options(values, options)
 
     -- List window dimensions
     local list_width = columns - (margin_x * 2) - 2
+    local list_selection_column_width = options.multiple_selection and 1 or 0
+    local list_window_width = list_width + list_selection_column_width
     local list_height = lines - (margin_y * 2) - 5
     local list_row = margin_y + 1
     local list_column = margin_x + 1
+
+    ---@type _my.selector_gui.State
+    local state = { input = "", all = values, filtered = {}, selected = 1, selected_by_value = {} }
 
     -- Prompt window dimensions
     local prompt_width = list_width
@@ -149,17 +274,52 @@ function M.select_from_options(values, options)
     local prompt_row = list_row - 2
     local prompt_column = list_column
 
+    --- Escape selector header text for use in a window-local statusline string.
+    ---
+    ---@param text string Some header text.
+    ---@return string # Text that can be safely embedded into a winbar.
+    local function _escape_statusline_text(text)
+        local output = text:gsub("%%", "%%%%")
+        output = output:gsub("\n", " ")
+
+        return output
+    end
+
+    --- Convert selector header chunks into a pinned floating-window winbar.
+    ---
+    ---@return string? # The winbar string, if a header was configured.
+    local function _get_list_window_winbar()
+        if not options.header or #options.header == 0 then
+            return nil
+        end
+
+        ---@type string[]
+        local chunks = {}
+
+        for _, chunk in ipairs(options.header) do
+            table.insert(chunks, string.format("%%#%s#%s%%*", chunk.highlight, _escape_statusline_text(chunk.text)))
+        end
+
+        return table.concat(chunks, "")
+    end
+
     -- Create list buffer and window
     local list_buffer = vim.api.nvim_create_buf(false, true)
+    local list_namespace = vim.api.nvim_create_namespace("selector-gui-list")
     local list_window = vim.api.nvim_open_win(list_buffer, true, {
         relative = "editor",
-        width = list_width,
+        width = list_window_width,
         height = list_height,
         row = list_row,
         col = list_column,
         style = "minimal",
         border = "single",
     })
+    local list_window_winbar = _get_list_window_winbar()
+
+    if list_window_winbar then
+        vim.wo[list_window].winbar = list_window_winbar
+    end
 
     -- Create prompt buffer and window
     local prompt_buffer = vim.api.nvim_create_buf(false, true)
@@ -173,6 +333,7 @@ function M.select_from_options(values, options)
         border = "single",
     })
     vim.api.nvim_buf_set_lines(prompt_buffer, 0, -1, false, { "" })
+    local prompt_namespace = vim.api.nvim_create_namespace("selector-gui-prompt")
 
     -- Start in insert mode in prompt
     vim.api.nvim_set_current_win(prompt_window)
@@ -182,21 +343,168 @@ function M.select_from_options(values, options)
         vim.api.nvim_feedkeys(options.input, "i", false)
     end
 
+    --- Convert a selected item index to its visible list buffer line.
+    ---
+    ---@param selected integer The one-indexed selected item index.
+    ---@return integer # The one-indexed list buffer line.
+    local function _get_selected_buffer_line(selected)
+        return selected
+    end
+
+    --- Count all entries explicitly chosen in multi-select mode.
+    ---
+    ---@return integer # The selected entry count.
+    local function _count_selected_entries()
+        local count = 0
+
+        for _ in pairs(state.selected_by_value) do
+            count = count + 1
+        end
+
+        return count
+    end
+
+    --- Draw the current filtered/total count in the upper-right prompt corner.
+    local function _draw_match_count()
+        local text = string.format("%d/%d", #state.filtered, #state.all)
+
+        if options.multiple_selection then
+            text = string.format("%s (%d)", text, _count_selected_entries())
+        end
+
+        vim.api.nvim_buf_clear_namespace(prompt_buffer, prompt_namespace, 0, -1)
+        vim.api.nvim_buf_set_extmark(prompt_buffer, prompt_namespace, 0, 0, {
+            virt_text = {
+                { text, "Comment" },
+            },
+            virt_text_pos = "right_align",
+        })
+    end
+
+    --- Get the list-window row where the selection should settle while scrolling.
+    ---
+    ---@return integer # The one-indexed row where the selected entry should appear.
+    local function _get_scroll_anchor_row()
+        return math.max(1, math.floor((list_height + 1) / 2))
+    end
+
+    --- Get the top buffer line needed to keep the selected entry anchored.
+    ---
+    ---@param selected_line integer The selected line in the list buffer.
+    ---@return integer # The one-indexed buffer line that should be at the top of the list window.
+    local function _get_top_line_for_selection(selected_line)
+        local anchor_row = _get_scroll_anchor_row()
+
+        if selected_line <= anchor_row then
+            return 1
+        end
+
+        return selected_line - anchor_row + 1
+    end
+
+    --- Add blank lines so the selected entry can stay centered near the end.
+    ---
+    ---@param top_line integer The desired top line for the list window.
+    local function _pad_list_bottom(top_line)
+        local line_count = vim.api.nvim_buf_line_count(list_buffer)
+        local visible_last_line = top_line + list_height - 1
+        local missing_lines = visible_last_line - line_count
+
+        if missing_lines <= 0 then
+            return
+        end
+
+        ---@type string[]
+        local padding = {}
+
+        for _ = 1, missing_lines do
+            table.insert(padding, "")
+        end
+
+        vim.api.nvim_buf_set_lines(list_buffer, -1, -1, false, padding)
+    end
+
+    --- Scroll the list window so the selected entry behaves like scrolloffpad.
+    ---
+    ---@param selected_line integer The selected line in the list buffer.
+    local function _scroll_to_selection(selected_line)
+        local top_line = _get_top_line_for_selection(selected_line)
+
+        _pad_list_bottom(top_line)
+        pcall(vim.api.nvim_win_set_cursor, list_window, { selected_line, 0 })
+        pcall(vim.api.nvim_win_call, list_window, function()
+            vim.fn.winrestview({ topline = top_line })
+        end)
+    end
+
     --- Redraw the current, filtered list.
     local function _redraw()
         -- TODO: Don't redraw the whole buffer. This is slow.
-        vim.api.nvim_buf_set_lines(list_buffer, 0, -1, false, {})
+        vim.api.nvim_buf_clear_namespace(list_buffer, list_namespace, 0, -1)
+
+        ---@type string[]
+        local rendered_lines = {}
 
         for index, item in ipairs(state.filtered) do
-            local prefix = (index == state.selected) and "> " or "  "
-            vim.api.nvim_buf_set_lines(list_buffer, index, index, false, { prefix .. item.display })
+            local hover_marker = (index == state.selected) and ">" or " "
+
+            if options.multiple_selection then
+                local selection_marker = state.selected_by_value[item.value] and ">" or " "
+                table.insert(rendered_lines, hover_marker .. selection_marker .. " " .. item.display)
+            else
+                table.insert(rendered_lines, hover_marker .. " " .. item.display)
+            end
         end
+
+        if #rendered_lines == 0 then
+            table.insert(rendered_lines, "")
+        end
+
+        vim.api.nvim_buf_set_lines(list_buffer, 0, -1, false, rendered_lines)
+
+        if options.multiple_selection then
+            for index, item in ipairs(state.filtered) do
+                if state.selected_by_value[item.value] then
+                    vim.api.nvim_buf_set_extmark(list_buffer, list_namespace, index - 1, 1, {
+                        end_col = 2,
+                        hl_group = "SelectorSelectedMarker",
+                        priority = 25,
+                    })
+                end
+            end
+        end
+
+        if #state.filtered > 0 then
+            local selected_line = _get_selected_buffer_line(state.selected)
+            local prefix_start_column = 0
+            local text_start_column = list_selection_column_width + 2
+
+            vim.api.nvim_buf_set_extmark(list_buffer, list_namespace, selected_line - 1, 0, {
+                line_hl_group = "Visual",
+                priority = 10,
+            })
+            vim.api.nvim_buf_set_extmark(list_buffer, list_namespace, selected_line - 1, text_start_column, {
+                end_col = #rendered_lines[selected_line],
+                hl_group = "SelectorCurrentLine",
+                priority = 15,
+            })
+            vim.api.nvim_buf_set_extmark(list_buffer, list_namespace, selected_line - 1, prefix_start_column, {
+                end_col = prefix_start_column + 1,
+                hl_group = "SelectorCurrentPrefix",
+                priority = 20,
+            })
+
+            _scroll_to_selection(selected_line)
+        end
+
+        _draw_match_count()
     end
 
     --- Populate filtered items.
     local function _update_filter()
         local line = vim.api.nvim_buf_get_lines(prompt_buffer, 0, 1, false)[1]
         state.input = line or ""
+        ---@type _my.selector_gui.entry.Selection[]
         state.filtered = {}
 
         ---@type _my.selector_gui.entry.Selection[]
@@ -246,7 +554,31 @@ function M.select_from_options(values, options)
         _close_all()
 
         local entry = state.filtered[state.selected]
-        options.confirm(entry)
+
+        if not options.multiple_selection then
+            options.confirm(entry)
+
+            return
+        end
+
+        ---@type _my.selector_gui.entry.Selection[]
+        local selected_entries = {}
+        local deserializer = options.deserialize or _passthrough
+
+        for _, item in ipairs(state.all) do
+            local deserialized = deserializer(item)
+            local selected = state.selected_by_value[deserialized.value]
+
+            if selected then
+                table.insert(selected_entries, selected)
+            end
+        end
+
+        if #selected_entries == 0 and entry then
+            table.insert(selected_entries, entry)
+        end
+
+        options.confirm(selected_entries)
     end
 
     --- Don't select anything from the search and just close all of the windows.
@@ -290,13 +622,35 @@ function M.select_from_options(values, options)
 
         local down_options =
             vim.tbl_deep_extend("force", opts, { desc = "Select the item below the current selection." })
-        local up_options =
-            vim.tbl_deep_extend("force", opts, { desc = "Select the item above the current selection." })
+        local up_options = vim.tbl_deep_extend("force", opts, { desc = "Select the item above the current selection." })
         vim.keymap.set("n", "j", select_down, down_options)
         vim.keymap.set("i", "<C-n>", select_down, down_options)
 
         vim.keymap.set("n", "k", select_up, up_options)
         vim.keymap.set("i", "<C-p>", select_up, up_options)
+
+        if options.multiple_selection then
+            local toggle_selection = function()
+                local entry = state.filtered[state.selected]
+
+                if not entry then
+                    return
+                end
+
+                if state.selected_by_value[entry.value] then
+                    state.selected_by_value[entry.value] = nil
+                else
+                    state.selected_by_value[entry.value] = entry
+                end
+
+                _redraw()
+            end
+            local toggle_options =
+                vim.tbl_deep_extend("force", opts, { desc = "Toggle multi-selection for the current item." })
+
+            vim.keymap.set("n", "<Tab>", toggle_selection, toggle_options)
+            vim.keymap.set("i", "<Tab>", toggle_selection, toggle_options)
+        end
     end
 
     _setup_keys()
@@ -308,6 +662,8 @@ function M.select_from_options(values, options)
         buffer = prompt_buffer,
         callback = vim.schedule_wrap(_update_filter),
     })
+
+    return _update_filter
 end
 
 --- Write Lua source code that shows how to save/restore bookmarks.
@@ -316,8 +672,11 @@ end
 ---@return string[] # All of the Lua source-code.
 ---
 function M.serialize_mark_code(directory)
+    ---@type string?
+    local expanded_directory = nil
+
     if directory then
-        directory = vim.fn.expand(directory)
+        expanded_directory = tostring(vim.fn.expand(directory))
     end
 
     ---@type string[]
@@ -332,9 +691,9 @@ function M.serialize_mark_code(directory)
         if mark and mark.file ~= "" then
             local path = vim.fn.expand(mark.file)
 
-            if directory then
+            if expanded_directory then
                 local success, relative = pcall(function()
-                    return vim.fs.relpath(directory, path)
+                    return vim.fs.relpath(expanded_directory, path)
                 end)
 
                 if success and relative then
@@ -396,10 +755,8 @@ function M.setup_lsp_details(args)
     end, { desc = "Show documentation for the current WORD under the cursor." })
 
     local identifier = args.data.client_id
-    local client = assert(
-        vim.lsp.get_client_by_id(identifier),
-        string.format('Identifier "%s" has no LSP client.', identifier)
-    )
+    local client =
+        assert(vim.lsp.get_client_by_id(identifier), string.format('Identifier "%s" has no LSP client.', identifier))
 
     if client:supports_method("textDocument/completion") then
         -- NOTE: Automatic LSP auto-complete + we can still use <C-x><C-o>
@@ -408,7 +765,10 @@ function M.setup_lsp_details(args)
         vim.lsp.completion.enable(true, client.id, args.buf, { autotrigger = true })
         vim.opt_local.completeopt = { "fuzzy", "menuone", "noinsert", "noselect" }
         -- NOTE: This line adds omnifunc (LSP) as a completion source.
-        vim.opt_local.complete:append("o")
+        -- TODO: Remove this pcall guard once Neovim 0.11.0 support is dropped
+        pcall(function()
+            vim.opt_local.complete:append("o")
+        end)
     end
 
     vim.o.pumheight = 5 -- NOTE: Only the top 5 suggestions are shown
@@ -516,10 +876,7 @@ function M.show_git_stashes()
             -- NOTE: For some reason the error is in stdout
             local error_message = process.stdout
 
-            vim.notify(
-                string.format("Git stash apply failed. See below:\n\n%s", error_message),
-                vim.log.levels.ERROR
-            )
+            vim.notify(string.format("Git stash apply failed. See below:\n\n%s", error_message), vim.log.levels.ERROR)
         end,
     })
 end
@@ -559,6 +916,16 @@ function M.show_snippet_completion()
         vim.snippet.expand(snippet.body)
     end
 
+    --- Delete the trigger text and immediately expand `match`.
+    ---
+    ---@param start_column integer A 1-or-more Lua value where the trigger begins.
+    ---@param match _my.completion.Entry The only matched snippet completion.
+    local function _expand_single_match(start_column, match)
+        local window = 0 -- NOTE: The current window
+        _delete_trigger_text(window, start_column)
+        _expand_snippet({ completed = match })
+    end
+
     --- Delete the initial trigger text and expand the snippet
     ---
     ---@param start_column integer A 1-or-more Lua value where `callback` runs from.
@@ -584,6 +951,12 @@ function M.show_snippet_completion()
     table.sort(matches, function(left, right)
         return left.word < right.word
     end)
+
+    if #matches == 1 then
+        _expand_single_match(start_column - 1, matches[1])
+
+        return
+    end
 
     vim.fn.complete(start_column, matches)
 
@@ -979,61 +1352,209 @@ function M.write_async(filename, data)
     return status, message
 end
 
+---@type table<string, _my.git_branch_cache>
+local _GIT_BRANCH_CACHE = {}
+local _GIT_BRANCH_REFRESH_INTERVAL = 500
+local _IS_GIT_AVAILABLE = nil
+
+---@class _my.git_branch_cache
+---@field branch string?
+---@field checked_at integer
+---@field in_flight boolean
+---@field failed boolean
+
+---@return boolean
+local function _is_git_available()
+    if _IS_GIT_AVAILABLE == nil then
+        _IS_GIT_AVAILABLE = core_helpers.exists_command(core_helpers._GIT_EXECUTABLE)
+    end
+
+    return _IS_GIT_AVAILABLE
+end
+
+---@param buffer integer
+---@return string?
+local function _get_terminal_job_directory(buffer)
+    local job_id = vim.b[buffer].terminal_job_id
+
+    if not job_id then
+        return nil
+    end
+
+    local ok, pid = pcall(vim.fn.jobpid, job_id)
+
+    if not ok or pid <= 0 then
+        -- NOTE: This happens if `job_id` is a deleted terminal buffer.
+        return nil
+    end
+
+    local has_directory, directory = pcall(vim.uv.fs_realpath, "/proc/" .. pid .. "/cwd")
+
+    if has_directory and type(directory) == "string" and vim.fn.isdirectory(directory) == 1 then
+        return directory
+    end
+
+    return nil
+end
+
+---@param buffer integer
+---@return string?
+local function _get_terminal_buffer_directory(buffer)
+    local terminal_job_directory = _get_terminal_job_directory(buffer)
+
+    if terminal_job_directory then
+        return terminal_job_directory
+    end
+
+    local toggle_terminal_cwd = vim.b[buffer]._toggle_terminal_cwd
+
+    if toggle_terminal_cwd and vim.fn.isdirectory(toggle_terminal_cwd) == 1 then
+        return toggle_terminal_cwd
+    end
+
+    local name = vim.api.nvim_buf_get_name(buffer)
+    local directory = name:match("^term://(.-)//")
+
+    if directory and vim.fn.isdirectory(directory) == 1 then
+        return directory
+    end
+
+    return nil
+end
+
+---@return string
+local function _get_git_branch_reference_path()
+    local buffer = vim.api.nvim_get_current_buf()
+
+    if vim.bo[buffer].buftype == "terminal" then
+        return _get_terminal_buffer_directory(buffer) or vim.fn.getcwd()
+    end
+
+    local path = vim.api.nvim_buf_get_name(buffer)
+
+    if path == "" then
+        return vim.fn.getcwd()
+    end
+
+    return vim.fs.dirname(path)
+end
+
+---@param path string?
+---@return string
+local function _get_git_branch_cache_key(path)
+    return vim.fs.normalize(path or _get_git_branch_reference_path())
+end
+
+---@param path string?
+---@return string[]
+local function _get_git_branch_command(path)
+    return {
+        core_helpers._GIT_EXECUTABLE,
+        "-C",
+        path or _get_git_branch_reference_path(),
+        "rev-parse",
+        "--abbrev-ref",
+        "HEAD",
+    }
+end
+
+---@param path string?
+---@param entry _my.git_branch_cache
+local function _refresh_git_branch(path, entry)
+    if entry.in_flight then
+        return
+    end
+
+    entry.in_flight = true
+
+    vim.system(_get_git_branch_command(path), { text = true }, function(process)
+        local branch = nil
+        local failed = process.code ~= 0
+
+        if not failed then
+            branch = vim.split(process.stdout or "", "\n", { plain = true })[1]
+
+            if branch == "" then
+                branch = nil
+            end
+        end
+
+        vim.schedule(function()
+            entry.branch = branch
+            entry.checked_at = vim.uv.now()
+            entry.failed = failed or branch == nil
+            entry.in_flight = false
+            vim.cmd("redrawstatus!")
+        end)
+    end)
+end
+
 --- Find the git branch name, if any.
+---
+--- This function returns the last cached branch immediately and refreshes the
+--- value asynchronously when needed. Keep it cheap; it is called by the
+--- statusline.
 ---
 ---@param path string? Use this path to find the git repository. If not provided, we use Vim's own $PWD instead.
 ---@return string? # Get the current Git branch, if any.
 ---
 function M.get_git_branch_safe(path)
-    local command = { core_helpers._GIT_EXECUTABLE, "rev-parse", "--abbrev-ref", "HEAD" }
-
-    if path then
-        vim.list_extend(command, { "-C", path })
-    end
-
-    if not core_helpers.exists_command(command[1]) then
+    if not _is_git_available() then
         return nil
     end
 
-    local process = vim.system(command, { text = true }):wait()
+    local key = _get_git_branch_cache_key(path)
+    local entry = _GIT_BRANCH_CACHE[key]
 
-    if process.code ~= 0 then
-        return nil
+    if not entry then
+        entry = { checked_at = 0, in_flight = false, failed = false }
+        _GIT_BRANCH_CACHE[key] = entry
     end
 
-    local branch = vim.split(process.stdout, "\n", { plain = true })[1]
+    local now = vim.uv.now()
 
-    if branch == "" then
-        return nil
+    if entry.checked_at == 0 or (now - entry.checked_at) > _GIT_BRANCH_REFRESH_INTERVAL then
+        _refresh_git_branch(path, entry)
     end
 
-    return branch
+    return entry.branch
+end
+
+--- Refresh the cached git branch for `path` without waiting.
+---
+---@param path string? Use this path to find the git repository. If not provided, use the current buffer.
+function M.refresh_git_branch_safe(path)
+    if not _is_git_available() then
+        return
+    end
+
+    local key = _get_git_branch_cache_key(path)
+    local entry = _GIT_BRANCH_CACHE[key]
+
+    if not entry then
+        entry = { checked_at = 0, in_flight = false, failed = false }
+        _GIT_BRANCH_CACHE[key] = entry
+    end
+
+    _refresh_git_branch(path, entry)
 end
 
 ---@return string # Get a human-readable git branch name, if possible.
 function M.get_git_branch_label_safe()
-    local command = { core_helpers._GIT_EXECUTABLE, "rev-parse", "--abbrev-ref", "HEAD" }
-
-    if not core_helpers.exists_command(command[1]) then
+    if not _is_git_available() then
         return "<No git command>"
     end
 
-    local process = vim.system(command, { text = true }):wait()
+    local branch = M.get_git_branch_safe(_get_git_branch_reference_path())
 
-    if process.code ~= 0 then
-        return "<Git command failed>"
-    end
-
-    local branch = process.stdout:gsub("\n", "")
-
-    if branch == "" then
+    if not branch then
         return "<No git branch found>"
     end
 
     local git_prefix = "git "
 
-    if core_helpers._IS_NERDFONT_ALLOWED then
-        git_prefix = " "
+    if core_helpers.IS_NERDFONT_ALLOWED then
+        git_prefix = " "
     end
 
     return git_prefix .. branch

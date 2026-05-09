@@ -19,10 +19,7 @@ function _P.operator_paste(type_)
     elseif type_ == "line" then
         vim.cmd('normal! `[V`]"_d')
     else
-        vim.notify(
-            string.format('Unknown mode "%s" is not supported for paste operator.', type_),
-            vim.log.levels.WARN
-        )
+        vim.notify(string.format('Unknown mode "%s" is not supported for paste operator.', type_), vim.log.levels.WARN)
 
         return
     end

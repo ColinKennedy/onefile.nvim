@@ -1,30 +1,6 @@
 --- Define baseline window, tab, buffer, quickfix, command-line, and terminal keymaps.
 
 ---------- Keymaps [Start] ----------
-local options = { expr = true, noremap = true, silent = true }
-local move_description = function(direction)
-    return vim.tbl_deep_extend("force", options, { desc = string.format('Move to the "%s" window.', direction) })
-end
-vim.keymap.set("n", "<C-h>", "<C-w>h", move_description("left"))
-vim.keymap.set("n", "<C-j>", "<C-w>j", move_description("bottom"))
-vim.keymap.set("n", "<C-k>", "<C-w>k", move_description("top"))
-vim.keymap.set("n", "<C-l>", "<C-w>l", move_description("right"))
-
-local resize_description = function(direction)
-    return vim.tbl_deep_extend("force", options, { desc = string.format('Resize the "%s" window.', direction) })
-end
-vim.keymap.set("n", "<M-h>", function()
-    require("modules.utilities.core_helpers").resize_window("left", 5)
-end, resize_description("left"))
-vim.keymap.set("n", "<M-j>", function()
-    require("modules.utilities.core_helpers").resize_window("down", 2)
-end, resize_description("down"))
-vim.keymap.set("n", "<M-k>", function()
-    require("modules.utilities.core_helpers").resize_window("up", 2)
-end, resize_description("up"))
-vim.keymap.set("n", "<M-l>", function()
-    require("modules.utilities.core_helpers").resize_window("right", 5)
-end, resize_description("right"))
 
 -- Add numbered j/k movements to Vim's jumplist
 -- Reference: https://www.reddit.com/r/neovim/comments/1k3lhac/tiny_quality_of_life_rebind_make_j_and_k/
@@ -50,9 +26,6 @@ vim.keymap.set("n", "gp", "`[v`]", { desc = "Select the most recent text [p]ut y
 vim.keymap.set("v", ".", "<cmd>norm.<CR>", {
     desc = "Make `.` work with visually selected lines.",
 })
-
-vim.keymap.set("i", "jk", "<Esc>", { desc = "Escape to NORMAL mode." })
-vim.keymap.set("t", "jk", "<C-\\><C-n>", { desc = "Escape to NORMAL mode." })
 
 vim.keymap.set("n", "<leader>ss", ":%s/\\<<C-r><C-w>\\>/<C-r><C-w>/<Right>", {
     desc = "[s]ubstitute [s]election (in-file search/replace) for the word under your cursor.",

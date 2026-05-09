@@ -3,7 +3,6 @@
 local M = {}
 local _P = {}
 
-
 ---@class _my._datatypes.IntBounds An inclusive or exclusive pair of integers.
 ---@field first integer The starting value.
 ---@field last integer The ending value.
@@ -18,7 +17,7 @@ local _P = {}
 ---    The actual user inline comment, without the tag.
 
 ---@class _my.completion.Data All Snippet-internal data used during callbacks.
----@field completed vim.v.completed_item The completed word/phrase.
+---@field completed vim.v.completed_item | _my.completion.Entry The completed word/phrase.
 
 ---@class _my.completion.Entry A Neovim representation of a "row" of auto-complete data.
 ---@field kind string The type of completion item.
@@ -28,6 +27,10 @@ local _P = {}
 ---@class _my.selector_gui.entry.Deserialized The formatted option used by the selector GUI.
 ---@field display string The text to show in the pop-up.
 ---@field value any The original data, unformatted.
+
+---@class _my.selector_gui.HeaderChunk A highlighted bit of selector header text.
+---@field text string The text to draw at the top of the selector's results window.
+---@field highlight string The highlight group to apply to `text`.
 
 ---@alias _my.easymotion.ExtmarksData table<string, {line: integer, column: integer, id: integer}>
 
@@ -62,6 +65,8 @@ local _P = {}
 ---@field all string[] All possible options to consider.
 ---@field filtered _my.selector_gui.entry.Selection[] All options that match with `input`.
 ---@field selected integer The selected index.
+---@field selected_by_value table<any, _my.selector_gui.entry.Selection>
+---    Entries explicitly selected in multi-select mode.
 
 ---@class _my.selector_gui.entry.Selection : _my.selector_gui.entry.Deserialized
 ---    The formatted option used by the selector GUI.
@@ -72,9 +77,14 @@ local _P = {}
 ---    Use this to control the behavior of the selection GUI.
 ---@field input string?
 ---    Starting text to being a search, if any.
+---@field header _my.selector_gui.HeaderChunk[]?
+---    Static, unselectable text chunks to render above the selectable rows.
+---@field multiple_selection boolean?
+---    If enabled, <Tab> toggles selected entries and confirm sends all selected
+---    entries, or the hovered entry if nothing was explicitly selected.
 ---@field cancel (fun(value: _my.selector_gui.entry.Selection): nil)?
 ---    Custom "close selection GUI" behavior.
----@field confirm fun(value: _my.selector_gui.entry.Selection): nil
+---@field confirm fun(value: _my.selector_gui.entry.Selection|_my.selector_gui.entry.Selection[]): nil
 ---    The function that runs on-selection.
 ---@field deserialize (fun(value: any): _my.selector_gui.entry.Deserialized)?
 ---    Format the incoming data, if needed. This is needed when
@@ -154,6 +164,7 @@ M._RIPGREP_EXECUTABLE = os.getenv("NEOVIM_RIPGREP_EXECUTABLE_PATH") or "rg"
 ---@type table<string, boolean>
 local _LANGUAGES_CACHE = {}
 
+---@type table<string, _my.Snippet[]>
 local _SNIPPETS = {}
 
 M._SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
@@ -169,7 +180,7 @@ M._VIMSCRIPT_COMMENT_MARKER = '"'
 
 M._SESSIONX_NAME = "Sessionx.vim"
 
-M._IS_NERDFONT_ALLOWED = true
+M.IS_NERDFONT_ALLOWED = true
 
 local _MAXIMUM_QUICK_FIX_LENGTH = 55
 
@@ -587,6 +598,7 @@ end
 ---
 function M.compute_snippet_completion_options(data)
     -- NOTE: Re-populate the cache with snippets which match the completion menu
+    ---@type table<string, _my.Snippet>
     M._TRIGGER_TO_SNIPPET_CACHE = {}
 
     local snippets = _SNIPPETS[data.file_type] or {}
@@ -620,7 +632,7 @@ end
 ---@param first boolean? Whether to use the arguments of the first call to `caller` or not.
 ---@return fun(...: _Parameters): _Return # The wrapped function.
 ---
-function M.debounce_trailing(caller, timeout, first)
+function _P.debounce_trailing(caller, timeout, first)
     local timer = vim.uv.new_timer()
 
     if not timer then
@@ -765,9 +777,10 @@ end
 ---
 ---@param command string[] The shell command to run. e.g. `{"ls", "~"}`.
 ---@param on_fail (fun(obj: vim.SystemCompleted): nil)? If included, a function that runs on-error.
+---@param on_update (fun(): nil)? If included, a function that runs after command output is added.
 ---@return string[] # All returned results.
 ---
-function M.get_deferred_shell_command_results(command, on_fail)
+function M.get_deferred_shell_command_results(command, on_fail, on_update)
     ---@param obj vim.SystemCompleted
     local function generic_error(obj)
         vim.notify(
@@ -794,6 +807,10 @@ function M.get_deferred_shell_command_results(command, on_fail)
             if line ~= "" then
                 table.insert(options, line)
             end
+        end
+
+        if on_update then
+            vim.schedule(on_update)
         end
     end)
 
@@ -876,6 +893,7 @@ function _P.levenshtein(a, b)
         return len_a
     end
 
+    ---@type integer[]
     local previous = {}
 
     for index_b = 0, len_b do
@@ -883,6 +901,7 @@ function _P.levenshtein(a, b)
     end
 
     for index_a = 1, len_a do
+        ---@type integer[]
         local current = {}
 
         current[0] = index_a
@@ -892,8 +911,7 @@ function _P.levenshtein(a, b)
         for index_b = 1, len_b do
             local character_b = b:sub(index_b, index_b)
             local cost = (character_a == character_b) and 0 or 1
-            current[index_b] =
-                math.min(current[index_b - 1] + 1, previous[index_b] + 1, previous[index_b - 1] + cost)
+            current[index_b] = math.min(current[index_b - 1] + 1, previous[index_b] + 1, previous[index_b - 1] + cost)
         end
 
         previous = current
@@ -983,7 +1001,7 @@ function M.get_fuzzy_match_score(query, candidate)
     ---@return number? # A sortable score, or nil if the query does not match.
     ---
     local function subsequence_score(query_, candidate_)
-        if query_ == '' then
+        if query_ == "" then
             return 1
         end
 
@@ -1016,8 +1034,9 @@ function M.get_fuzzy_match_score(query, candidate)
                     streak = 1
                 end
 
-                local previous = candidate_index == 1 and '/' or candidate_:sub(candidate_index - 1, candidate_index - 1)
-                local is_boundary = previous:match('[%s%-%_%.%/]') ~= nil
+                local previous = candidate_index == 1 and "/"
+                    or candidate_:sub(candidate_index - 1, candidate_index - 1)
+                local is_boundary = previous:match("[%s%-%_%.%/]") ~= nil
 
                 score = score + 40 + (streak * 12)
 
@@ -1041,8 +1060,8 @@ function M.get_fuzzy_match_score(query, candidate)
         return score - ((first_match or 1) * 2) - (#candidate_ - #query_)
     end
 
-    local normalized_query = query:lower():gsub('[^%w%s%-%_%.%/]', '')
-    local normalized_candidate = candidate:lower():gsub('[^%w%s%-%_%.%/]', '')
+    local normalized_query = query:lower():gsub("[^%w%s%-%_%.%/]", "")
+    local normalized_candidate = candidate:lower():gsub("[^%w%s%-%_%.%/]", "")
 
     local score = subsequence_score(normalized_query, normalized_candidate)
 
@@ -1052,7 +1071,7 @@ function M.get_fuzzy_match_score(query, candidate)
 
     -- Keep typo tolerance cheap: only compare the query against individual path
     -- pieces whose length is close enough for one edit or transposition.
-    for token in normalized_candidate:gmatch('[%w]+') do
+    for token in normalized_candidate:gmatch("[%w]+") do
         if math.abs(#normalized_query - #token) <= 1 and is_near_typo(normalized_query, token) then
             return 15 - math.abs(#normalized_query - #token) - (#token / 100)
         end
@@ -1254,21 +1273,31 @@ function M.complete_relative(text)
     local directory = _P.get_current_buffer_directory()
 
     if not directory then
-        vim.cmd.edit(text)
-
-        return nil
+        return vim.fn.getcompletion(text, "file")
     end
 
-    local options = _P.enable_autochdir(function()
-        return vim.fn.getcompletion("edit ", "cmdline")
-    end)
+    local parent = vim.fs.dirname(text)
+    local prefix = vim.fs.basename(text)
+    local relative_parent = parent == "." and "" or parent
+    local search_directory = relative_parent == "" and directory or vim.fs.joinpath(directory, relative_parent)
+
+    if vim.fn.isdirectory(search_directory) ~= 1 then
+        return {}
+    end
 
     ---@type string[]
     local output = {}
 
-    for _, item in ipairs(options or {}) do
-        if vim.startswith(item, text) then
-            table.insert(output, item)
+    for _, name in ipairs(vim.fn.readdir(search_directory)) do
+        if vim.startswith(name, prefix) then
+            local relative = relative_parent == "" and name or vim.fs.joinpath(relative_parent, name)
+            local full = vim.fs.joinpath(search_directory, name)
+
+            if vim.fn.isdirectory(full) == 1 then
+                relative = relative .. "/"
+            end
+
+            table.insert(output, relative)
         end
     end
 
@@ -1561,10 +1590,7 @@ function M.reset_bookmark(mark, buffer)
             vim.cmd.mark(mark)
         end)
     else
-        vim.notify(
-            string.format('Bug: expected a string or integer but got "%s" value.', buffer),
-            vim.log.levels.ERROR
-        )
+        vim.notify(string.format('Bug: expected a string or integer but got "%s" value.', buffer), vim.log.levels.ERROR)
     end
 end
 
@@ -1652,6 +1678,8 @@ end
 ---@param command string The git command to run. e.g. `"pull"`, `"push"`, etc.
 ---
 function _P.run_git_generic_command(command)
+    local directory = _P.get_current_directory()
+
     --- Print success or failure, depending on `result`.
     ---
     ---@param result vim.SystemCompleted Some CLI command data to check for a return code.
@@ -1666,14 +1694,11 @@ function _P.run_git_generic_command(command)
         end
 
         vim.schedule(function()
-            vim.notify(
-                string.format('`git %s` failed with error: "%s"', command, result.stderr),
-                vim.log.levels.ERROR
-            )
+            vim.notify(string.format('`git %s` failed with error: "%s"', command, result.stderr), vim.log.levels.ERROR)
         end)
     end
 
-    vim.system({ M._GIT_EXECUTABLE, command }, { text = true }, _notify_on_error):wait()
+    vim.system({ M._GIT_EXECUTABLE, "-C", directory, command }, { text = true }, _notify_on_error)
 end
 
 --- Call `git pull` from the current working directory.
@@ -1690,6 +1715,17 @@ end
 function M.run_git_add_p()
     vim.cmd.split()
     vim.cmd.terminal(string.format("%s add -p", M._GIT_EXECUTABLE))
+    vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
+
+    local terminal_buffer = vim.api.nvim_get_current_buf()
+
+    M.close_terminal_afterwards(terminal_buffer)
+end
+
+--- Run `git checkout -p` in the current tab's `$PWD` in a new terminal.
+function M.run_git_checkout_p()
+    vim.cmd.split()
+    vim.cmd.terminal(string.format("%s checkout -p", M._GIT_EXECUTABLE))
     vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
 
     local terminal_buffer = vim.api.nvim_get_current_buf()
@@ -1798,9 +1834,11 @@ function M.select_buffer()
         end
     end
 
-    local window = vim.api.nvim_get_current_win()
+    local core_editor_setup = require("modules.features.core_editor_setup")
+    local window = core_editor_setup.get_selector_target_window()
 
-    require("modules.features.core_editor_setup").select_from_options(buffers, {
+    core_editor_setup.select_from_options(buffers, {
+        multiple_selection = true,
         deserialize = function(choice)
             ---@cast choice integer
 
@@ -1819,9 +1857,12 @@ function M.select_buffer()
 
             return { display = display, value = choice }
         end,
-        confirm = function(entry)
+        confirm = function(entries)
             vim.api.nvim_set_current_win(window)
-            vim.cmd.buffer(entry.value)
+
+            for _, entry in ipairs(entries) do
+                vim.cmd.buffer(entry.value)
+            end
         end,
     })
 end

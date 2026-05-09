@@ -7,6 +7,7 @@ local _extend = function(table_to_modify, items)
 end
 
 local _multi_2 = function(first, second)
+    ---@type vim.api.keyset.highlight
     local output = {}
 
     _extend(output, first)
@@ -16,6 +17,7 @@ local _multi_2 = function(first, second)
 end
 
 local _multi_3 = function(first, second, third)
+    ---@type vim.api.keyset.highlight
     local output = {}
 
     _extend(output, first)
@@ -166,6 +168,51 @@ vim.api.nvim_set_hl(0, "PreProc", _STATEMENT)
 vim.api.nvim_set_hl(0, "Question", _NOTE_10_FG)
 vim.api.nvim_set_hl(0, "Repeat", _STATEMENT)
 vim.api.nvim_set_hl(0, "Search", _multi_2(_SEARCH_FG, _TITLE_BG)) -- Searched, non-selected text
+vim.api.nvim_set_hl(0, "SelectorCurrentPrefix", { fg = _ACCENT_CRITICAL_30, ctermfg = 202, bold = true })
+vim.api.nvim_set_hl(0, "SelectorSelectedMarker", _multi_2(_NOTE_10_FG, _BOLD))
+--- Check whether a highlight color is bright enough for the selected selector row.
+---
+---@param color integer? A Neovim RGB color integer.
+---@return boolean # Whether the color reads as bright white.
+local function _is_bright_white_color(color)
+    if not color then
+        return false
+    end
+
+    local red = math.floor(color / 0x10000) % 0x100
+    local green = math.floor(color / 0x100) % 0x100
+    local blue = color % 0x100
+
+    return red >= 230 and green >= 230 and blue >= 230
+end
+
+--- Set the selected selector-row text to a bright foreground.
+---
+--- Prefer linking to an existing bright-white text group so the selector follows
+--- the active colorscheme. If no bright-white group exists, use a direct color.
+local function _set_selector_current_line_highlight()
+    local candidates = {
+        "FzfLuaCursorLine",
+        "FzfLuaCursorLineNr",
+        "CursorLineNr",
+        "@markup.link.label",
+        "@variable.parameter",
+    }
+
+    for _, group in ipairs(candidates) do
+        local ok, highlight = pcall(vim.api.nvim_get_hl, 0, { name = group, link = false })
+
+        if ok and _is_bright_white_color(highlight.fg) then
+            vim.api.nvim_set_hl(0, "SelectorCurrentLine", { link = group })
+
+            return
+        end
+    end
+
+    vim.api.nvim_set_hl(0, "SelectorCurrentLine", { fg = _SECTION_60, ctermfg = 231, bold = true })
+end
+
+_set_selector_current_line_highlight()
 vim.api.nvim_set_hl(0, "SignColumn", _BG)
 vim.api.nvim_set_hl(0, "Special", _KHAKI_GREEN)
 vim.api.nvim_set_hl(0, "SpecialComment", _KHAKI_GREEN)

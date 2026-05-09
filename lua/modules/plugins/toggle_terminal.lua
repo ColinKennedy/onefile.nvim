@@ -1,5 +1,6 @@
 --- A lightweight "toggleterminal". Use <space>T to open and close it.
 
+local M = {}
 local _P = {}
 
 ---@type table<integer, _my.ToggleTerminal>
@@ -17,6 +18,7 @@ local _NEXT_NUMBER = 0
 local _STARTING_MODE = _Mode.insert -- NOTE: Start off in insert mode
 
 local _IS_VIM_ENTERED = false
+local _DEFAULT_SHELL_COMMAND = nil
 
 --- Check if `buffer` is shown to the user.
 ---
@@ -56,13 +58,71 @@ local function _increment_terminal_uuid()
     _NEXT_NUMBER = _NEXT_NUMBER + 1
 end
 
+--- Check whether Neovim is running on Windows.
+---
+---@return boolean
+local function _is_windows()
+    return package.config:sub(1, 1) == "\\"
+end
+
+--- Check if `command` points back to Neovim itself.
+---
+---@param command string?
+---@return boolean
+local function _is_neovim_command(command)
+    if not command or command == "" then
+        return false
+    end
+
+    local executable = command:match("^%s*([^%s]+)")
+
+    if not executable then
+        return false
+    end
+
+    local name = vim.fs.basename(executable):lower()
+
+    return name == "nvim" or name == "nvim.exe" or name == "neovim" or name == "neovim.exe"
+end
+
+--- Get the shell command to use for toggleterminal buffers.
+---
+---@return string
+local function _get_default_shell_command()
+    if _DEFAULT_SHELL_COMMAND then
+        return _DEFAULT_SHELL_COMMAND
+    end
+
+    local shell = os.getenv("NEOVIM_SHELL_COMMAND")
+
+    if not shell or shell == "" then
+        shell = vim.o.shell
+    end
+
+    if not shell or shell == "" then
+        if _is_windows() then
+            shell = os.getenv("ComSpec") or "cmd.exe"
+        else
+            shell = os.getenv("SHELL") or "sh"
+        end
+    end
+
+    if _is_neovim_command(shell) then
+        shell = _is_windows() and (os.getenv("ComSpec") or "cmd.exe") or (os.getenv("SHELL") or "sh")
+    end
+
+    _DEFAULT_SHELL_COMMAND = shell
+
+    return _DEFAULT_SHELL_COMMAND
+end
+
 --- Suggest a new terminal name, starting with `name`, that is unique.
 ---
 --- @param name string
----     Some terminal prefix. i.e. `"term://bash"`.
+---     Some terminal prefix. i.e. `"term://powershell.exe"`.
 --- @return string
 ---     The full buffer path that doesn't already exist. i.e.
----     `"term://bash;::toggleterminal::1"`. It's important though to remember
+---     `"term://powershell.exe;::toggleterminal::1"`. It's important though to remember
 ---     - This won't be the final, real terminal path name because this name
 ---     doesn't contain a $PWD.
 ---
@@ -89,6 +149,7 @@ end
 local function _initialize_terminal_buffer(buffer)
     vim.bo[buffer].bufhidden = "hide"
     vim.b[buffer]._toggle_terminal_buffer = true
+    vim.b[buffer]._toggle_terminal_cwd = vim.b[buffer]._toggle_terminal_cwd or vim.fn.getcwd()
 end
 
 --- Set colors onto `window`.
@@ -107,6 +168,37 @@ local function _apply_highlights(window)
     )
 end
 
+--- Configure the current terminal window for toggle-terminal display.
+---
+---@param window integer The terminal window to configure.
+local function _configure_terminal_window(window)
+    vim.wo[window].relativenumber = false
+    vim.wo[window].number = false
+    vim.wo[window].signcolumn = "no"
+
+    vim.schedule(function()
+        _apply_highlights(window)
+    end)
+end
+
+--- Set `buffer` into `window`, even if the window is temporarily fixed.
+---
+---@param window integer The window to update.
+---@param buffer integer The buffer to show in `window`.
+local function _set_window_buffer(window, buffer)
+    local winfixbuf = vim.wo[window].winfixbuf
+
+    if winfixbuf then
+        vim.wo[window].winfixbuf = false
+    end
+
+    vim.api.nvim_win_set_buf(window, buffer)
+
+    if winfixbuf then
+        vim.wo[window].winfixbuf = true
+    end
+end
+
 --- Create a new buffer or reuse the given terminal `buffer`.
 ---
 ---@param buffer integer? If not provided, a new terminal is created.
@@ -114,9 +206,25 @@ end
 ---
 local function _create_terminal(buffer)
     if not buffer then
-        vim.cmd("edit! " .. _suggest_name("term://bash"))
+        local command = _get_default_shell_command()
+        local terminal_name = _suggest_name("term://" .. command)
 
-        buffer = vim.fn.bufnr()
+        buffer = vim.api.nvim_create_buf(false, true)
+        local window = vim.api.nvim_get_current_win()
+
+        _set_window_buffer(window, buffer)
+        vim.api.nvim_buf_set_name(buffer, terminal_name)
+        _initialize_terminal_buffer(buffer)
+
+        local job = vim.fn.jobstart(command, { term = true })
+
+        if job <= 0 then
+            vim.api.nvim_buf_delete(buffer, { force = true })
+            error(string.format('Failed to start terminal shell "%s".', command), 0)
+        end
+
+        vim.api.nvim_buf_set_name(buffer, terminal_name)
+        _configure_terminal_window(window)
     end
 
     _initialize_terminal_buffer(buffer)
@@ -182,21 +290,11 @@ local function _prepare_terminal_window()
     vim.cmd("set splitbelow&") -- Restore the previous split setting
     vim.cmd.wincmd("J") -- Move the split to the bottom of the tab
     vim.cmd.resize(10)
+    vim.wo.winfixbuf = true
 end
 
---- Keep the current terminal mode and then passthrough `keys`.
----
---- This function is intended to be used with a keymap with `expr = true`.
----
----@param keys string The original keymap to run.
----@return fun(): string # The wrapped function.
----
-local function _save_terminal_state(keys)
-    return function()
-        _handle_term_leave(vim.fn.bufnr())
-
-        return keys
-    end
+function M.save_terminal_state()
+    _handle_term_leave(vim.fn.bufnr())
 end
 
 --- Open an existing terminal for the current tab or create one if it doesn't exist.
@@ -210,6 +308,9 @@ local function _toggle_terminal()
         local terminal = _create_terminal()
         _TAB_TERMINALS[tab] = terminal
         _BUFFER_TO_TERMINAL[terminal.buffer] = _TAB_TERMINALS[tab]
+        vim.schedule(function()
+            vim.cmd.startinsert()
+        end)
 
         return
     end
@@ -222,7 +323,7 @@ local function _toggle_terminal()
         end
     else
         _prepare_terminal_window()
-        vim.cmd.buffer(terminal.buffer)
+        _set_window_buffer(vim.api.nvim_get_current_win(), terminal.buffer)
     end
 end
 
@@ -237,6 +338,7 @@ function _P.setup_autocommands()
         nested = true, -- This is necessary in case the buffer is the last
         callback = function()
             local buffer = vim.fn.bufnr()
+
             vim.schedule(function()
                 if not _IS_VIM_ENTERED then
                     -- NOTE: This is a special situation. If we're
@@ -262,13 +364,15 @@ function _P.setup_autocommands()
         callback = function()
             local window = vim.fn.win_getid()
 
-            vim.wo[window].relativenumber = false
-            vim.wo[window].number = false
-            vim.wo[window].signcolumn = "no"
+            _configure_terminal_window(window)
+        end,
+    })
 
-            vim.schedule(function()
-                _apply_highlights(window)
-            end)
+    vim.api.nvim_create_autocmd("TermClose", {
+        group = group,
+        pattern = toggleterm_pattern,
+        callback = function()
+            vim.b.terminal_job_id = nil
         end,
     })
 
@@ -299,24 +403,4 @@ vim.keymap.set(
     { desc = "Toggle [T]erminal, in a split at the bottom of the current tab." }
 )
 
--- NOTE: Allow quick and easy movement out of a terminal buffer using just <C-hjkl>
-vim.keymap.set({ "n", "t" }, "<C-h>", _save_terminal_state("<C-\\><C-n><C-w>h"), {
-    desc = "Move to the left of the terminal buffer.",
-    expr = true,
-    silent = true,
-})
-vim.keymap.set({ "n", "t" }, "<C-j>", _save_terminal_state("<C-\\><C-n><C-w>j"), {
-    desc = "Move down to the buffer below the terminal buffer.",
-    expr = true,
-    silent = true,
-})
-vim.keymap.set({ "n", "t" }, "<C-k>", _save_terminal_state("<C-\\><C-n><C-w>k"), {
-    desc = "Move up to the buffer above the terminal buffer.",
-    expr = true,
-    silent = true,
-})
-vim.keymap.set({ "n", "t" }, "<C-l>", _save_terminal_state("<C-\\><C-n><C-w>l"), {
-    desc = "Move to the right of the terminal buffer.",
-    expr = true,
-    silent = true,
-})
+return M

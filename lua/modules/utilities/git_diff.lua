@@ -15,6 +15,8 @@ local _P = {}
 ---@field stdout string
 ---@field stderr string
 
+---@alias _my.git_diff.SystemCallback fun(result: _my.git_diff.SystemResult): nil
+
 ---@class _my.git_diff.Operation
 ---@field type "add" | "delete" | "equal"
 ---@field old_line integer?
@@ -44,6 +46,36 @@ local _P = {}
 ---@field new_count integer
 ---@field removed string[]
 ---@field added string[]
+
+--- Strip a trailing carriage return from a line for hunk comparisons.
+---
+---@param line string The line to normalize.
+---@return string # The line without a trailing carriage return.
+---
+local function _strip_trailing_carriage_return(line)
+    return (line:gsub("\r$", ""))
+end
+
+--- Normalize lines for line-oriented git hunk comparisons.
+---
+--- Neovim can expose CRLF or mixed line endings as literal trailing `\r`
+--- characters in buffer lines, while `git diff --unified=0` may not report a
+--- content hunk for those endings. Gutter signs should follow git's hunk view
+--- instead of treating the displayed `^M` marker as a changed line.
+---
+---@param lines string[] The lines to normalize.
+---@return string[] # The normalized lines.
+---
+local function _normalize_hunk_lines(lines)
+    ---@type string[]
+    local normalized = {}
+
+    for _, line in ipairs(lines) do
+        table.insert(normalized, _strip_trailing_carriage_return(line))
+    end
+
+    return normalized
+end
 
 --- Split `text` into lines without keeping a trailing empty item from final newline.
 ---
@@ -77,111 +109,160 @@ function _P.join_lines(lines)
     return table.concat(lines, "\n") .. "\n"
 end
 
---- Run a git command and wait for it to finish.
+--- Run a git command asynchronously.
 ---
 ---@param arguments string[] Git arguments, without the leading executable.
 ---@param directory string The directory to run within.
 ---@param stdin string? Optional standard input.
----@return _my.git_diff.SystemResult # The command result.
+---@param callback _my.git_diff.SystemCallback The callback that receives the command result.
 ---
-function M.run_git(arguments, directory, stdin)
+function _P.run_git(arguments, directory, stdin, callback)
     ---@type string[]
     local command = { core_helpers._GIT_EXECUTABLE }
     vim.list_extend(command, arguments)
 
-    local success, result = pcall(function()
-        return vim.system(command, { cwd = directory, stdin = stdin, text = true }):wait()
+    local success, message = pcall(function()
+        vim.system(command, { cwd = directory, stdin = stdin, text = true }, function(result)
+            vim.schedule(function()
+                callback({
+                    code = result.code or 1,
+                    stderr = result.stderr or "",
+                    stdout = result.stdout or "",
+                })
+            end)
+        end)
     end)
 
     if not success then
-        return {
-            code = 1,
-            stderr = tostring(result),
-            stdout = "",
-        }
+        vim.schedule(function()
+            callback({
+                code = 1,
+                stderr = tostring(message),
+                stdout = "",
+            })
+        end)
     end
+end
 
-    return {
-        code = result.code or 1,
-        stderr = result.stderr or "",
-        stdout = result.stdout or "",
-    }
+--- Run a git command asynchronously.
+---
+---@param arguments string[] Git arguments, without the leading executable.
+---@param directory string The directory to run within.
+---@param stdin string? Optional standard input.
+---@param callback _my.git_diff.SystemCallback The callback that receives the command result.
+function M.run_git(arguments, directory, stdin, callback)
+    _P.run_git(arguments, directory, stdin, callback)
 end
 
 --- Get git details for `buffer`.
 ---
 ---@param buffer integer The buffer to inspect.
----@return _my.git_diff.FileDetails? # The file details, if found.
----@return string? # An error message, if any.
+---@param callback fun(details: _my.git_diff.FileDetails?, message: string?): nil
+---    Callback with file details or an error.
 ---
-function M.get_file_details(buffer)
+function M.get_file_details(buffer, callback)
     local absolute_path = vim.api.nvim_buf_get_name(buffer)
 
     if absolute_path == "" then
-        return nil, "Current buffer has no file path."
+        callback(nil, "Current buffer has no file path.")
+
+        return
     end
 
     local directory = vim.fs.dirname(absolute_path)
 
     if not directory or vim.fn.isdirectory(directory) == 0 then
-        return nil, "Current buffer directory does not exist."
+        callback(nil, "Current buffer directory does not exist.")
+
+        return
     end
 
-    local repository = M.run_git({ "-C", directory, "rev-parse", "--show-toplevel" }, directory)
+    _P.run_git({ "-C", directory, "rev-parse", "--show-toplevel" }, directory, nil, function(repository)
+        if repository.code ~= 0 then
+            callback(nil, "Current buffer is not inside a git repository.")
 
-    if repository.code ~= 0 then
-        return nil, "Current buffer is not inside a git repository."
-    end
+            return
+        end
 
-    local repository_path = vim.trim(repository.stdout)
-    local relative =
-        M.run_git({ "-C", repository_path, "ls-files", "--full-name", "--", absolute_path }, repository_path)
-    local relative_path = vim.trim(relative.stdout)
+        local repository_path = vim.trim(repository.stdout)
 
-    if relative_path == "" then
-        local prefix = M.run_git({ "-C", repository_path, "rev-parse", "--show-prefix" }, repository_path)
-        local filename = vim.fs.basename(absolute_path)
-        relative_path = vim.trim(prefix.stdout) .. filename
-    end
+        _P.run_git(
+            { "-C", repository_path, "ls-files", "--full-name", "--", absolute_path },
+            repository_path,
+            nil,
+            function(relative)
+                local relative_path = vim.trim(relative.stdout)
 
-    return {
-        absolute_path = absolute_path,
-        relative_path = relative_path,
-        repository = repository_path,
-    },
-        nil
+                if relative_path ~= "" then
+                    callback({
+                        absolute_path = absolute_path,
+                        relative_path = relative_path,
+                        repository = repository_path,
+                    }, nil)
+
+                    return
+                end
+
+                _P.run_git(
+                    { "-C", repository_path, "rev-parse", "--show-prefix" },
+                    repository_path,
+                    nil,
+                    function(prefix)
+                        local filename = vim.fs.basename(absolute_path)
+                        callback({
+                            absolute_path = absolute_path,
+                            relative_path = vim.trim(prefix.stdout) .. filename,
+                            repository = repository_path,
+                        }, nil)
+                    end
+                )
+            end
+        )
+    end)
 end
 
 --- Get the HEAD version of `path`.
 ---
 ---@param details _my.git_diff.FileDetails The file details to query.
----@return string[] # The HEAD lines.
----@return boolean # If `true`, the file is not in HEAD yet.
+---@param callback fun(lines: string[], missing: boolean): nil Callback with the HEAD lines.
 ---
-function M.get_head_lines(details)
-    local result = M.run_git({ "-C", details.repository, "show", "HEAD:" .. details.relative_path }, details.repository)
+function _P.get_head_lines(details, callback)
+    _P.run_git(
+        { "-C", details.repository, "show", "HEAD:" .. details.relative_path },
+        details.repository,
+        nil,
+        function(result)
+            if result.code ~= 0 then
+                callback({}, true)
 
-    if result.code ~= 0 then
-        return {}, true
-    end
+                return
+            end
 
-    return _split_lines(result.stdout), false
+            callback(_split_lines(result.stdout), false)
+        end
+    )
 end
 
 --- Get the index version of `path`.
 ---
 ---@param details _my.git_diff.FileDetails The file details to query.
----@return string[] # The index lines.
----@return boolean # If `true`, the file is not in the index yet.
+---@param callback fun(lines: string[], missing: boolean): nil Callback with the index lines.
 ---
-function M.get_index_lines(details)
-    local result = M.run_git({ "-C", details.repository, "show", ":" .. details.relative_path }, details.repository)
+function M.get_index_lines(details, callback)
+    _P.run_git(
+        { "-C", details.repository, "show", ":" .. details.relative_path },
+        details.repository,
+        nil,
+        function(result)
+            if result.code ~= 0 then
+                _P.get_head_lines(details, callback)
 
-    if result.code ~= 0 then
-        return M.get_head_lines(details)
-    end
+                return
+            end
 
-    return _split_lines(result.stdout), false
+            callback(_split_lines(result.stdout), false)
+        end
+    )
 end
 
 --- Build a dynamic-programming table for longest common subsequence.
@@ -195,6 +276,7 @@ local function _make_lcs_table(old_lines, new_lines)
     local table_ = {}
 
     for old_index = 0, #old_lines do
+        ---@type integer[]
         table_[old_index] = {}
 
         for new_index = 0, #new_lines do
@@ -222,7 +304,7 @@ end
 ---@param new_lines string[] The changed lines.
 ---@return _my.git_diff.Operation[] # The diff operations.
 ---
-function M.compute_operations(old_lines, new_lines)
+function _P.compute_operations(old_lines, new_lines)
     local table_ = _make_lcs_table(old_lines, new_lines)
     local old_index = 1
     local new_index = 1
@@ -282,7 +364,7 @@ end
 ---@param operations _my.git_diff.Operation[] The operations to group.
 ---@return _my.git_diff.ChangeGroup[] # The changed groups.
 ---
-function M.get_change_groups(operations)
+function _P.get_change_groups(operations)
     ---@type _my.git_diff.ChangeGroup[]
     local groups = {}
     local index = 1
@@ -339,7 +421,10 @@ end
 ---@return _my.git_diff.Hunk[] # The hunks.
 ---
 function M.compute_hunks(old_lines, new_lines)
-    local groups = M.get_change_groups(M.compute_operations(old_lines, new_lines))
+    old_lines = _normalize_hunk_lines(old_lines)
+    new_lines = _normalize_hunk_lines(new_lines)
+
+    local groups = _P.get_change_groups(_P.compute_operations(old_lines, new_lines))
     ---@type _my.git_diff.Hunk[]
     local hunks = {}
 
@@ -405,7 +490,7 @@ end
 ---@return string[] # The file lines.
 ---@return boolean # If `true`, the original text ended in a newline.
 ---
-function M.split_git_text(text)
+function _P.split_git_text(text)
     local has_eol = text:sub(-1) == "\n"
     local body = has_eol and text:sub(1, -2) or text
 
@@ -426,7 +511,7 @@ end
 ---@param has_eol boolean If `true`, add a final newline.
 ---@return string # The joined file text.
 ---
-function M.join_git_text(lines, has_eol)
+function _P.join_git_text(lines, has_eol)
     if #lines == 0 then
         return ""
     end
@@ -445,7 +530,7 @@ end
 ---@param diff string The output from `git diff --unified=0`.
 ---@return _my.git_diff.SelectionHunk[] # The parsed hunks.
 ---
-function M.parse_selection_diff(diff)
+function _P.parse_selection_diff(diff)
     ---@type _my.git_diff.SelectionHunk[]
     local hunks = {}
     ---@type _my.git_diff.SelectionHunk?
@@ -477,6 +562,14 @@ function M.parse_selection_diff(diff)
     return hunks
 end
 
+--- Parse a zero-context unified diff into hunks.
+---
+---@param diff string The output from `git diff --unified=0`.
+---@return _my.git_diff.SelectionHunk[] # The parsed hunks.
+function M.parse_selection_diff(diff)
+    return _P.parse_selection_diff(diff)
+end
+
 --- Build text containing only selected changes from `base_text` to `target_text`.
 ---
 ---@param base_text string The text to patch from.
@@ -491,9 +584,9 @@ end
 function M.build_selection_target(base_text, target_text, diff, start_line, end_line, invert)
     invert = invert == true
 
-    local base_lines, base_has_eol = M.split_git_text(base_text)
-    local _, target_has_eol = M.split_git_text(target_text)
-    local hunks = M.parse_selection_diff(diff)
+    local base_lines, base_has_eol = _P.split_git_text(base_text)
+    local _, target_has_eol = _P.split_git_text(target_text)
+    local hunks = _P.parse_selection_diff(diff)
 
     ---@type string[]
     local output = {}
@@ -573,7 +666,7 @@ function M.build_selection_target(base_text, target_text, diff, start_line, end_
 
     local has_eol = selected_changes > 0 and target_has_eol or base_has_eol
 
-    return M.join_git_text(output, has_eol), selected_changes
+    return _P.join_git_text(output, has_eol), selected_changes
 end
 
 --- Build lines that contain only selected buffer changes applied to HEAD.
@@ -582,15 +675,17 @@ end
 ---@param new_lines string[] The changed buffer lines.
 ---@param start_line integer The first selected buffer line.
 ---@param end_line integer The last selected buffer line.
----@return string[] # The partially-applied file lines.
+---@param callback fun(lines: string[]): nil Callback with the partially-applied file lines.
 ---
-function M.make_selected_lines(old_lines, new_lines, start_line, end_line)
+function _P.make_selected_lines(old_lines, new_lines, start_line, end_line, callback)
     local base_text = _P.join_lines(old_lines)
     local target_text = _P.join_lines(new_lines)
-    local diff = M.build_zero_context_diff(base_text, target_text)
-    local partial_text = M.build_selection_target(base_text, target_text, diff or "", start_line, end_line)
 
-    return _split_lines(partial_text)
+    M.build_zero_context_diff(base_text, target_text, function(diff)
+        local partial_text = M.build_selection_target(base_text, target_text, diff or "", start_line, end_line)
+
+        callback(_split_lines(partial_text))
+    end)
 end
 
 --- Write `text` without using Vim's line-based writefile behavior.
@@ -600,7 +695,7 @@ end
 ---@return boolean # If `true`, the file was written.
 ---@return string? # The error message, if any.
 ---
-function M.write_text(path, text)
+function _P.write_text(path, text)
     local file, open_error = vim.uv.fs_open(path, "w", 438)
 
     if not file then
@@ -619,7 +714,7 @@ end
 ---@return string # The quoted path.
 ---
 local function _quote_patch_path(path)
-    if not path:find("[%s\"]") then
+    if not path:find('[%s"]') then
         return path
     end
 
@@ -652,27 +747,28 @@ end
 ---@param base_text string The text to patch from.
 ---@param target_text string The text to patch to.
 ---@param context integer The unified diff context line count.
----@return string? # The diff, if generated.
----@return string? # An error message, if any.
+---@param callback fun(diff: string?, message: string?): nil Callback with the diff or an error.
 ---
-local function _build_no_index_diff(base_text, target_text, context)
+local function _build_no_index_diff(base_text, target_text, context, callback)
     local before = vim.fn.tempname()
     local after = vim.fn.tempname()
-    local ok, message = M.write_text(before, base_text)
+    local ok, message = _P.write_text(before, base_text)
 
     if ok then
-        ok, message = M.write_text(after, target_text)
+        ok, message = _P.write_text(after, target_text)
     end
 
     if not ok then
         pcall(vim.uv.fs_unlink, before)
         pcall(vim.uv.fs_unlink, after)
 
-        return nil, message
+        callback(nil, message)
+
+        return
     end
 
-    local result = vim.system(
-        {
+    local success, start_error = pcall(function()
+        vim.system({
             core_helpers._GIT_EXECUTABLE,
             "diff",
             "--no-index",
@@ -681,29 +777,36 @@ local function _build_no_index_diff(base_text, target_text, context)
             "--",
             before,
             after,
-        },
-        { text = true }
-    ):wait()
+        }, { text = true }, function(result)
+            vim.schedule(function()
+                pcall(vim.uv.fs_unlink, before)
+                pcall(vim.uv.fs_unlink, after)
 
-    pcall(vim.uv.fs_unlink, before)
-    pcall(vim.uv.fs_unlink, after)
+                if result.code ~= 0 and result.code ~= 1 then
+                    callback(nil, result.stderr)
 
-    if result.code ~= 0 and result.code ~= 1 then
-        return nil, result.stderr
+                    return
+                end
+
+                callback(result.stdout or "", nil)
+            end)
+        end)
+    end)
+
+    if not success then
+        pcall(vim.uv.fs_unlink, before)
+        pcall(vim.uv.fs_unlink, after)
+        callback(nil, tostring(start_error))
     end
-
-    return result.stdout or "", nil
 end
 
 --- Generate a zero-context diff from `base_text` to `target_text`.
 ---
 ---@param base_text string The text to patch from.
 ---@param target_text string The text containing all candidate changes.
----@return string? # The diff, if generated.
----@return string? # An error message, if any.
----
-function M.build_zero_context_diff(base_text, target_text)
-    return _build_no_index_diff(base_text, target_text, 0)
+---@param callback fun(diff: string?, message: string?): nil Callback with the diff or an error.
+function M.build_zero_context_diff(base_text, target_text, callback)
+    _build_no_index_diff(base_text, target_text, 0, callback)
 end
 
 --- Create a Git patch from `base_text` to `target_text` for `relative_path`.
@@ -711,103 +814,131 @@ end
 ---@param base_text string The text to patch from.
 ---@param target_text string The text to patch to.
 ---@param relative_path string The repository-relative file path.
----@return string? # The patch, if generated.
----@return string? # An error message, if any.
----
-function M.build_selection_patch(base_text, target_text, relative_path)
-    local diff, diff_error = _build_no_index_diff(base_text, target_text, 3)
+---@param callback fun(patch: string?, message: string?): nil Callback with the patch or an error.
+function M.build_selection_patch(base_text, target_text, relative_path, callback)
+    _build_no_index_diff(base_text, target_text, 3, function(diff, diff_error)
+        if not diff then
+            callback(nil, diff_error)
 
-    if not diff then
-        return nil, diff_error
-    end
+            return
+        end
 
-    local hunks = _get_patch_hunks(diff)
+        local hunks = _get_patch_hunks(diff)
 
-    if not hunks then
-        return nil, "No patch hunks were generated."
-    end
+        if not hunks then
+            callback(nil, "No patch hunks were generated.")
 
-    relative_path = relative_path:gsub("\\", "/")
+            return
+        end
 
-    local old_path = _quote_patch_path("a/" .. relative_path)
-    local new_path = _quote_patch_path("b/" .. relative_path)
-    local header = table.concat({
-        string.format("diff --git %s %s", old_path, new_path),
-        "--- " .. old_path,
-        "+++ " .. new_path,
-    }, "\n")
+        relative_path = relative_path:gsub("\\", "/")
 
-    return header .. "\n" .. hunks, nil
+        local old_path = _quote_patch_path("a/" .. relative_path)
+        local new_path = _quote_patch_path("b/" .. relative_path)
+        local header = table.concat({
+            string.format("diff --git %s %s", old_path, new_path),
+            "--- " .. old_path,
+            "+++ " .. new_path,
+        }, "\n")
+
+        callback(header .. "\n" .. hunks, nil)
+    end)
 end
 
 --- Get a Git blob as text.
 ---
 ---@param details _my.git_diff.FileDetails The file details to use.
 ---@param object string The object name to read.
----@return string? # The blob text, if found.
----@return string? # An error message, if any.
----
-function M.get_blob_text(details, object)
-    local result = M.run_git({ "-C", details.repository, "show", object }, details.repository)
+---@param callback fun(text: string?, message: string?): nil Callback with blob text or an error.
+function M.get_blob_text(details, object, callback)
+    _P.run_git({ "-C", details.repository, "show", object }, details.repository, nil, function(result)
+        if result.code ~= 0 then
+            callback(nil, result.stderr)
 
-    if result.code ~= 0 then
-        return nil, result.stderr
-    end
+            return
+        end
 
-    return result.stdout or "", nil
+        callback(result.stdout or "", nil)
+    end)
 end
 
 --- Check if a path has unresolved merge entries.
 ---
 ---@param details _my.git_diff.FileDetails The file details to use.
----@return boolean # If `true`, unmerged entries exist.
----
-function M.has_unmerged_entries(details)
-    local result = M.run_git(
-        { "-C", details.repository, "ls-files", "-u", "--", details.relative_path },
-        details.repository
+---@param callback fun(has_unmerged: boolean): nil Callback with whether unmerged entries exist.
+function M.has_unmerged_entries(details, callback)
+    _P.run_git(
+        {
+            "-C",
+            details.repository,
+            "ls-files",
+            "-u",
+            "--",
+            details.relative_path,
+        },
+        details.repository,
+        nil,
+        function(result)
+            callback(result.code == 0 and result.stdout ~= "")
+        end
     )
-
-    return result.code == 0 and result.stdout ~= ""
 end
 
 --- Apply `patch` to the git index.
 ---
 ---@param details _my.git_diff.FileDetails The file details to use.
 ---@param patch string The patch to apply.
----@return boolean # If the patch was applied, return `true`.
----@return string? # An error message, if any.
+---@param callback fun(success: boolean, message: string?): nil Callback with whether the patch was applied.
 ---
-function M.apply_cached_patch(details, patch)
+function M.apply_cached_patch(details, patch, callback)
     if patch == "" then
-        return false, "No selected git changes found."
+        callback(false, "No selected git changes found.")
+
+        return
     end
 
     local path = vim.fn.tempname()
-    local ok, message = M.write_text(path, patch)
+    local ok, message = _P.write_text(path, patch)
 
     if not ok then
         pcall(vim.uv.fs_unlink, path)
 
-        return false, message
+        callback(false, message)
+
+        return
     end
 
-    local check = M.run_git({ "-C", details.repository, "apply", "--cached", "--check", path }, details.repository)
+    _P.run_git(
+        { "-C", details.repository, "apply", "--cached", "--check", path },
+        details.repository,
+        nil,
+        function(check)
+            if check.code ~= 0 then
+                pcall(vim.uv.fs_unlink, path)
 
-    if check.code ~= 0 then
-        pcall(vim.uv.fs_unlink, path)
+                callback(false, vim.trim(check.stderr))
 
-        return false, vim.trim(check.stderr)
-    end
+                return
+            end
 
-    local result = M.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository)
-    pcall(vim.uv.fs_unlink, path)
+            _P.run_git(
+                { "-C", details.repository, "apply", "--cached", path },
+                details.repository,
+                nil,
+                function(result)
+                    pcall(vim.uv.fs_unlink, path)
 
-    if result.code ~= 0 then
-        return false, vim.trim(result.stderr)
-    end
+                    if result.code ~= 0 then
+                        callback(false, vim.trim(result.stderr))
 
-    return true, nil
+                        return
+                    end
+
+                    callback(true, nil)
+                end
+            )
+        end
+    )
 end
 
 return M

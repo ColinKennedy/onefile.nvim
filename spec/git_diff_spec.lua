@@ -47,6 +47,18 @@ describe("modules.utilities.git_diff", function()
         }, hunks)
     end)
 
+    it("does not report hunks for trailing carriage-return-only differences", function()
+        local hunks = git_diff.compute_hunks({
+            "foo_bar_baz    -> civquux -> foo_quux_baz",
+            "QUUX_SPAM      -> civLOTS_OF -> LOTS_OF_SPAM",
+        }, {
+            "foo_bar_baz    -> civquux -> foo_quux_baz\r",
+            "QUUX_SPAM      -> civLOTS_OF -> LOTS_OF_SPAM\r",
+        })
+
+        assert.are.same({}, hunks)
+    end)
+
     it("builds a selected target for the middle of a larger hunk", function()
         local base = "one\ntwo\nthree\nfour\n"
         local target = "one\nTWO\nTHREE\nFOUR\n"

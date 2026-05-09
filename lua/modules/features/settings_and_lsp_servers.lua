@@ -2,7 +2,6 @@
 
 local M = {}
 
-
 ---------- Saver [Start] ----------
 -- NOTE: Create the :AsyncWrite command (for writing without blocking Neovim)
 vim.api.nvim_create_user_command("AsyncWrite", function()
@@ -61,6 +60,13 @@ vim.opt.laststatus = 3
 -- Reference: https://youtu.be/3TRouzuWOuQ?t=107
 --
 vim.g.editorconfig = false
+
+-- Keep Neovim's cursor always centered
+-- TODO: remove this pcall once Neovim 0.11 is dropped
+pcall(function()
+    vim.o.scrolloffpad = 1
+end)
+
 ---------- Settings [End] ----------
 
 -- NOTE: If you need to override the shell, use $NEOVIM_SHELL_COMMAND
@@ -94,6 +100,27 @@ M.servers = {
                         },
                     },
                 },
+            }, { bufnr = event.buf })
+        end,
+    },
+    {
+        name = "ty",
+        filetypes = "python",
+        callback = function(event)
+            local command = "ty"
+
+            if vim.fn.executable(command) ~= 1 then
+                vim.notify(
+                    string.format('Cannot load LSP. There is no "%s" executable.', command),
+                    vim.log.levels.ERROR
+                )
+
+                return
+            end
+
+            vim.lsp.start({
+                name = "ty",
+                cmd = { command, "server" },
             }, { bufnr = event.buf })
         end,
     },

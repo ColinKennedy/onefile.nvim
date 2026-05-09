@@ -8,3 +8,10 @@ vim.api.nvim_create_autocmd("FileType", {
         vim.bo.expandtab = true
     end,
 })
+
+vim.api.nvim_create_autocmd("FileType", {
+    pattern = { "qf" },
+    callback = function()
+        vim.wo.winfixbuf = true
+    end,
+})

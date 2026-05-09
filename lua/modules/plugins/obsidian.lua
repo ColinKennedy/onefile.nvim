@@ -183,6 +183,19 @@ function _P.set_workspace_name(name)
     _CURRENT_WORKSPACE = name
 end
 
+--- Check if `name` is a visible workspace directory.
+---
+---@param vault_root string The absolute path containing workspace directories.
+---@param name string The directory name to check.
+---@return boolean # If `name` is a non-hidden directory, return `true`.
+local function _is_visible_workspace_directory(vault_root, name)
+    if name:sub(1, 1) == "." then
+        return false
+    end
+
+    return vim.fn.isdirectory(vim.fs.joinpath(vault_root, name)) == 1
+end
+
 --- Select a new current Obsidian workspace in a pop-up GUI.
 function _P.select_workspace()
     local vault_root = _P.get_vaults_root_path()
@@ -194,9 +207,7 @@ function _P.select_workspace()
     local entries = vim.fn.readdir(vault_root)
 
     for _, name in ipairs(entries) do
-        local full = vim.fs.joinpath(vault_root, name)
-
-        if vim.fn.isdirectory(full) == 1 then
+        if _is_visible_workspace_directory(vault_root, name) then
             table.insert(directories, name)
         end
     end
@@ -222,22 +233,144 @@ function _P.select_workspace()
     end)
 end
 
-vim.api.nvim_create_user_command(
-    "ObsidianAliases",
-    _P.search_notes_by_aliases,
-    { nargs = 0, desc = "Load obsidian.nvim notes in using their alias name." }
-)
+local _SECONDS_PER_DAY = 24 * 60 * 60
+
+--- Get a stable timestamp for today's local date.
+---
+---@return integer # The current local date at noon, as a timestamp.
+---
+function _P.get_today_time()
+    local today_data = os.date("*t")
+
+    if type(today_data) == "string" then
+        error("Expected os.date('*t') to return a date table.", 0)
+    end
+
+    ---@type osdateparam
+    local today = {
+        year = today_data.year,
+        month = today_data.month,
+        day = today_data.day,
+        hour = 12,
+        min = 0,
+        sec = 0,
+        isdst = today_data.isdst,
+    }
+
+    return os.time(today)
+end
+
+---@param time integer A timestamp to check.
+---@return boolean # If `time` is a Saturday or Sunday.
+function _P.is_weekend(time)
+    local weekday = os.date("*t", time).wday
+
+    return weekday == 1 or weekday == 7
+end
+
+---@param time integer A timestamp to start from.
+---@param direction integer Either `1` for next or `-1` for previous.
+---@return integer # The next weekday timestamp in `direction`.
+function _P.get_business_day_time(time, direction)
+    local current = time
+
+    repeat
+        current = current + (_SECONDS_PER_DAY * direction)
+    until not _P.is_weekend(current)
+
+    return current
+end
+
+---@param time integer The timestamp for the daily note to open.
+function _P.open_daily_note(time)
+    local date = os.date("%Y-%m-%d", time)
+    local path = vim.fs.joinpath(_P.get_workspace_path(), date .. ".md")
+
+    if vim.fn.filereadable(path) ~= 1 then
+        local lines = {
+            "---",
+            "id: " .. date,
+            "aliases: []",
+            "tags:",
+            "  - daily-notes",
+            "---",
+            "",
+            "",
+        }
+
+        vim.fn.mkdir(vim.fs.dirname(path), "p")
+        vim.fn.writefile(lines, path)
+    end
+
+    vim.cmd.edit(vim.fn.fnameescape(path))
+    pcall(vim.cmd.stopinsert)
+    vim.api.nvim_win_set_cursor(0, { vim.api.nvim_buf_line_count(0), 0 })
+end
+
+function _P.today()
+    _P.open_daily_note(_P.get_today_time())
+end
+
+function _P.yesterday()
+    _P.open_daily_note(_P.get_business_day_time(_P.get_today_time(), -1))
+end
+
+function _P.tomorrow()
+    _P.open_daily_note(_P.get_business_day_time(_P.get_today_time(), 1))
+end
+
+local _SUBCOMMANDS = {
+    aliases = _P.search_notes_by_aliases,
+    get_workspace = _P.print_current_workspace,
+    set_workspace = _P.select_workspace,
+    today = _P.today,
+    tomorrow = _P.tomorrow,
+    tommorrow = _P.tomorrow,
+    yesterday = _P.yesterday,
+}
+
+local _SUBCOMMAND_NAMES = vim.fn.sort(vim.tbl_keys(_SUBCOMMANDS))
+
+function _P.complete_command(arglead, command_line)
+    local arguments_text = command_line:gsub("^%s*Obsidian%s*", "", 1)
+
+    if arguments_text:match("^%S+%s+") then
+        return {}
+    end
+
+    if arglead == "" then
+        return _SUBCOMMAND_NAMES
+    end
+
+    ---@type string[]
+    local output = {}
+
+    for _, name in ipairs(_SUBCOMMAND_NAMES) do
+        if name:find(arglead, 1, true) == 1 then
+            table.insert(output, name)
+        end
+    end
+
+    return output
+end
+
+function _P.run_command(opts)
+    local subcommand = opts.fargs[1]
+    local callback = _SUBCOMMANDS[subcommand]
+
+    if not callback then
+        vim.notify(string.format('Unknown Obsidian subcommand: "%s"', subcommand or ""), vim.log.levels.ERROR)
+
+        return
+    end
+
+    callback()
+end
 
 vim.api.nvim_create_user_command(
-    "ObsidianGetWorkspace",
-    _P.print_current_workspace,
-    { desc = "Select a persistent Obsidian workspace" }
-)
-
-vim.api.nvim_create_user_command(
-    "ObsidianSetWorkspace",
-    _P.select_workspace,
-    { desc = "Select a persistent Obsidian workspace" }
+    "Obsidian",
+    _P.run_command,
+    { complete = _P.complete_command, nargs = "*", desc = "Run an Obsidian command." }
 )
 
 vim.api.nvim_create_user_command("Note", function(opts)

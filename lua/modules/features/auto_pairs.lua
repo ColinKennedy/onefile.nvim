@@ -35,12 +35,30 @@ local function _define_open_mapping(open, close)
     end, { expr = true, desc = "Create an open + close pair and move the cursor to the middle." })
 end
 
-local _PAIRS = {
+--- Whenever a symmetric pair character is typed, create the pair or move past the close character.
+---
+---@param character string The quote-like character that opens and closes the pair.
+local function _define_symmetric_mapping(character)
+    vim.keymap.set("i", character, function()
+        local line = vim.api.nvim_get_current_line()
+        local column = vim.api.nvim_win_get_cursor(0)[2]
+        local next_character = line:sub(column + 1, column + 1)
+
+        if next_character == character then
+            return "<Right>"
+        end
+
+        return character .. character .. "<Left>"
+    end, { expr = true, desc = "Create a quote pair or move to the right of the closing quote." })
+end
+
+local _ASYMMETRIC_PAIRS = {
     ["("] = ")",
     ["["] = "]",
     ["{"] = "}",
+}
 
-    -- TODO: These symmetric-pair characters don't work as mappings yet. Fix them later.
+local _SYMMETRIC_PAIRS = {
     ["'"] = "'",
     ['"'] = '"',
     ["`"] = "`",
@@ -50,13 +68,16 @@ local _CLOSING_PAIRS = {
     ")",
     "]",
     "}",
-    "'",
-    '"',
-    "`",
 }
 
-for open, close in pairs(_PAIRS) do
+local _PAIRS = vim.tbl_extend("force", _ASYMMETRIC_PAIRS, _SYMMETRIC_PAIRS)
+
+for open, close in pairs(_ASYMMETRIC_PAIRS) do
     _define_open_mapping(open, close)
+end
+
+for character in pairs(_SYMMETRIC_PAIRS) do
+    _define_symmetric_mapping(character)
 end
 
 for _, character in ipairs(_CLOSING_PAIRS) do

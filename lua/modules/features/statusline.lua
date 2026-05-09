@@ -1,8 +1,7 @@
 --- Build the custom statusline with mode colors, git branch, Grapple marks, and cursor progress.
-
-local M = {}
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
+local git_status = require("modules.utilities.git_status")
 
 -- TODO: Make these colors better later
 local _Color = {
@@ -76,7 +75,7 @@ function _P.clone_highlight(name, source, overrides)
 end
 
 ---@return string # The Neovim statusline for saved grapple buffers
-function M.get_grapple_statusline()
+function _P.get_grapple_statusline()
     ---@type string[]
     local output = {}
     local current_buffer = vim.api.nvim_get_current_buf()
@@ -100,11 +99,23 @@ function M.get_grapple_statusline()
     return " " .. table.concat(output, " ") .. " "
 end
 
+---@return string # Get the git branch name or an empty string.
 _G.get_git_branch_label_safe = function()
-    return require("modules.features.core_editor_setup").get_git_branch_label_safe()
-end
-_G.get_grapple_statusline = M.get_grapple_statusline
+    local core_editor_setup = require("modules.features.core_editor_setup")
 
+    return core_editor_setup.get_git_branch_label_safe()
+end
+
+local function _refresh_git_branch_statusline()
+    local core_editor_setup = require("modules.features.core_editor_setup")
+
+    core_editor_setup.refresh_git_branch_safe()
+    git_status.refresh()
+end
+
+vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "DirChanged", "FocusGained" }, {
+    callback = _refresh_git_branch_statusline,
+})
 
 local dark_lefthand_background = "#2c323c" -- NOTE: Blueish-dark gray
 local lighter_background = "#3e4452" -- NOTE: Just a bit lighter than `dark_lefthand_background`
@@ -112,6 +123,16 @@ local lighter_background = "#3e4452" -- NOTE: Just a bit lighter than `dark_left
 vim.api.nvim_set_hl(0, "StatusMode", {}) -- NOTE: We auto-replace the `bg` in another section.
 vim.api.nvim_set_hl(0, "StatusLine", { fg = "#dddddd", bg = dark_lefthand_background })
 vim.api.nvim_set_hl(0, "StatusGit", { bg = lighter_background })
+_P.clone_highlight("StatusGitAhead", "DiffAdd", { bg = lighter_background })
+_P.clone_highlight("StatusGitBehind", "WarningMsg", { bg = lighter_background })
+_P.clone_highlight("StatusGitConflict", "ErrorMsg", { bg = lighter_background, bold = true })
+_P.clone_highlight("StatusGitDeleted", "WarningMsg", { bg = lighter_background })
+_P.clone_highlight("StatusGitModified", "Type", { bg = lighter_background })
+_P.clone_highlight("StatusGitRenamed", "Search", { bg = lighter_background })
+_P.clone_highlight("StatusGitSeparator", "Comment", { bg = lighter_background })
+_P.clone_highlight("StatusGitStaged", "Title", { bg = lighter_background })
+_P.clone_highlight("StatusGitStashed", "Special", { bg = lighter_background })
+_P.clone_highlight("StatusGitUntracked", "DiagnosticHint", { bg = lighter_background })
 vim.api.nvim_set_hl(0, "StatusLightArrow", { fg = lighter_background, bg = dark_lefthand_background })
 
 _P.clone_highlight("StatusPosition", "Comment", { fg = "#aaaaaa", bg = lighter_background })
@@ -121,11 +142,40 @@ _P.clone_highlight("StatusGrappleActive", "Special", { bold = true, bg = dark_le
 
 local left_arrow = ">"
 local right_arrow = "<"
+local left_arrow_outline = ">>"
 
-if core_helpers._IS_NERDFONT_ALLOWED then
+if core_helpers.IS_NERDFONT_ALLOWED then
     -- NOTE: Technically these are regular unicodes, not nerd font. But whatever.
     left_arrow = ""
     right_arrow = ""
+    left_arrow_outline = " "
+end
+
+---@return string # Get the optional git-details and grapple statusline tail.
+_G.get_git_and_grapple_statusline = function()
+    local details = git_status.get_statusline()
+    local grapple = _P.get_grapple_statusline()
+
+    if details == "" and grapple == "" then
+        return " %#StatusLightArrow#" .. left_arrow
+    end
+
+    ---@type string[]
+    local output = {}
+
+    if details ~= "" then
+        table.insert(output, "%#StatusGit#" .. left_arrow_outline)
+        table.insert(output, details)
+    end
+
+    if grapple ~= "" then
+        table.insert(output, "%#StatusLightArrow#" .. left_arrow)
+        table.insert(output, grapple)
+    elseif details ~= "" then
+        table.insert(output, "%#StatusLightArrow#" .. left_arrow)
+    end
+
+    return table.concat(output, "")
 end
 
 vim.o.statusline = table.concat({
@@ -133,10 +183,8 @@ vim.o.statusline = table.concat({
     "%#StatusModeArrow#",
     left_arrow,
     "%#StatusGit# ",
-    "%{v:lua.get_git_branch_label_safe()} ",
-    "%#StatusLightArrow#",
-    left_arrow,
-    "%{%v:lua.get_grapple_statusline()%} ",
+    "%{v:lua.get_git_branch_label_safe()}",
+    "%{%v:lua.get_git_and_grapple_statusline()%}",
     "%=", -- Spacer
     "%#StatusLightArrow# ",
     right_arrow,
@@ -171,6 +219,6 @@ vim.api.nvim_create_autocmd({ "ModeChanged", "InsertEnter" }, {
     end,
 })
 
-_P.update_status_mode_colors(vim.api.nvim_get_mode().mode)
+git_status.setup()
 
-return M
+_P.update_status_mode_colors(vim.api.nvim_get_mode().mode)

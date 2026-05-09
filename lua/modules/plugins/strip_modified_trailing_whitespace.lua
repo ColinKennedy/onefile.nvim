@@ -90,6 +90,7 @@ function _P.strip_trailing_whitespaces()
     end)
     vim.fn.winrestview(view)
 
+    ---@type table<integer, boolean>
     _LINES[buffer] = {}
 end
 

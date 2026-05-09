@@ -37,7 +37,7 @@ if vim.fn.has("nvim-0.10") then
     vim.diagnostic.config({
         -- Reference: https://github.com/neovim/neovim/commit/ad191be65e2b1641c181506166b1037b548d14a8
         -- Reference:
--- https://www.reddit.com/r/neovim/comments/10jh2jm/comment/j5koxew/
+        -- https://www.reddit.com/r/neovim/comments/10jh2jm/comment/j5koxew/
         --
         severity_sort = true,
         signs = {

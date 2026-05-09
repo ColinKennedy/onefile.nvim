@@ -86,43 +86,21 @@ vim.keymap.set(
     { desc = "Run `git reset` for all hunks in the current buffer." }
 )
 
-vim.keymap.set(
-    "n",
-    "<leader>gsp",
-    function()
-        require("modules.utilities.core_helpers").push_stash_by_name()
-    end,
-    { desc = "Create a new, named git stash." }
-)
-vim.keymap.set(
-    "n",
-    "<leader>gsa",
-    function()
-        require("modules.features.core_editor_setup").show_git_stashes()
-    end,
-    { desc = "Show the git stashes that are available." }
-)
-vim.keymap.set(
-    "n",
-    "<leader>gap",
-    function()
-        require("modules.utilities.core_helpers").run_git_add_p()
-    end,
-    { noremap = true, silent = true, desc = "Create a terminal and run `git add -p` on it." }
-)
-vim.keymap.set(
-    "n",
-    "<leader>gph",
-    function()
-        require("modules.utilities.core_helpers").run_git_push()
-    end,
-    { noremap = true, silent = true, desc = "Push the committed to changes to the remote branch." }
-)
-vim.keymap.set(
-    "n",
-    "<leader>gpl",
-    function()
-        require("modules.utilities.core_helpers").run_git_pull()
-    end,
-    { noremap = true, silent = true, desc = "Push the latest commits from the remote branch." }
-)
+vim.keymap.set("n", "<leader>gsp", function()
+    require("modules.utilities.core_helpers").push_stash_by_name()
+end, { desc = "Create a new, named git stash." })
+vim.keymap.set("n", "<leader>gsa", function()
+    require("modules.features.core_editor_setup").show_git_stashes()
+end, { desc = "Show the git stashes that are available." })
+vim.keymap.set("n", "<leader>gap", function()
+    require("modules.utilities.core_helpers").run_git_add_p()
+end, { noremap = true, silent = true, desc = "Create a terminal and run `git add -p` on it." })
+vim.keymap.set("n", "<leader>gcop", function()
+    require("modules.utilities.core_helpers").run_git_checkout_p()
+end, { noremap = true, silent = true, desc = "Create a terminal and run `git checkout -p` on it." })
+vim.keymap.set("n", "<leader>gph", function()
+    require("modules.utilities.core_helpers").run_git_push()
+end, { noremap = true, silent = true, desc = "Push the committed to changes to the remote branch." })
+vim.keymap.set("n", "<leader>gpl", function()
+    require("modules.utilities.core_helpers").run_git_pull()
+end, { noremap = true, silent = true, desc = "Push the latest commits from the remote branch." })

@@ -1,34 +1,63 @@
 --- Register a :Git command that runs git output in a scratch buffer.
 
-vim.api.nvim_create_user_command("Git", function(opts)
-    local arguments = table.concat(opts.fargs, " ")
-    local command = string.format("%s %s", require("modules.utilities.core_helpers")._GIT_EXECUTABLE, arguments)
+local M = {}
+
+--- Find some (reasonable, not exhaustive) git auto-complete values.
+---
+---@param _ any Some ignored parameter.
+---@param line string The raw command-line text to get auto-complete results for.
+---@return string[] # The basic subcommands.
+local function _get_git_completion(_, line)
+    if line:match(" .+ ") ~= nil then
+        -- NOTE: If we've gotten to `:Git foo ` then don't auto-complete any more.
+        return {}
+    end
+
+    return { "add", "commit", "diff", "log", "pull", "push", "status" }
+end
+
+--- Build a shell-free Git command argv list.
+---
+---@param executable string The Git executable path.
+---@param arguments string[] The arguments passed to `:Git`.
+---@return string[] # The argv list to pass to `jobstart()`.
+function M.build_git_command(executable, arguments)
+    local command = { executable }
+
+    for _, argument in ipairs(arguments) do
+        table.insert(command, argument)
+    end
+
+    return command
+end
+
+--- A simple `git` wrapper for Neovim.
+---
+---@param opts vim.api.keyset.create_user_command.command_args The user-command options to read from.
+local function _run_in_git(opts)
+    local command = M.build_git_command(require("modules.utilities.core_helpers")._GIT_EXECUTABLE, opts.fargs)
 
     vim.cmd.split()
     vim.cmd.enew()
-    local buffer = vim.api.nvim_get_current_buf()
 
     vim.fn.jobstart(command, {
         term = true,
-        on_exit = function(_, exit_code, _)
-            if exit_code ~= 0 then
-                -- NOTE: We leave the buffer open so that we can display the error.
-                return
-            end
-
-            -- NOTE: We auto-close the terminal buffer when git process exits.
-            if vim.api.nvim_buf_is_valid(buffer) then
-                vim.api.nvim_buf_delete(buffer, { force = true })
-            end
-        end,
     })
 
     -- NOTE: Switch to terminal mode so we can immediately begin typing.
     vim.cmd.startinsert()
-end, {
+end
+
+vim.api.nvim_create_user_command("G", _run_in_git, {
     desc = "A basic git wrapper.",
     nargs = "+",
-    complete = function(_, _line)
-        return { "add", "commit", "diff", "log", "pull", "push", "status" }
-    end,
+    complete = _get_git_completion,
 })
+
+vim.api.nvim_create_user_command("Git", _run_in_git, {
+    desc = "A basic git wrapper.",
+    nargs = "+",
+    complete = _get_git_completion,
+})
+
+return M

@@ -167,3 +167,9 @@ function _P.assert_keys_with_buffer(callbacks, before_options, expected, strict)
 
     assert.equal(expected, found)
 end
+
+describe("hello world", function()
+    it("passes", function()
+        assert.equal("hello world", "hello world")
+    end)
+end)

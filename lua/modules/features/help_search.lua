@@ -1,6 +1,7 @@
+--- Search helptags across installed Vim documentation with the selector UI.
+
 local _P = {}
 
---- Search Neovim's :help, quickly and easily
 --- Find all Vim helptag files, for all languages.
 ---
 ---@param paths string[] The potential files to filter out.

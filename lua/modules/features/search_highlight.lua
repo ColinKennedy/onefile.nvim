@@ -1,3 +1,5 @@
+--- Manage search highlighting so matches clear when the cursor leaves them.
+
 local _P = {}
 
 -- Reference: https://github.com/vim/vim/issues/17187#issuecomment-2820531752

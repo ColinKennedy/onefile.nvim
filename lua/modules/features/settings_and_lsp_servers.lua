@@ -1,6 +1,7 @@
+--- Configure editor options and collect built-in LSP server definitions.
+
 local M = {}
 
---- Settings and LSP server definitions
 
 ---------- Saver [Start] ----------
 -- NOTE: Create the :AsyncWrite command (for writing without blocking Neovim)

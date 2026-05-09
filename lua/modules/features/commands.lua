@@ -1,4 +1,5 @@
---- Commands
+--- Register project-aware commands for ripgrep search and project-root detection.
+
 local _REPOSITORY_ROOT = { ".git" }
 local _REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
 table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")

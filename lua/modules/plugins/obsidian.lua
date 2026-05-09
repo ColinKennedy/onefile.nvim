@@ -1,10 +1,10 @@
-local _P = {}
+--- Basic [obsidian](https://obsidian.md) support.
+---
+--- Instead of supporting
+--- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim), which is
+--- a huge I just port the commands that I want to keep. And I only need a few commands.
 
---- Basic [obsidian](https://obsidian.md) support
---
--- Instead of supporting
--- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim), which is
--- a huge I just port the commands that I want to keep. And I only need a few commands.
+local _P = {}
 
 -- NOTE: obsidian.nvim separates the top-level note data from the rest of the
 -- document using these characters.

@@ -1,6 +1,7 @@
+--- Implement a native EasyMotion-style jump overlay for visible text.
+---
+--- Reference: https://antonk52.github.io/webdevandstuff/post/2025-11-30-diy-easymotion.html
 
---- A native "EasyMotion" snippet
--- Reference: https://antonk52.github.io/webdevandstuff/post/2025-11-30-diy-easymotion.html
 local _NAMESPACE = vim.api.nvim_create_namespace("my.easymotion")
 local _CHARACTERS = vim.split("fjdkslgha;rueiwotyqpvbcnxmzFJDKSLGHARUEIWOTYQPVBCNXMZ", "")
 

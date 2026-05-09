@@ -1,4 +1,5 @@
---- Keymaps
+--- Define leader mappings for project files, buffers, diagnostics, LSP, snippets, sessions, and search helpers.
+
 vim.keymap.set("n", "<space>E", function()
     require("modules.features.core_editor_setup").select_file_from_project_root()
 end, { desc = "Search And [E]dit a file from the project root." })

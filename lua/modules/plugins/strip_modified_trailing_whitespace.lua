@@ -1,6 +1,7 @@
+--- Strip trailing whitespace only from lines changed in the current buffer.
+
 local _P = {}
 
---- Remove trailing whitespace but only on lines you've modified.
 local _GROUP = vim.api.nvim_create_augroup("my.formatter.strip_trailing_whitespace", { clear = true })
 ---@type table<integer, table<integer, boolean>>
 local _LINES = {}

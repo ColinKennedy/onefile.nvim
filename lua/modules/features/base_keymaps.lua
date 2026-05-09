@@ -1,4 +1,4 @@
---- Base keymaps
+--- Define baseline window, tab, buffer, quickfix, command-line, and terminal keymaps.
 
 ---------- Keymaps [Start] ----------
 local options = { expr = true, noremap = true, silent = true }

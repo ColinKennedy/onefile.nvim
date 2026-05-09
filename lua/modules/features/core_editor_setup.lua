@@ -1,8 +1,9 @@
+--- Configure core editor helpers for file selection, completions, snippets, git status, etc.
+
 local M = {}
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
 
---- Core editor setup
 
 --- Find, select, and replace the current window with a new file.
 ---

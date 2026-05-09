@@ -1,11 +1,11 @@
+--- Implement native bookmark management inspired by grapple.nvim.
+---
+--- Reference:
+---     https://www.reddit.com/r/neovim/comments/1js5bg8/comment/mloidmn/
+---
+
 local core_editor_setup = require("modules.features.core_editor_setup")
 local core_helpers = require("modules.utilities.core_helpers")
-
---- A grapple.nvim replacement using only native Neovim
---
--- Reference:
---     https://www.reddit.com/r/neovim/comments/1js5bg8/comment/mloidmn/
---
 
 for index = core_helpers._BOOKMARK_MINIMUM, core_helpers._BOOKMARK_MAXIMUM do
     local mark = core_helpers.get_vim_mark_from_bookmark_index(index)

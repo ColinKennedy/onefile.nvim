@@ -1,5 +1,5 @@
+--- Configure diagnostic signs and highlight colors.
 
---- Diagnostic symbols and colors
 -- The ctermfg colors are determined by your terminal (``echo $TERM``). Mine is
 -- ``screen-256color`` at the time of writing. Their chart is located here:
 --

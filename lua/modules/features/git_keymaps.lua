@@ -1,6 +1,7 @@
+--- Define keymaps for staging, committing, resetting, and running git commands from Neovim.
+
 local _P = {}
 
---- git-related keymaps
 --- Run `git add` on the current Vim buffer.
 function _P.git_add_current_buffer()
     local buffer = 0

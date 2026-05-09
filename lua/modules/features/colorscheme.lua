@@ -1,5 +1,5 @@
+--- Configure the default colorscheme and fallback highlight groups.
 
---- Colorscheme
 local _extend = function(table_to_modify, items)
     for key, value in pairs(items) do
         table_to_modify[key] = value

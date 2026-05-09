@@ -1,5 +1,3 @@
-local core_helpers = require("modules.utilities.core_helpers")
-
 --- Base keymaps
 
 ---------- Keymaps [Start] ----------
@@ -16,16 +14,16 @@ local resize_description = function(direction)
     return vim.tbl_deep_extend("force", options, { desc = string.format('Resize the "%s" window.', direction) })
 end
 vim.keymap.set("n", "<M-h>", function()
-    core_helpers.resize_window("left", 5)
+    require("modules.utilities.core_helpers").resize_window("left", 5)
 end, resize_description("left"))
 vim.keymap.set("n", "<M-j>", function()
-    core_helpers.resize_window("down", 2)
+    require("modules.utilities.core_helpers").resize_window("down", 2)
 end, resize_description("down"))
 vim.keymap.set("n", "<M-k>", function()
-    core_helpers.resize_window("up", 2)
+    require("modules.utilities.core_helpers").resize_window("up", 2)
 end, resize_description("up"))
 vim.keymap.set("n", "<M-l>", function()
-    core_helpers.resize_window("right", 5)
+    require("modules.utilities.core_helpers").resize_window("right", 5)
 end, resize_description("right"))
 
 -- Add numbered j/k movements to Vim's jumplist
@@ -152,13 +150,25 @@ vim.keymap.set(
 )
 
 -- Reference: https://www.joshmedeski.com/posts/underrated-square-bracket
-vim.keymap.set("n", "]e", core_helpers.go_to_diagnostic(true, "ERROR"), { desc = "Next diagnostic [e]rror." })
-vim.keymap.set("n", "[e", core_helpers.go_to_diagnostic(false, "ERROR"), { desc = "Previous diagnostic [e]rror." })
-vim.keymap.set("n", "]w", core_helpers.go_to_diagnostic(true, "WARN"), { desc = "Next diagnostic [w]arning." })
-vim.keymap.set("n", "[w", core_helpers.go_to_diagnostic(false, "WARN"), { desc = "Previous diagnostic [w]arning." })
+vim.keymap.set("n", "]e", function()
+    require("modules.utilities.core_helpers").go_to_diagnostic(true, "ERROR")()
+end, { desc = "Next diagnostic [e]rror." })
+vim.keymap.set("n", "[e", function()
+    require("modules.utilities.core_helpers").go_to_diagnostic(false, "ERROR")()
+end, { desc = "Previous diagnostic [e]rror." })
+vim.keymap.set("n", "]w", function()
+    require("modules.utilities.core_helpers").go_to_diagnostic(true, "WARN")()
+end, { desc = "Next diagnostic [w]arning." })
+vim.keymap.set("n", "[w", function()
+    require("modules.utilities.core_helpers").go_to_diagnostic(false, "WARN")()
+end, { desc = "Previous diagnostic [w]arning." })
 
-vim.keymap.set("n", "[d", core_helpers.go_to_diagnostic(false, nil), { desc = "Previous diagnostic issue." })
-vim.keymap.set("n", "]d", core_helpers.go_to_diagnostic(true, nil), { desc = "Previous diagnostic issue." })
+vim.keymap.set("n", "[d", function()
+    require("modules.utilities.core_helpers").go_to_diagnostic(false, nil)()
+end, { desc = "Previous diagnostic issue." })
+vim.keymap.set("n", "]d", function()
+    require("modules.utilities.core_helpers").go_to_diagnostic(true, nil)()
+end, { desc = "Previous diagnostic issue." })
 
 vim.keymap.set("n", "=d", function()
     vim.diagnostic.open_float({ source = true })

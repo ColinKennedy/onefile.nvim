@@ -1,11 +1,11 @@
-local core_helpers = require("modules.utilities.core_helpers")
-
 --- Commands
 local _REPOSITORY_ROOT = { ".git" }
 local _REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
 table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
 
-vim.api.nvim_create_user_command("Rg", core_helpers.run_ripgrep_command, { nargs = 1, desc = "Search using ripgrep." })
+vim.api.nvim_create_user_command("Rg", function(opts)
+    require("modules.utilities.core_helpers").run_ripgrep_command(opts)
+end, { nargs = 1, desc = "Search using ripgrep." })
 
 --- Find the nearest directory that matches `pattern`.
 ---
@@ -83,14 +83,16 @@ end, {
 
 vim.api.nvim_create_user_command(
     "Pcd",
-    core_helpers.cd_to_parent_project_root,
+    function()
+        require("modules.utilities.core_helpers").cd_to_parent_project_root()
+    end,
     { nargs = 0, desc = "From the [P]roject, [c]hange [d]irectory." }
 )
 vim.api.nvim_create_user_command("Cedit", function(opts)
-    core_helpers.open_relative(opts.args)
+    require("modules.utilities.core_helpers").open_relative(opts.args)
 end, {
     complete = function(text)
-        return core_helpers.complete_relative(text)
+        return require("modules.utilities.core_helpers").complete_relative(text)
     end,
     nargs = 1,
     desc = "Open a file using a relative file path.",

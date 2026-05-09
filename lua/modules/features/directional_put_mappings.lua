@@ -1,5 +1,3 @@
-local core_helpers = require("modules.utilities.core_helpers")
-
 --- Add [p ]p >p <p >P <P mappings.
 --- Paste to the line above or below, and move text left or right.
 ---
@@ -18,7 +16,7 @@ local function _paste_line(direction, indent)
 
     local register = vim.v.register ~= "" and vim.v.register or '"'
     local line = vim.fn.getreg(register)
-    line = core_helpers.rstrip(line)
+    line = require("modules.utilities.core_helpers").rstrip(line)
     local lines = vim.split(line, "\n")
     vim.api.nvim_buf_set_lines(0, row, row, true, lines)
     local start = row + 1

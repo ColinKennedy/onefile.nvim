@@ -1,5 +1,3 @@
-local core_editor_setup = require("modules.features.core_editor_setup")
-
 --- The `ii` indentwise text-object
 --- Find the first column that is not whitespace for some `line`.
 ---
@@ -83,7 +81,7 @@ local function select_same_indent(allow_empty_line)
     start_line = start_line + 1
     end_line = end_line - 1
 
-    core_editor_setup.set_text_object_marks(
+    require("modules.features.core_editor_setup").set_text_object_marks(
         start_line,
         _get_first_non_whitespace_column(start_line) - 1,
         end_line,

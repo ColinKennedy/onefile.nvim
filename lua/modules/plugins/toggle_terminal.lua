@@ -1,5 +1,4 @@
 local _P = {}
-local core_helpers = require("modules.utilities.core_helpers")
 
 --- A lightweight "toggleterminal". Use <space>T to open and close it.
 ---@type table<integer, _my.ToggleTerminal>
@@ -120,7 +119,7 @@ local function _create_terminal(buffer)
     end
 
     _initialize_terminal_buffer(buffer)
-    core_helpers.close_terminal_afterwards(buffer)
+    require("modules.utilities.core_helpers").close_terminal_afterwards(buffer)
 
     return { buffer = buffer, mode = _STARTING_MODE }
 end

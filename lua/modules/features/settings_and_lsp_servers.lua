@@ -1,13 +1,14 @@
 local M = {}
-local core_editor_setup = require("modules.features.core_editor_setup")
-local core_helpers = require("modules.utilities.core_helpers")
 
 --- Settings and LSP server definitions
 
 ---------- Saver [Start] ----------
 -- NOTE: Create the :AsyncWrite command (for writing without blocking Neovim)
 vim.api.nvim_create_user_command("AsyncWrite", function()
-    local work = vim.loop.new_work(core_editor_setup.write_async, core_helpers.check_async_write)
+    local work = vim.loop.new_work(
+        require("modules.features.core_editor_setup").write_async,
+        require("modules.utilities.core_helpers").check_async_write
+    )
     local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
     work:queue(vim.api.nvim_buf_get_name(0), table.concat(lines, "\n"))
 end, { desc = "Write all buffer lines to-disk in a separate thread." })
@@ -99,7 +100,7 @@ M.servers = {
         name = "lua_ls",
         filetypes = { "lua" },
         callback = function(event)
-            local paths = vim.tbl_deep_extend("force", {}, core_helpers._LUA_ROOT_PATHS)
+            local paths = vim.tbl_deep_extend("force", {}, require("modules.utilities.core_helpers")._LUA_ROOT_PATHS)
             table.insert(paths, ".git")
 
             local command = "lua-language-server"

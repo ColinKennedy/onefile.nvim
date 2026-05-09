@@ -1,6 +1,5 @@
 local M = {}
 local _P = {}
-local core_editor_setup = require("modules.features.core_editor_setup")
 local core_helpers = require("modules.utilities.core_helpers")
 
 --- Statusline definition
@@ -100,7 +99,9 @@ function M.get_grapple_statusline()
     return " " .. table.concat(output, " ") .. " "
 end
 
-_G.get_git_branch_label_safe = core_editor_setup.get_git_branch_label_safe
+_G.get_git_branch_label_safe = function()
+    return require("modules.features.core_editor_setup").get_git_branch_label_safe()
+end
 _G.get_grapple_statusline = M.get_grapple_statusline
 
 

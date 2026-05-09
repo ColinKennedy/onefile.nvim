@@ -1,6 +1,4 @@
 local _P = {}
-local core_editor_setup = require("modules.features.core_editor_setup")
-local core_helpers = require("modules.utilities.core_helpers")
 
 --- git-related keymaps
 --- Run `git add` on the current Vim buffer.
@@ -52,7 +50,7 @@ function _P.run_git_command(command, directory)
 
     ---@type string[]
     local full_command = {}
-    vim.list_extend(full_command, { core_helpers._GIT_EXECUTABLE, "-C", directory })
+    vim.list_extend(full_command, { require("modules.utilities.core_helpers")._GIT_EXECUTABLE, "-C", directory })
     vim.list_extend(full_command, command)
 
     vim.system(full_command, { text = true }, function(object)
@@ -90,30 +88,40 @@ vim.keymap.set(
 vim.keymap.set(
     "n",
     "<leader>gsp",
-    core_helpers.push_stash_by_name,
+    function()
+        require("modules.utilities.core_helpers").push_stash_by_name()
+    end,
     { desc = "Create a new, named git stash." }
 )
 vim.keymap.set(
     "n",
     "<leader>gsa",
-    core_editor_setup.show_git_stashes,
+    function()
+        require("modules.features.core_editor_setup").show_git_stashes()
+    end,
     { desc = "Show the git stashes that are available." }
 )
 vim.keymap.set(
     "n",
     "<leader>gap",
-    core_helpers.run_git_add_p,
+    function()
+        require("modules.utilities.core_helpers").run_git_add_p()
+    end,
     { noremap = true, silent = true, desc = "Create a terminal and run `git add -p` on it." }
 )
 vim.keymap.set(
     "n",
     "<leader>gph",
-    core_helpers.run_git_push,
+    function()
+        require("modules.utilities.core_helpers").run_git_push()
+    end,
     { noremap = true, silent = true, desc = "Push the committed to changes to the remote branch." }
 )
 vim.keymap.set(
     "n",
     "<leader>gpl",
-    core_helpers.run_git_pull,
+    function()
+        require("modules.utilities.core_helpers").run_git_pull()
+    end,
     { noremap = true, silent = true, desc = "Push the latest commits from the remote branch." }
 )

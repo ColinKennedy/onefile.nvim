@@ -1,4 +1,3 @@
-local core_editor_setup = require("modules.features.core_editor_setup")
 local core_helpers = require("modules.utilities.core_helpers")
 local settings_and_lsp_servers = require("modules.features.settings_and_lsp_servers")
 
@@ -40,7 +39,9 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 vim.api.nvim_create_autocmd("LspAttach", {
-    callback = core_editor_setup.setup_lsp_details,
+    callback = function(event)
+        require("modules.features.core_editor_setup").setup_lsp_details(event)
+    end,
     group = core_helpers._LSP_GROUP,
 })
 

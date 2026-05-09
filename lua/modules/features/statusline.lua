@@ -1,5 +1,6 @@
 local M = {}
 local _P = {}
+local core_editor_setup = require("modules.features.core_editor_setup")
 local core_helpers = require("modules.utilities.core_helpers")
 
 --- Statusline definition
@@ -99,6 +100,10 @@ function M.get_grapple_statusline()
     return " " .. table.concat(output, " ") .. " "
 end
 
+_G.get_git_branch_label_safe = core_editor_setup.get_git_branch_label_safe
+_G.get_grapple_statusline = M.get_grapple_statusline
+
+
 local dark_lefthand_background = "#2c323c" -- NOTE: Blueish-dark gray
 local lighter_background = "#3e4452" -- NOTE: Just a bit lighter than `dark_lefthand_background`
 
@@ -121,22 +126,21 @@ if core_helpers._IS_NERDFONT_ALLOWED then
     right_arrow = ""
 end
 
--- NOTE: This redefines `core_editor_setup.get_git_branch_label_safe` as a global function.
 vim.o.statusline = table.concat({
     "%#StatusMode#   ",
     "%#StatusModeArrow#",
     left_arrow,
     "%#StatusGit# ",
-    "%{luaeval('require(\"modules.features.core_editor_setup\").get_git_branch_label_safe()')} ",
+    "%{v:lua.get_git_branch_label_safe()} ",
     "%#StatusLightArrow#",
     left_arrow,
-    "%{luaeval('require(\"modules.features.statusline\").get_grapple_statusline()')} ",
+    "%{v:lua.get_grapple_statusline()} ",
     "%=", -- Spacer
     "%#StatusLightArrow# ",
     right_arrow,
     "%#StatusLine#",
     "%#StatusPosition# %l:%c",
-    "%#StatusProgress# [%{luaeval('require(\"modules.features.core_editor_setup\").get_window_line_progress()')}] ",
+    "%#StatusProgress# [%{v:lua.get_window_line_progress()}] ",
     "%#StatusModeArrow#",
     right_arrow,
     "%#StatusMode#   ",

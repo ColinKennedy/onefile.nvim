@@ -118,6 +118,78 @@ diff --git a/file b/file
         assert.equal("one\nfour\n", partial)
     end)
 
+    it("selects deleted lines from the visible sign line", function()
+        local base = "one\ntwo\nthree\nfour\n"
+        local target = "one\nfour\n"
+        local diff = [[
+diff --git a/file b/file
+@@ -2,2 +1,0 @@
+-two
+-three
+]]
+
+        local partial, count = git_diff.build_selection_target(base, target, diff, 2, 2)
+
+        assert.equal(2, count)
+        assert.equal("one\nfour\n", partial)
+    end)
+
+    it("selects deleted lines from a range spanning the deleted hunk", function()
+        local base = "one\ntwo\nthree\nfour\n"
+        local target = "one\nfour\n"
+        local diff = [[
+diff --git a/file b/file
+@@ -2,2 +1,0 @@
+-two
+-three
+]]
+
+        local partial, count = git_diff.build_selection_target(base, target, diff, 1, 2)
+
+        assert.equal(2, count)
+        assert.equal("one\nfour\n", partial)
+    end)
+
+    it("selects changed lines across multiple hunks", function()
+        local base = "one\ntwo\nthree\nfour\nfive\nsix\n"
+        local target = "one\nTWO\nthree\nfour\nFIVE\nsix\n"
+        local diff = [[
+diff --git a/file b/file
+@@ -2 +2 @@
+-two
++TWO
+@@ -5 +5 @@
+-five
++FIVE
+]]
+
+        local partial, count = git_diff.build_selection_target(base, target, diff, 2, 5)
+
+        assert.equal(2, count)
+        assert.equal("one\nTWO\nthree\nfour\nFIVE\nsix\n", partial)
+    end)
+
+    it("selects partial hunks across a visual range", function()
+        local base = "one\ntwo\nthree\nfour\nfive\n"
+        local target = "one\nTWO\nTHREE\nfour\nFIVE\n"
+        local diff = [[
+diff --git a/file b/file
+@@ -2,2 +2,2 @@
+-two
+-three
++TWO
++THREE
+@@ -5 +5 @@
+-five
++FIVE
+]]
+
+        local partial, count = git_diff.build_selection_target(base, target, diff, 3, 5)
+
+        assert.equal(2, count)
+        assert.equal("one\ntwo\nTHREE\nfour\nFIVE\n", partial)
+    end)
+
     it("keeps unselected removed lines in replacement hunks", function()
         local base = "one\ntwo\nthree\nfour\n"
         local target = "one\nTWO\nfour\n"

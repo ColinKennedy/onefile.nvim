@@ -383,6 +383,22 @@ local function _is_line_selected(line, start_line, end_line)
     return start_line <= line and line <= end_line
 end
 
+--- Check whether a deletion-only hunk intersects the visual selection.
+---
+---@param hunk _my.git_diff.SelectionHunk The parsed deletion hunk.
+---@param start_line integer The first selected target line.
+---@param end_line integer The last selected target line.
+---@return boolean # If `true`, the deleted lines are selected.
+---
+local function _is_deleted_hunk_selected(hunk, start_line, end_line)
+    local before_anchor = math.max(hunk.new_start, 1)
+    local after_anchor = math.max(hunk.new_start + 1, 1)
+
+    return _is_line_selected(before_anchor, start_line, end_line)
+        or _is_line_selected(after_anchor, start_line, end_line)
+        or (start_line <= before_anchor and after_anchor <= end_line)
+end
+
 --- Split file text into lines and remember whether it ended in a newline.
 ---
 ---@param text string Some file contents.
@@ -533,13 +549,14 @@ function M.build_selection_target(base_text, target_text, diff, start_line, end_
                     table.insert(output, added)
                 end
             elseif removed then
-                local anchor = math.max(hunk.new_start + hunk.new_count - 1, 1)
+                local selected
 
-                if hunk.new_count > 0 then
-                    anchor = hunk.new_start + index - 1
+                if hunk.new_count == 0 then
+                    selected = _is_deleted_hunk_selected(hunk, start_line, end_line)
+                else
+                    local anchor = hunk.new_start + index - 1
+                    selected = _is_line_selected(anchor, start_line, end_line)
                 end
-
-                local selected = _is_line_selected(anchor, start_line, end_line)
 
                 if selected then
                     selected_changes = selected_changes + 1

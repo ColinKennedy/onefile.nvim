@@ -30,15 +30,12 @@ Run commands from the repository root: `~/repositories/personal/.config/noplugin
 
 ```sh
 make test
-eval $(luarocks path --lua-version 5.1 --bin)
 make luacheck
 make check-stylua
 make stylua
 make llscheck
 make download-dependencies
 ```
-
-Before running `make luacheck` or `make llscheck`, you must run `eval $(luarocks path --lua-version 5.1 --bin)` in the same shell so the LuaRocks-installed `luacheck` and `llscheck` executables are in `PATH`.
 
 The README also documents this test setup:
 
@@ -86,13 +83,12 @@ For behavior changes in `init.lua`, prefer adding or updating focused specs in `
 Before handing work back, run the smallest useful verification for the task. Typical checks are:
 
 ```sh
-eval $(luarocks path --lua-version 5.1 --bin)
 make test
 make luacheck
 make check-stylua
 ```
 
-Run `eval $(luarocks path --lua-version 5.1 --bin)` first, then `make llscheck` when changing annotations, public helper shapes, or language-server-sensitive code, if the required tooling is available.
+Run `make llscheck` when changing annotations, public helper shapes, or language-server-sensitive code, if the required tooling is available.
 
 ## Installation / Manual Use
 

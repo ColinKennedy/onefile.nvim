@@ -1,5 +1,5 @@
+--- Define insert-mode auto-pair mappings for brackets, quotes, and backspace cleanup.
 
---- auto-pairs functionality
 --- Whenever `character` is typed, check if we want to move the cursor right instead.
 ---
 --- If `character` like `")"` is already in the buffer and is the cursor is

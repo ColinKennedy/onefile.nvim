@@ -1,4 +1,7 @@
---- Print the current word (It's https://github.com/andrewferrier/debugprint.nvim, basically)
+--- Insert simple debug-print statements for the current word or visual selection.
+---
+--- (It's https://github.com/andrewferrier/debugprint.nvim, basically)
+
 local _COUNTER = 1
 
 ---@return string? # Get the visual selection, if it is in visual mode.

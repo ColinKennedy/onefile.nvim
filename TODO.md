@@ -1,4 +1,3 @@
-- Docstrings for the modules still need to exist
 - Add gitgutter + git navigation [g + ]g support + multi-file navigation
 - Add :Gcd
 - Add tests

@@ -1,4 +1,4 @@
---- Session sync
+--- Synchronize custom session tracking when Neovim loads a Session.vim file.
 
 vim.api.nvim_create_autocmd("SessionLoadPre", {
     group = vim.api.nvim_create_augroup("my.session_sync", { clear = true }),

@@ -1,7 +1,8 @@
+--- Shared utility functions, type definitions, constants, and state for the Neovim configuration.
+
 local M = {}
 local _P = {}
 
---- Core shared helpers and state
 
 ---@class _my._datatypes.IntBounds An inclusive or exclusive pair of integers.
 ---@field first integer The starting value.

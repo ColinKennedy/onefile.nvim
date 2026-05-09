@@ -1,4 +1,5 @@
---- The `ii` indentwise text-object
+--- Define the `ii` text object for selecting same-indent blocks.
+
 --- Find the first column that is not whitespace for some `line`.
 ---
 ---@param line integer | string The 1-or-more index of some Vim buffer to search for text.

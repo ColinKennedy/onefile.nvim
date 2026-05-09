@@ -1,5 +1,5 @@
+--- Apply indentation and spellcheck settings for specific filetypes.
 
---- Filetype-specific details
 vim.api.nvim_create_autocmd("FileType", {
     pattern = { "lua", "python" },
     callback = function()

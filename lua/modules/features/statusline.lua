@@ -1,8 +1,9 @@
+--- Build the custom statusline with mode colors, git branch, Grapple marks, and cursor progress.
+
 local M = {}
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
 
---- Statusline definition
 -- TODO: Make these colors better later
 local _Color = {
     command = "#e5c07b",

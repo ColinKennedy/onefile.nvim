@@ -1,5 +1,5 @@
+--- Move between Neovim windows and adjacent tmux panes with the same directional keys.
 
---- If at the edge of the Neovim tab, move to the nearest tmux pane instead.
 --- Move in `direction` if 1. on a Neovim edge tab 2. there is a nearby tmux pane.
 ---
 ---@param direction "h" | "j" | "k" | "l"

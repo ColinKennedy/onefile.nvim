@@ -1,5 +1,5 @@
+---- Make [q + ]q / [l + ]l mappings auto-wrap. Seriously why are these not the default?
 
---- Make []q/[]l mappings auto-wrap. Seriously why are these not the default?
 vim.keymap.set("n", "[q", function()
     local success = pcall(vim.cmd.cprevious)
 

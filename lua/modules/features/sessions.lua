@@ -1,6 +1,7 @@
+--- Create, save, and reopen Session.vim files for repository roots.
+
 local _P = {}
 
---- Add mksession support.
 -- This integrates well with [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect)
 --
 -- Important:

@@ -1,7 +1,8 @@
+--- Register filetype and editor autocommands for LSP setup, file reloads, terminal buffers, and formatting.
+
 local core_helpers = require("modules.utilities.core_helpers")
 local settings_and_lsp_servers = require("modules.features.settings_and_lsp_servers")
 
---- Autocommands
 for _, data in ipairs(settings_and_lsp_servers.servers) do
     vim.api.nvim_create_autocmd("FileType", {
         group = core_helpers._LSP_GROUP,

@@ -1,6 +1,7 @@
+--- A lightweight "toggleterminal". Use <space>T to open and close it.
+
 local _P = {}
 
---- A lightweight "toggleterminal". Use <space>T to open and close it.
 ---@type table<integer, _my.ToggleTerminal>
 local _TAB_TERMINALS = {}
 ---@type table<integer, _my.ToggleTerminal>

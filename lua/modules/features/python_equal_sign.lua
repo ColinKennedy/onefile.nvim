@@ -1,6 +1,7 @@
+--- Provide Python insert-mode helpers for appending assignment equals signs.
+
 local _P = {}
 
---- Python equal-sign insertion support
 local _BUILTINS = {
     ["False"] = true,
     ["None"] = true,

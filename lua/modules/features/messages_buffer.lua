@@ -1,5 +1,5 @@
+--- Register :Messages for opening command messages in a scratch buffer.
 
---- Write `:messages` to a buffer
 vim.api.nvim_create_user_command("Messages", function()
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_call(bufnr, function()

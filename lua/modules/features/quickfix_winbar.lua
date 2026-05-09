@@ -1,6 +1,7 @@
+--- Add an automatic winbar title to quickfix windows.
+
 local M = {}
 
---- Add an automated winbar title to the Quickfix window.
 ---@return string # The recommended Quickfix window title, if any is defined.
 function M.get_quickfix_winbar_title()
     local info = vim.fn.getqflist({ title = 0 })

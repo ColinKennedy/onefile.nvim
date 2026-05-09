@@ -1,8 +1,9 @@
+--- Highlight tagged inline comments such as TODO, NOTE, and FIXME without plugins.
+---
+--- This is a "poor man's https://github.com/folke/todo-comments.nvim".
+
 local _P = {}
 
---- This is a "poor man's https://github.com/folke/todo-comments.nvim".
----
---- It highlights tagged inline comments with a unique color.
 
 ---@enum _my.ColorType A custom color alias (used to compute real colors later).
 local _ColorType = {

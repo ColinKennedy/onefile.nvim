@@ -1,10 +1,11 @@
+--- Make `p` behave as a text-object operator for replacing motions and text objects.
+
 local M = {}
 local _P = {}
 
 _P.operatorfunc_caller = nil
 _P.operatorfunc_original = nil
 
---- Make text-objects to work with `p`. e.g. `piw`
 --- Change `p` into a text-object-aware operator.
 ---
 ---@param type_ "char" | "line" The type of operator to consider.

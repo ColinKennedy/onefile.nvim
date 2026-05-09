@@ -1,9 +1,7 @@
-local core_helpers = require("modules.utilities.core_helpers")
-
 --- A really basic git command wrapper.
 vim.api.nvim_create_user_command("Git", function(opts)
     local arguments = table.concat(opts.fargs, " ")
-    local command = string.format("%s %s", core_helpers._GIT_EXECUTABLE, arguments)
+    local command = string.format("%s %s", require("modules.utilities.core_helpers")._GIT_EXECUTABLE, arguments)
 
     vim.cmd.split()
     vim.cmd.enew()

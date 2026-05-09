@@ -1,6 +1,4 @@
 local _P = {}
-local core_editor_setup = require("modules.features.core_editor_setup")
-local core_helpers = require("modules.utilities.core_helpers")
 
 --- Add mksession support.
 -- This integrates well with [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect)
@@ -35,6 +33,7 @@ local core_helpers = require("modules.utilities.core_helpers")
 ---@return string? # The recommended Session.vim save location, if any.
 ---
 function _P.get_session_branch_path(reference_path)
+    local core_helpers = require("modules.utilities.core_helpers")
     local root = core_helpers.get_nearest_project_root(reference_path)
 
     if not root then
@@ -46,7 +45,7 @@ function _P.get_session_branch_path(reference_path)
         return nil
     end
 
-    local branch = core_editor_setup.get_git_branch_safe()
+    local branch = require("modules.features.core_editor_setup").get_git_branch_safe()
 
     if not branch then
         vim.notify(string.format('Cannot save "%s" project. No branch was found.', root), vim.log.levels.ERROR)
@@ -95,7 +94,7 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
 
 vim.api.nvim_create_user_command("SessionWrite", function()
     local directory = vim.fn.getcwd()
-    local root = core_helpers.get_nearest_project_root(directory)
+    local root = require("modules.utilities.core_helpers").get_nearest_project_root(directory)
 
     if not root then
         vim.notify(
@@ -117,7 +116,7 @@ vim.api.nvim_create_user_command("SessionWrite", function()
         return
     end
 
-    local session = vim.fs.joinpath(directory, core_helpers._VIM_SESSION_FILE_NAME)
+    local session = vim.fs.joinpath(directory, require("modules.utilities.core_helpers")._VIM_SESSION_FILE_NAME)
     _P.save_session(session)
     vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
     vim.uv.fs_copyfile(session, path)

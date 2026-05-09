@@ -1,5 +1,4 @@
 local _P = {}
-local core_editor_setup = require("modules.features.core_editor_setup")
 
 --- Basic [obsidian](https://obsidian.md) support
 --
@@ -168,7 +167,7 @@ function _P.search_notes_by_aliases()
 
     local window = vim.api.nvim_get_current_win()
 
-    core_editor_setup.select_from_options(found, {
+    require("modules.features.core_editor_setup").select_from_options(found, {
         confirm = function(entry)
             vim.api.nvim_set_current_win(window)
             vim.cmd.edit(entry.value)

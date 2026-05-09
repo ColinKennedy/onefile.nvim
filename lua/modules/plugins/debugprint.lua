@@ -1,5 +1,3 @@
-local core_editor_setup = require("modules.features.core_editor_setup")
-
 --- Print the current word (It's https://github.com/andrewferrier/debugprint.nvim, basically)
 local _COUNTER = 1
 
@@ -15,7 +13,7 @@ local function _get_selected_word()
     local result = vim.fn.join(characters, "")
 
     if mode:match("V") then
-        result = core_editor_setup.strip_left(result)
+        result = require("modules.features.core_editor_setup").strip_left(result)
     end
 
     return result

@@ -1,25 +1,22 @@
-local core_editor_setup = require("modules.features.core_editor_setup")
-local core_helpers = require("modules.utilities.core_helpers")
-
 --- Keymaps
-vim.keymap.set(
-    "n",
-    "<space>E",
-    core_editor_setup.select_file_from_project_root,
-    { desc = "Search And [E]dit a file from the project root." }
-)
-vim.keymap.set(
-    "n",
-    "<space>e",
-    core_editor_setup.select_file_in_directory,
-    { desc = "Search and [e]dit from the current directory." }
-)
-vim.keymap.set("n", "<space>B", core_helpers.select_buffer, { desc = "Select a [B]uffer and swtich to it." })
-vim.keymap.set("n", "<leader>tq", core_editor_setup.toggle_quickfix, { desc = "Open or close the [q]uickfix buffer." })
+vim.keymap.set("n", "<space>E", function()
+    require("modules.features.core_editor_setup").select_file_from_project_root()
+end, { desc = "Search And [E]dit a file from the project root." })
+vim.keymap.set("n", "<space>e", function()
+    require("modules.features.core_editor_setup").select_file_in_directory()
+end, { desc = "Search and [e]dit from the current directory." })
+vim.keymap.set("n", "<space>B", function()
+    require("modules.utilities.core_helpers").select_buffer()
+end, { desc = "Select a [B]uffer and swtich to it." })
+vim.keymap.set("n", "<leader>tq", function()
+    require("modules.features.core_editor_setup").toggle_quickfix()
+end, { desc = "Open or close the [q]uickfix buffer." })
 vim.keymap.set(
     "i",
     "<C-Space>",
-    core_editor_setup.show_snippet_completion,
+    function()
+        return require("modules.features.core_editor_setup").show_snippet_completion()
+    end,
     { noremap = true, desc = "Trigger snippet completion." }
 )
 

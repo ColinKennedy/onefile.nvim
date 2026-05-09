@@ -35,9 +35,31 @@ local function remove_tree(path)
 end
 
 local function edit_file(path, lines)
-    vim.cmd("edit " .. vim.fn.fnameescape(path))
+    vim.cmd("silent edit " .. vim.fn.fnameescape(path))
     vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
     vim.bo.endofline = true
+end
+
+local function with_captured_notifications(callback)
+    local notify = vim.notify
+    local messages = {}
+
+    rawset(vim, "notify", function(message, _level, _options)
+        table.insert(messages, tostring(message))
+
+        return nil
+    end)
+
+    local ok, err = pcall(callback)
+    rawset(vim, "notify", notify)
+
+    if not ok then
+        for _, message in ipairs(messages) do
+            notify(message)
+        end
+    end
+
+    assert(ok, err)
 end
 
 local function get_gutter_lines()
@@ -58,7 +80,7 @@ describe("git visual hunk selection commands", function()
     it("stages selected unsaved buffer lines into the index", function()
         local root = make_repo()
 
-        local ok, err = pcall(function()
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\n")
             run_git(root, { "add", "file.txt" })
@@ -76,13 +98,12 @@ describe("git visual hunk selection commands", function()
         end)
 
         remove_tree(root)
-        assert(ok, err)
     end)
 
     it("resets selected staged lines while preserving the working tree", function()
         local root = make_repo()
 
-        local ok, err = pcall(function()
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\n")
             run_git(root, { "add", "file.txt" })
@@ -102,13 +123,12 @@ describe("git visual hunk selection commands", function()
         end)
 
         remove_tree(root)
-        assert(ok, err)
     end)
 
     it("stages deleted lines from the visible deletion sign line", function()
         local root = make_repo()
 
-        local ok, err = pcall(function()
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\n")
             run_git(root, { "add", "file.txt" })
@@ -123,13 +143,12 @@ describe("git visual hunk selection commands", function()
         end)
 
         remove_tree(root)
-        assert(ok, err)
     end)
 
     it("stages deleted lines from the line above the deletion", function()
         local root = make_repo()
 
-        local ok, err = pcall(function()
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\n")
             run_git(root, { "add", "file.txt" })
@@ -144,13 +163,12 @@ describe("git visual hunk selection commands", function()
         end)
 
         remove_tree(root)
-        assert(ok, err)
     end)
 
     it("resets staged deleted lines from the visible deletion sign line", function()
         local root = make_repo()
 
-        local ok, err = pcall(function()
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\n")
             run_git(root, { "add", "file.txt" })
@@ -167,13 +185,12 @@ describe("git visual hunk selection commands", function()
         end)
 
         remove_tree(root)
-        assert(ok, err)
     end)
 
     it("stages multiple selected hunks from one visual range", function()
         local root = make_repo()
 
-        local ok, err = pcall(function()
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\nfive\nsix\n")
             run_git(root, { "add", "file.txt" })
@@ -189,13 +206,12 @@ describe("git visual hunk selection commands", function()
         end)
 
         remove_tree(root)
-        assert(ok, err)
     end)
 
     it("refreshes gutter signs after staging selected unsaved lines", function()
         local root = make_repo()
 
-        local ok, err = pcall(function()
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\n")
             run_git(root, { "add", "file.txt" })
@@ -212,13 +228,12 @@ describe("git visual hunk selection commands", function()
         end)
 
         remove_tree(root)
-        assert(ok, err)
     end)
 
     it("refreshes gutter signs after resetting selected staged lines", function()
         local root = make_repo()
 
-        local ok, err = pcall(function()
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\n")
             run_git(root, { "add", "file.txt" })
@@ -237,6 +252,5 @@ describe("git visual hunk selection commands", function()
         end)
 
         remove_tree(root)
-        assert(ok, err)
     end)
 end)

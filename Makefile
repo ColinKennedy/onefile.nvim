@@ -20,13 +20,13 @@ llscheck: download-dependencies
 	VIMRUNTIME="`nvim --clean --headless --cmd 'lua io.write(os.getenv("VIMRUNTIME"))' --cmd 'quit'`" llscheck --configpath $(CONFIGURATION) .
 
 luacheck:
-	luacheck init.lua spec
+	luacheck init.lua lua spec
 
 check-stylua:
-	stylua init.lua spec --color always --check
+	stylua init.lua lua spec --color always --check
 
 stylua:
-	stylua init.lua spec
+	stylua init.lua lua spec
 
 test:
 	busted .

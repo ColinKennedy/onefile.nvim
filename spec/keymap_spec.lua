@@ -170,6 +170,6 @@ end
 
 describe("hello world", function()
     it("passes", function()
-        assert.equal("hello world", "hello world")
+        assert.equal(_P.dedent("hello world"), "hello world")
     end)
 end)

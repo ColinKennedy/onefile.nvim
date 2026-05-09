@@ -165,7 +165,7 @@ local _VIMSCRIPT_COMMENT_MARKER = '"'
 
 local _SESSIONX_NAME = "Sessionx.vim"
 
-local _IS_NERDFONT_ALLOWED = false
+local _IS_NERDFONT_ALLOWED = true
 
 -- luacheck: push ignore
 unpack = unpack or table.unpack
@@ -4029,6 +4029,595 @@ do -- NOTE: Keymaps
 end
 
 do -- NOTE: git-related keymaps
+    ---@class _my.git_selection.Hunk
+    ---@field old_start integer
+    ---@field old_count integer
+    ---@field new_start integer
+    ---@field new_count integer
+    ---@field removed string[]
+    ---@field added string[]
+
+    --- Get all current buffer text as a single string.
+    ---
+    ---@param buffer integer The 0-or-more Vim buffer to inspect.
+    ---@return string # The buffer text.
+    ---
+    function _P.get_buffer_text(buffer)
+        local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+        local text = table.concat(lines, "\n")
+
+        if vim.bo[buffer].endofline then
+            text = text .. "\n"
+        end
+
+        return text
+    end
+
+    --- Split file text into lines and remember whether it ended in a newline.
+    ---
+    ---@param text string Some file contents.
+    ---@return string[]
+    ---@return boolean
+    ---
+    local function _split_git_text(text)
+        local has_eol = text:sub(-1) == "\n"
+        local body = has_eol and text:sub(1, -2) or text
+
+        if body == "" then
+            if has_eol then
+                return { "" }, has_eol
+            end
+
+            return {}, has_eol
+        end
+
+        return vim.split(body, "\n", { plain = true }), has_eol
+    end
+
+    --- Join file lines back into text.
+    ---
+    ---@param lines string[] Some file contents without newline characters.
+    ---@param has_eol boolean If `true`, add a final newline.
+    ---@return string
+    ---
+    local function _join_git_text(lines, has_eol)
+        if #lines == 0 then
+            return ""
+        end
+
+        local text = table.concat(lines, "\n")
+
+        if has_eol then
+            text = text .. "\n"
+        end
+
+        return text
+    end
+
+    --- Parse a zero-context unified diff into hunks.
+    ---
+    ---@param diff string The output from `git diff --unified=0`.
+    ---@return _my.git_selection.Hunk[]
+    ---
+    function _P.parse_git_selection_diff(diff)
+        ---@type _my.git_selection.Hunk[]
+        local hunks = {}
+        ---@type _my.git_selection.Hunk?
+        local current = nil
+
+        for line in diff:gmatch("[^\r\n]+") do
+            local old_start, old_count, new_start, new_count =
+                line:match("^@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@")
+
+            if old_start and new_start then
+                old_count = old_count == "" and "1" or old_count
+                new_count = new_count == "" and "1" or new_count
+
+                current = {
+                    old_start = tonumber(old_start) or 0,
+                    old_count = tonumber(old_count) or 0,
+                    new_start = tonumber(new_start) or 0,
+                    new_count = tonumber(new_count) or 0,
+                    removed = {},
+                    added = {},
+                }
+                table.insert(hunks, current)
+            elseif current and line:sub(1, 1) == "-" then
+                table.insert(current.removed, line:sub(2))
+            elseif current and line:sub(1, 1) == "+" then
+                table.insert(current.added, line:sub(2))
+            end
+        end
+
+        return hunks
+    end
+
+    --- Check if `line` is inside an inclusive range.
+    ---
+    ---@param line integer The line number to check.
+    ---@param first integer The first selected line.
+    ---@param last integer The last selected line.
+    ---@return boolean
+    ---
+    local function _is_selected_line(line, first, last)
+        return line >= first and line <= last
+    end
+
+    --- Build text containing only selected changes from `base_text` to `target_text`.
+    ---
+    ---@param base_text string The text to patch from.
+    ---@param target_text string The text containing all candidate changes.
+    ---@param diff string A zero-context diff from `base_text` to `target_text`.
+    ---@param first integer The first selected target line.
+    ---@param last integer The last selected target line.
+    ---@param invert boolean? If `true`, keep unselected changes instead of selected changes.
+    ---@return string
+    ---@return integer
+    ---
+    function _P.build_git_selection_target(base_text, target_text, diff, first, last, invert)
+        invert = invert == true
+
+        local base_lines, base_has_eol = _split_git_text(base_text)
+        local _, target_has_eol = _split_git_text(target_text)
+        local hunks = _P.parse_git_selection_diff(diff)
+
+        ---@type string[]
+        local output = {}
+        local old_cursor = 1
+        local selected_changes = 0
+
+        local function _copy_base_until(stop)
+            for index = old_cursor, stop do
+                table.insert(output, base_lines[index])
+            end
+        end
+
+        for _, hunk in ipairs(hunks) do
+            if hunk.old_count == 0 then
+                _copy_base_until(hunk.old_start)
+                old_cursor = hunk.old_start + 1
+            else
+                _copy_base_until(hunk.old_start - 1)
+                old_cursor = hunk.old_start + hunk.old_count
+            end
+
+            local max_count = math.max(hunk.old_count, hunk.new_count)
+
+            for index = 1, max_count do
+                local removed = hunk.removed[index]
+                local added = hunk.added[index]
+
+                if removed and added then
+                    local line = hunk.new_start + index - 1
+                    local selected = _is_selected_line(line, first, last)
+
+                    if selected then
+                        selected_changes = selected_changes + 1
+                    end
+
+                    if selected ~= invert then
+                        table.insert(output, added)
+                    else
+                        table.insert(output, removed)
+                    end
+                elseif added then
+                    local line = hunk.new_start + index - 1
+                    local selected = _is_selected_line(line, first, last)
+
+                    if selected then
+                        selected_changes = selected_changes + 1
+                    end
+
+                    if selected ~= invert then
+                        table.insert(output, added)
+                    end
+                elseif removed then
+                    local anchor = math.max(hunk.new_start + hunk.new_count - 1, 1)
+                    local selected = _is_selected_line(anchor, first, last)
+
+                    if selected then
+                        selected_changes = selected_changes + 1
+                    end
+
+                    if selected == invert then
+                        table.insert(output, removed)
+                    end
+                end
+            end
+        end
+
+        _copy_base_until(#base_lines)
+
+        local has_eol = selected_changes > 0 and target_has_eol or base_has_eol
+
+        return _join_git_text(output, has_eol), selected_changes
+    end
+
+    --- Write `text` without using Vim's line-based writefile behavior.
+    ---
+    ---@param path string The path to write.
+    ---@param text string The text to write into `path`.
+    ---@return boolean # If `true`, the file was written.
+    ---@return string? # The error message, if any.
+    ---
+    local function _write_git_text(path, text)
+        local file, open_error = vim.uv.fs_open(path, "w", 438)
+
+        if not file then
+            return false, open_error
+        end
+
+        local ok, write_error = vim.uv.fs_write(file, text, 0)
+        vim.uv.fs_close(file)
+
+        return ok ~= nil, write_error
+    end
+
+    --- Quote a path for a Git patch header, if needed.
+    ---
+    ---@param path string A patch path, e.g. `a/foo.txt`.
+    ---@return string
+    ---
+    local function _quote_git_patch_path(path)
+        if not path:find("[%s\"]") then
+            return path
+        end
+
+        path = path:gsub("\\", "\\\\"):gsub('"', '\\"')
+
+        return '"' .. path .. '"'
+    end
+
+    --- Get the hunks from a unified diff, without file headers.
+    ---
+    ---@param diff string The output from `git diff`.
+    ---@return string?
+    ---
+    local function _get_patch_hunks(diff)
+        local start = diff:find("\n@@ ", 1, true)
+
+        if start then
+            return diff:sub(start + 1)
+        end
+
+        if diff:sub(1, 3) == "@@ " then
+            return diff
+        end
+
+        return nil
+    end
+
+    --- Create a Git patch from `base_text` to `target_text` for `relative`.
+    ---
+    ---@param base_text string The text to patch from.
+    ---@param target_text string The text to patch to.
+    ---@param relative string The repository-relative file path.
+    ---@return string?
+    ---@return string?
+    ---
+    function _P.build_git_selection_patch(base_text, target_text, relative)
+        local before = vim.fn.tempname()
+        local after = vim.fn.tempname()
+        local ok, message = _write_git_text(before, base_text)
+
+        if ok then
+            ok, message = _write_git_text(after, target_text)
+        end
+
+        if not ok then
+            pcall(vim.uv.fs_unlink, before)
+            pcall(vim.uv.fs_unlink, after)
+
+            return nil, message
+        end
+
+        local diff_object = vim.system(
+            { _GIT_EXECUTABLE, "diff", "--no-index", "--unified=3", "--no-color", "--", before, after },
+            { text = true }
+        ):wait()
+
+        pcall(vim.uv.fs_unlink, before)
+        pcall(vim.uv.fs_unlink, after)
+
+        if diff_object.code ~= 0 and diff_object.code ~= 1 then
+            return nil, diff_object.stderr
+        end
+
+        local hunks = _get_patch_hunks(diff_object.stdout or "")
+
+        if not hunks then
+            return nil, "No patch hunks were generated."
+        end
+
+        relative = relative:gsub("\\", "/")
+
+        local old_path = _quote_git_patch_path("a/" .. relative)
+        local new_path = _quote_git_patch_path("b/" .. relative)
+        local header = table.concat({
+            string.format("diff --git %s %s", old_path, new_path),
+            "--- " .. old_path,
+            "+++ " .. new_path,
+        }, "\n")
+
+        return header .. "\n" .. hunks
+    end
+
+    --- Get a Git blob as text.
+    ---
+    ---@param root string The repository root.
+    ---@param object string The object name to read.
+    ---@return string?
+    ---@return string?
+    ---
+    local function _git_show_text(root, object)
+        local result = vim.system({ _GIT_EXECUTABLE, "-C", root, "show", object }, { text = true }):wait()
+
+        if result.code ~= 0 then
+            return nil, result.stderr
+        end
+
+        return result.stdout or ""
+    end
+
+    --- Get the current buffer's Git root and relative path.
+    ---
+    ---@param buffer integer The buffer to inspect.
+    ---@return string?
+    ---@return string?
+    ---@return string?
+    ---
+    local function _get_git_buffer_path(buffer)
+        local path = vim.api.nvim_buf_get_name(buffer)
+
+        if path == "" then
+            return nil, nil, "Cannot use Git hunk selection on an unnamed buffer."
+        end
+
+        local directory = vim.fs.dirname(path)
+
+        if not directory then
+            return nil, nil, "Cannot find the current buffer's directory."
+        end
+
+        local result = vim.system({ _GIT_EXECUTABLE, "-C", directory, "rev-parse", "--show-toplevel" }, { text = true })
+            :wait()
+
+        if result.code ~= 0 then
+            return nil, nil, "Cannot find a Git repository for the current buffer."
+        end
+
+        local root = (result.stdout or ""):gsub("%s+$", "")
+        local relative = vim.fs.relpath(root, path)
+
+        if not relative then
+            return nil, nil, "Cannot make the current buffer path relative to the Git root."
+        end
+
+        return root, relative:gsub("\\", "/"), nil
+    end
+
+    --- Check if a path has unresolved merge entries.
+    ---
+    ---@param root string The repository root.
+    ---@param relative string The repository-relative path.
+    ---@return boolean
+    ---
+    local function _has_unmerged_entries(root, relative)
+        local result = vim.system({ _GIT_EXECUTABLE, "-C", root, "ls-files", "-u", "--", relative }, { text = true })
+            :wait()
+
+        return result.code == 0 and (result.stdout or "") ~= ""
+    end
+
+    --- Generate a zero-context diff from `base_text` to `target_text`.
+    ---
+    ---@param base_text string The text to patch from.
+    ---@param target_text string The text containing all candidate changes.
+    ---@return string?
+    ---@return string?
+    ---
+    local function _build_zero_context_diff(base_text, target_text)
+        local before = vim.fn.tempname()
+        local after = vim.fn.tempname()
+        local ok, message = _write_git_text(before, base_text)
+
+        if ok then
+            ok, message = _write_git_text(after, target_text)
+        end
+
+        if not ok then
+            pcall(vim.uv.fs_unlink, before)
+            pcall(vim.uv.fs_unlink, after)
+
+            return nil, message
+        end
+
+        local result = vim.system(
+            { _GIT_EXECUTABLE, "diff", "--no-index", "--unified=0", "--no-color", "--", before, after },
+            { text = true }
+        ):wait()
+
+        pcall(vim.uv.fs_unlink, before)
+        pcall(vim.uv.fs_unlink, after)
+
+        if result.code ~= 0 and result.code ~= 1 then
+            return nil, result.stderr
+        end
+
+        return result.stdout or ""
+    end
+
+    --- Apply `patch` to the index.
+    ---
+    ---@param root string The repository root.
+    ---@param patch string The patch to apply.
+    ---@param reverse boolean If `true`, reverse the patch while applying it.
+    ---@return boolean
+    ---@return string?
+    ---
+    local function _apply_git_selection_patch(root, patch, reverse)
+        local path = vim.fn.tempname()
+        local ok, message = _write_git_text(path, patch)
+
+        if not ok then
+            pcall(vim.uv.fs_unlink, path)
+
+            return false, message
+        end
+
+        local check_command = { _GIT_EXECUTABLE, "-C", root, "apply", "--cached", "--check" }
+        local apply_command = { _GIT_EXECUTABLE, "-C", root, "apply", "--cached" }
+
+        if reverse then
+            table.insert(check_command, "--reverse")
+            table.insert(apply_command, "--reverse")
+        end
+
+        table.insert(check_command, path)
+        table.insert(apply_command, path)
+
+        local check = vim.system(check_command, { text = true }):wait()
+
+        if check.code ~= 0 then
+            pcall(vim.uv.fs_unlink, path)
+
+            return false, check.stderr
+        end
+
+        local result = vim.system(apply_command, { text = true }):wait()
+        pcall(vim.uv.fs_unlink, path)
+
+        if result.code ~= 0 then
+            return false, result.stderr
+        end
+
+        return true, nil
+    end
+
+    --- Run a visual Git hunk action for the selected lines.
+    ---
+    ---@param action "stage" | "reset"
+    ---@param first integer The first selected line.
+    ---@param last integer The last selected line.
+    ---
+    function _P.git_apply_selected_hunk(action, first, last)
+        if not vim.system or not _P.exists_command(_GIT_EXECUTABLE) then
+            vim.notify("Cannot use Git hunk selection. No `git` command was found.", vim.log.levels.ERROR)
+
+            return
+        end
+
+        if first > last then
+            first, last = last, first
+        end
+
+        local buffer = vim.api.nvim_get_current_buf()
+        local root, relative, path_error = _get_git_buffer_path(buffer)
+
+        if not root or not relative then
+            vim.notify(path_error or "Cannot resolve the current Git file.", vim.log.levels.ERROR)
+
+            return
+        end
+
+        if _has_unmerged_entries(root, relative) then
+            vim.notify("Cannot use Git hunk selection on a file with unresolved merge entries.", vim.log.levels.ERROR)
+
+            return
+        end
+
+        local base_text
+        local target_text
+        local success_message
+
+        if action == "stage" then
+            local show_error
+            base_text, show_error = _git_show_text(root, ":" .. relative)
+
+            if not base_text then
+                vim.notify(
+                    string.format("Cannot stage selected hunks for an untracked or non-text file: %s", show_error or ""),
+                    vim.log.levels.ERROR
+                )
+
+                return
+            end
+
+            target_text = _P.get_buffer_text(buffer)
+            success_message = "Staged selected Git hunk lines."
+        else
+            local base_error
+            local target_error
+            base_text, base_error = _git_show_text(root, "HEAD:" .. relative)
+            target_text, target_error = _git_show_text(root, ":" .. relative)
+
+            if not base_text or not target_text then
+                vim.notify(
+                    string.format(
+                        "Cannot reset selected hunks for this file: %s%s",
+                        base_error or "",
+                        target_error or ""
+                    ),
+                    vim.log.levels.ERROR
+                )
+
+                return
+            end
+
+            success_message = "Reset selected Git hunk lines from the index."
+        end
+
+        if base_text:find("\0", 1, true) or target_text:find("\0", 1, true) then
+            vim.notify("Cannot use Git hunk selection on binary files.", vim.log.levels.ERROR)
+
+            return
+        end
+
+        local diff, diff_error = _build_zero_context_diff(base_text, target_text)
+
+        if not diff then
+            vim.notify(string.format("Cannot calculate selected Git hunks: %s", diff_error or ""), vim.log.levels.ERROR)
+
+            return
+        end
+
+        local partial_text, selected_changes =
+            _P.build_git_selection_target(base_text, target_text, diff, first, last, action == "reset")
+
+        if selected_changes == 0 then
+            vim.notify("No Git hunk lines were selected.", vim.log.levels.INFO)
+
+            return
+        end
+
+        local patch_base_text = action == "reset" and target_text or base_text
+        local patch, patch_error = _P.build_git_selection_patch(patch_base_text, partial_text, relative)
+
+        if not patch then
+            vim.notify(string.format("Cannot create selected Git hunk patch: %s", patch_error or ""), vim.log.levels.ERROR)
+
+            return
+        end
+
+        local ok, apply_error = _apply_git_selection_patch(root, patch, false)
+
+        if not ok then
+            vim.notify(string.format("Cannot apply selected Git hunk patch: %s", apply_error or ""), vim.log.levels.ERROR)
+
+            return
+        end
+
+        vim.notify(success_message, vim.log.levels.INFO)
+
+        if _P.refresh_git_gutter then
+            _P.refresh_git_gutter(buffer)
+        end
+    end
+
+    _G._onefile_parse_git_selection_diff = _P.parse_git_selection_diff
+    _G._onefile_build_git_selection_target = _P.build_git_selection_target
+    _G._onefile_build_git_selection_patch = _P.build_git_selection_patch
+
     --- Run `git add` on the current Vim buffer.
     function _P.git_add_current_buffer()
         local buffer = 0
@@ -4112,6 +4701,22 @@ do -- NOTE: git-related keymaps
         _P.git_reset_current_buffer,
         { desc = "Run `git reset` for all hunks in the current buffer." }
     )
+
+    vim.api.nvim_create_user_command("GitStageSelection", function(options)
+        _P.git_apply_selected_hunk("stage", options.line1, options.line2)
+    end, { range = true, desc = "Stage selected Git hunk lines." })
+
+    vim.api.nvim_create_user_command("GitResetSelection", function(options)
+        _P.git_apply_selected_hunk("reset", options.line1, options.line2)
+    end, { range = true, desc = "Reset selected Git hunk lines from the index." })
+
+    vim.keymap.set("x", "<leader>gah", ":GitStageSelection<CR>", {
+        desc = "Stage selected Git hunk lines.",
+    })
+
+    vim.keymap.set("x", "<leader>grh", ":GitResetSelection<CR>", {
+        desc = "Reset selected Git hunk lines from the index.",
+    })
 
     vim.keymap.set("n", "<leader>gsp", _P.push_stash_by_name, { desc = "Create a new, named git stash." })
     vim.keymap.set("n", "<leader>gsa", _P.show_git_stashes, { desc = "Show the git stashes that are available." })

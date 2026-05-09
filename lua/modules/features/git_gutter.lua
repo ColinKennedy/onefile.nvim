@@ -52,10 +52,6 @@ end
 function M.update(buffer)
     buffer = buffer or vim.api.nvim_get_current_buf()
 
-    if buffer == 0 then
-        buffer = vim.api.nvim_get_current_buf()
-    end
-
     if not _is_supported_buffer(buffer) then
         return
     end
@@ -68,7 +64,7 @@ function M.update(buffer)
         return
     end
 
-    local old_lines = git_diff.get_index_lines(details)
+    local old_lines = git_diff.get_head_lines(details)
     local new_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
     local hunks = git_diff.compute_hunks(old_lines, new_lines)
 

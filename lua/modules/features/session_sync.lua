@@ -1,10 +1,8 @@
-local _shared = require("modules.utilities.shared_environment")
+local core_editor_setup = require("modules.features.core_editor_setup")
 
-_shared.run(function()
-    --- Session sync
+--- Session sync
 
-    -- TODO: Once `SessionLoadPre` exists, use that instead of this
-    pcall(function()
-        _SESSION_MANAGER:sync_current_session()
-    end)
+-- TODO: Once `SessionLoadPre` exists, use that instead of this
+pcall(function()
+    core_editor_setup._SESSION_MANAGER:sync_current_session()
 end)

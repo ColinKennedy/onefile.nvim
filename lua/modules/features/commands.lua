@@ -4,6 +4,7 @@ local _REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
 table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
 
 vim.api.nvim_create_user_command("Rg", function(opts)
+    ---@cast opts _neovim.commandline.Options
     require("modules.utilities.core_helpers").run_ripgrep_command(opts)
 end, { nargs = 1, desc = "Search using ripgrep." })
 

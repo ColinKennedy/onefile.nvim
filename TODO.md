@@ -1,3 +1,8 @@
+- Docstrings for the modules still need to exist
+- Add gitgutter + git navigation [g + ]g support + multi-file navigation
+- Add :Gcd
+- Add tests
+
 - Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
 - Add quickscope support
 - Add tmux pane swapper logic

@@ -40,6 +40,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
 vim.api.nvim_create_autocmd("LspAttach", {
     callback = function(event)
+        ---@cast event _my.lsp_attach.Result
         require("modules.features.core_editor_setup").setup_lsp_details(event)
     end,
     group = core_helpers._LSP_GROUP,

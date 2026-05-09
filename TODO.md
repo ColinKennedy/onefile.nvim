@@ -1,6 +1,15 @@
-- Add gitgutter + git navigation [g + ]g support + multi-file navigation
+- Make the fuzzy ranker in the selector GUI fast
+- Add gitgutter + git navigation [g + ]g support
+ + multi-file navigation (so I can emulate `git add -p`)
+  - This navigation I guess should be separate from quickfix but it also should be possible to load it into the quickfix
 - Add :Gcd
 - Add tests
+- Add my lazy + plugins back
+- A <M-S-{1,2,3,4}> for grapple
+
+https://github.com/cole-clark/onefile.nvim/commit/00cb04b342ce73d5bf113e06f713364f50c96ef7
+- Make it an async git gutter plugin and add <leader>gah etc
+- Add a CI/CD process that inlines all of the modules and compresses them into a single file
 
 - Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
 - Add quickscope support

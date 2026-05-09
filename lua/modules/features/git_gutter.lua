@@ -16,9 +16,19 @@ function M.define_signs()
     vim.api.nvim_set_hl(0, "GitGutterChange", { default = true, fg = "#56b6c2" })
     vim.api.nvim_set_hl(0, "GitGutterDelete", { default = true, fg = "#ff5555" })
 
-    vim.fn.sign_define(_SIGN_ADD, { text = "|", texthl = "GitGutterAdd" })
-    vim.fn.sign_define(_SIGN_CHANGE, { text = "|", texthl = "GitGutterChange" })
-    vim.fn.sign_define(_SIGN_DELETE, { text = "_", texthl = "GitGutterDelete" })
+    local add_text = "|"
+    local change_text = "|"
+    local delete_text = "_"
+
+    if require("modules.utilities.core_helpers").IS_NERDFONT_ALLOWED then
+        add_text = "┃"
+        change_text = "┃"
+        delete_text = "▁"
+    end
+
+    vim.fn.sign_define(_SIGN_ADD, { text = add_text, texthl = "GitGutterAdd" })
+    vim.fn.sign_define(_SIGN_CHANGE, { text = change_text, texthl = "GitGutterChange" })
+    vim.fn.sign_define(_SIGN_DELETE, { text = delete_text, texthl = "GitGutterDelete" })
 end
 
 --- Check if `buffer` can show git signs.

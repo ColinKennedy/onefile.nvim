@@ -1032,7 +1032,7 @@ function M.get_git_branch_label_safe()
 
     local git_prefix = "git "
 
-    if core_helpers._IS_NERDFONT_ALLOWED then
+    if core_helpers.IS_NERDFONT_ALLOWED then
         git_prefix = " "
     end
 

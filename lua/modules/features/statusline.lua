@@ -122,7 +122,7 @@ _P.clone_highlight("StatusGrappleActive", "Special", { bold = true, bg = dark_le
 local left_arrow = ">"
 local right_arrow = "<"
 
-if core_helpers._IS_NERDFONT_ALLOWED then
+if core_helpers.IS_NERDFONT_ALLOWED then
     -- NOTE: Technically these are regular unicodes, not nerd font. But whatever.
     left_arrow = ""
     right_arrow = ""

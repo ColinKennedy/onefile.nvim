@@ -1,8 +1,8 @@
---- Provide Python insert-mode helpers for appending assignment equals signs.
+local _shared = require("modules.utilities.shared_environment")
 
-local _P = {}
-
-local _BUILTINS = {
+_shared.run(function()
+--- Python equal-sign insertion support
+_BUILTINS = {
     ["False"] = true,
     ["None"] = true,
     ["True"] = true,
@@ -131,24 +131,23 @@ function _P.add_equal_sign_if_needed_python()
     local current_line_up_until_cursor = current_line:sub(1, cursor_column)
     local stripped = _strip_braces_characters(current_line_up_until_cursor)
 
-    if not _P.is_assignable(require("modules.utilities.core_helpers").lstrip(stripped)) then
+    if not _P.is_assignable(_P.lstrip(stripped)) then
         return " "
     end
 
     return " = "
 end
 
-vim.api.nvim_create_autocmd("FileType", {
-    pattern = "python",
-    callback = function()
-        if not require("modules.utilities.core_helpers").has_treesitter_parser("python") then
-            return
-        end
-
-        vim.keymap.set("i", "<Space>", _P.add_equal_sign_if_needed_python, {
-            buffer = true,
-            desc = "Add = signs when needed.",
-            expr = true,
-        })
-    end,
-})
+if _P.has_treesitter_parser("python") then
+    vim.api.nvim_create_autocmd("FileType", {
+        pattern = "python",
+        callback = function()
+            vim.keymap.set("i", "<Space>", _P.add_equal_sign_if_needed_python, {
+                buffer = true,
+                desc = "Add = signs when needed.",
+                expr = true,
+            })
+        end,
+    })
+end
+end)

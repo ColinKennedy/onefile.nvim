@@ -1,11 +1,13 @@
---- Move between Neovim windows and adjacent tmux panes with the same directional keys.
+local _shared = require("modules.utilities.shared_environment")
 
+_shared.run(function()
+--- If at the edge of the Neovim tab, move to the nearest tmux pane instead.
 --- Move in `direction` if 1. on a Neovim edge tab 2. there is a nearby tmux pane.
 ---
 ---@param direction "h" | "j" | "k" | "l"
 ---    The Neovim or tmux pane to move in.
 ---
-local function _move_to_tmux_pane_if_needed(direction)
+function _move_to_tmux_pane_if_needed(direction)
     local tmux_directions = { h = "L", j = "D", k = "U", l = "R" }
 
     local current_window = vim.api.nvim_get_current_win()
@@ -18,14 +20,14 @@ local function _move_to_tmux_pane_if_needed(direction)
     vim.fn.system(string.format("tmux select-pane -%s", tmux_directions[direction]))
 end
 
-local _desc = function(opts, direction)
+_desc = function(opts, direction)
     return vim.tbl_deep_extend(
         "force",
         opts,
         { desc = string.format('Move the cursor to the "%s" window.', direction) }
     )
 end
-local desc = function(direction)
+desc = function(direction)
     _desc({ noremap = true, silent = true }, direction)
 end
 
@@ -41,3 +43,4 @@ end, desc("up"))
 vim.keymap.set("n", "<C-l>", function()
     _move_to_tmux_pane_if_needed("l")
 end, desc("right"))
+end)

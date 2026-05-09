@@ -1,13 +1,15 @@
---- Add an automatic winbar title to quickfix windows.
+local _shared = require("modules.utilities.shared_environment")
 
-local M = {}
-
+_shared.run(function()
+--- Add an automated winbar title to the Quickfix window.
 ---@return string # The recommended Quickfix window title, if any is defined.
-function M.get_quickfix_winbar_title()
+function _P.get_quickfix_winbar_title()
     local info = vim.fn.getqflist({ title = 0 })
 
     return info.title or "Quickfix"
 end
+
+_G.get_quickfix_winbar_title = _P.get_quickfix_winbar_title
 
 vim.api.nvim_create_autocmd("FileType", {
     pattern = "qf",
@@ -18,9 +20,7 @@ vim.api.nvim_create_autocmd("FileType", {
             return
         end
 
-        vim.wo[window].winbar =
-            "%{luaeval('require(\"modules.features.quickfix_winbar\").get_quickfix_winbar_title()')}"
+        vim.wo[window].winbar = "%{%v:lua.get_quickfix_winbar_title()%}"
     end,
 })
-
-return M
+end)

@@ -1,23 +1,25 @@
---- Define leader mappings for project files, buffers, diagnostics, LSP, snippets, sessions, and search helpers.
+local _shared = require("modules.utilities.shared_environment")
 
-vim.keymap.set("n", "<space>E", function()
-    require("modules.features.core_editor_setup").select_file_from_project_root()
-end, { desc = "Search And [E]dit a file from the project root." })
-vim.keymap.set("n", "<space>e", function()
-    require("modules.features.core_editor_setup").select_file_in_directory()
-end, { desc = "Search and [e]dit from the current directory." })
-vim.keymap.set("n", "<space>B", function()
-    require("modules.utilities.core_helpers").select_buffer()
-end, { desc = "Select a [B]uffer and swtich to it." })
-vim.keymap.set("n", "<leader>tq", function()
-    require("modules.features.core_editor_setup").toggle_quickfix()
-end, { desc = "Open or close the [q]uickfix buffer." })
+_shared.run(function()
+--- Keymaps
+vim.keymap.set(
+    "n",
+    "<space>E",
+    _P.select_file_from_project_root,
+    { desc = "Search And [E]dit a file from the project root." }
+)
+vim.keymap.set(
+    "n",
+    "<space>e",
+    _P.select_file_in_directory,
+    { desc = "Search and [e]dit from the current directory." }
+)
+vim.keymap.set("n", "<space>B", _P.select_buffer, { desc = "Select a [B]uffer and swtich to it." })
+vim.keymap.set("n", "<leader>tq", _P.toggle_quickfix, { desc = "Open or close the [q]uickfix buffer." })
 vim.keymap.set(
     "i",
     "<C-Space>",
-    function()
-        return require("modules.features.core_editor_setup").show_snippet_completion()
-    end,
+    _P.show_snippet_completion,
     { noremap = true, desc = "Trigger snippet completion." }
 )
 
@@ -40,3 +42,4 @@ end, { desc = "Jump to the previous snippet tabstop, if active.", expr = true, s
 vim.keymap.set("n", "<leader>td", function()
     vim.diagnostic.config({ virtual_lines = not vim.diagnostic.config().virtual_lines })
 end, { desc = "[t]oggle [d]iagnostic as virtual_lines." })
+end)

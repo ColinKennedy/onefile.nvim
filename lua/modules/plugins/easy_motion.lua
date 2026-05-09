@@ -1,9 +1,10 @@
---- Implement a native EasyMotion-style jump overlay for visible text.
----
---- Reference: https://antonk52.github.io/webdevandstuff/post/2025-11-30-diy-easymotion.html
+local _shared = require("modules.utilities.shared_environment")
 
-local _NAMESPACE = vim.api.nvim_create_namespace("my.easymotion")
-local _CHARACTERS = vim.split("fjdkslgha;rueiwotyqpvbcnxmzFJDKSLGHARUEIWOTYQPVBCNXMZ", "")
+_shared.run(function()
+--- A native "EasyMotion" snippet
+-- Reference: https://antonk52.github.io/webdevandstuff/post/2025-11-30-diy-easymotion.html
+_NAMESPACE = vim.api.nvim_create_namespace("my.easymotion")
+_CHARACTERS = vim.split("fjdkslgha;rueiwotyqpvbcnxmzFJDKSLGHARUEIWOTYQPVBCNXMZ", "")
 
 --- Gather all visible extmarks data for `buffer` (ignore folded text).
 ---
@@ -11,7 +12,7 @@ local _CHARACTERS = vim.split("fjdkslgha;rueiwotyqpvbcnxmzFJDKSLGHARUEIWOTYQPVBC
 ---@param window integer The view into the buffer to get cursor data from.
 ---@return _my.easymotion.ExtmarksData # The found extmarks for the `buffer`.
 ---
-local function _get_extmarks(buffer, window)
+function _get_extmarks(buffer, window)
     local absolute_index = 1
     local first = vim.fn.nr2char(vim.fn.getchar() --[[@as number]])
     local second = vim.fn.nr2char(vim.fn.getchar() --[[@as number]])
@@ -66,7 +67,7 @@ local function _get_extmarks(buffer, window)
 end
 
 --- Jump anywhere on-screen. Just type 2 consecutive characters to where you want to go.
-local function _run_easy_motion()
+function _run_easy_motion()
     local window = vim.api.nvim_get_current_win()
     local buffer = vim.api.nvim_get_current_buf()
 
@@ -95,3 +96,4 @@ vim.keymap.set(
     _run_easy_motion,
     { desc = "Jump anywhere on-screen. Just type 2 consecutive characters to where you want to go." }
 )
+end)

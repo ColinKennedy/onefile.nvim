@@ -1,8 +1,11 @@
---- Define baseline window, tab, buffer, quickfix, command-line, and terminal keymaps.
+local _shared = require("modules.utilities.shared_environment")
+
+_shared.run(function()
+--- Base keymaps
 
 ---------- Keymaps [Start] ----------
-local options = { expr = true, noremap = true, silent = true }
-local move_description = function(direction)
+options = { expr = true, noremap = true, silent = true }
+move_description = function(direction)
     return vim.tbl_deep_extend("force", options, { desc = string.format('Move to the "%s" window.', direction) })
 end
 vim.keymap.set("n", "<C-h>", "<C-w>h", move_description("left"))
@@ -10,20 +13,20 @@ vim.keymap.set("n", "<C-j>", "<C-w>j", move_description("bottom"))
 vim.keymap.set("n", "<C-k>", "<C-w>k", move_description("top"))
 vim.keymap.set("n", "<C-l>", "<C-w>l", move_description("right"))
 
-local resize_description = function(direction)
+resize_description = function(direction)
     return vim.tbl_deep_extend("force", options, { desc = string.format('Resize the "%s" window.', direction) })
 end
 vim.keymap.set("n", "<M-h>", function()
-    require("modules.utilities.core_helpers").resize_window("left", 5)
+    _P.resize_window("left", 5)
 end, resize_description("left"))
 vim.keymap.set("n", "<M-j>", function()
-    require("modules.utilities.core_helpers").resize_window("down", 2)
+    _P.resize_window("down", 2)
 end, resize_description("down"))
 vim.keymap.set("n", "<M-k>", function()
-    require("modules.utilities.core_helpers").resize_window("up", 2)
+    _P.resize_window("up", 2)
 end, resize_description("up"))
 vim.keymap.set("n", "<M-l>", function()
-    require("modules.utilities.core_helpers").resize_window("right", 5)
+    _P.resize_window("right", 5)
 end, resize_description("right"))
 
 -- Add numbered j/k movements to Vim's jumplist
@@ -72,7 +75,7 @@ vim.keymap.set(
 -- Reference: https://stackoverflow.com/q/3760444
 -- Reference: http://vim.wikia.com/wiki/Simplifying_regular_expressions_using_magic_and_no-magic
 --
-local description = { desc = 'Make Vim\'s search more "magic", by default.' }
+description = { desc = 'Make Vim\'s search more "magic", by default.' }
 vim.keymap.set("n", "/", "/\\v", description)
 vim.keymap.set("v", "/", "/\\v", description)
 vim.keymap.set("c", "%s/", "%smagic/", description)
@@ -118,8 +121,7 @@ vim.keymap.set("n", "J", "mzJ`z", {
 
 vim.keymap.set("n", "QQ", "<cmd>qall!<CR>", { desc = "Exit Vim without saving." })
 
--- Reference:
--- https://www.reddit.com/r/neovim/comments/16ztjvl/comment/k3hd4i1/
+-- Reference: https://www.reddit.com/r/neovim/comments/16ztjvl/comment/k3hd4i1/?utm_source=share&utm_medium=web2x&context=3
 vim.keymap.set("x", "/", "<Esc>/\\%V", { desc = "Search for text some within a visual selection" })
 
 -- Change Vim to add numbered j/k  movement to the jumplist. It makes <C-o> and
@@ -150,25 +152,13 @@ vim.keymap.set(
 )
 
 -- Reference: https://www.joshmedeski.com/posts/underrated-square-bracket
-vim.keymap.set("n", "]e", function()
-    require("modules.utilities.core_helpers").go_to_diagnostic(true, "ERROR")()
-end, { desc = "Next diagnostic [e]rror." })
-vim.keymap.set("n", "[e", function()
-    require("modules.utilities.core_helpers").go_to_diagnostic(false, "ERROR")()
-end, { desc = "Previous diagnostic [e]rror." })
-vim.keymap.set("n", "]w", function()
-    require("modules.utilities.core_helpers").go_to_diagnostic(true, "WARN")()
-end, { desc = "Next diagnostic [w]arning." })
-vim.keymap.set("n", "[w", function()
-    require("modules.utilities.core_helpers").go_to_diagnostic(false, "WARN")()
-end, { desc = "Previous diagnostic [w]arning." })
+vim.keymap.set("n", "]e", _P.go_to_diagnostic(true, "ERROR"), { desc = "Next diagnostic [e]rror." })
+vim.keymap.set("n", "[e", _P.go_to_diagnostic(false, "ERROR"), { desc = "Previous diagnostic [e]rror." })
+vim.keymap.set("n", "]w", _P.go_to_diagnostic(true, "WARN"), { desc = "Next diagnostic [w]arning." })
+vim.keymap.set("n", "[w", _P.go_to_diagnostic(false, "WARN"), { desc = "Previous diagnostic [w]arning." })
 
-vim.keymap.set("n", "[d", function()
-    require("modules.utilities.core_helpers").go_to_diagnostic(false, nil)()
-end, { desc = "Previous diagnostic issue." })
-vim.keymap.set("n", "]d", function()
-    require("modules.utilities.core_helpers").go_to_diagnostic(true, nil)()
-end, { desc = "Previous diagnostic issue." })
+vim.keymap.set("n", "[d", _P.go_to_diagnostic(false, nil), { desc = "Previous diagnostic issue." })
+vim.keymap.set("n", "]d", _P.go_to_diagnostic(true, nil), { desc = "Previous diagnostic issue." })
 
 vim.keymap.set("n", "=d", function()
     vim.diagnostic.open_float({ source = true })
@@ -191,3 +181,5 @@ vim.keymap.set("n", "<leader>rs", "<cmd>normal 1z=<CR>", {
     silent = true,
 })
 ---------- Keymaps [End] ----------
+
+end)

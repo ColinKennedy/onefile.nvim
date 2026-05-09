@@ -1,7 +1,7 @@
---- Search helptags across installed Vim documentation with the selector UI.
+local _shared = require("modules.utilities.shared_environment")
 
-local _P = {}
-
+_shared.run(function()
+--- Search Neovim's :help, quickly and easily
 --- Find all Vim helptag files, for all languages.
 ---
 ---@param paths string[] The potential files to filter out.
@@ -16,7 +16,7 @@ function _P.get_tag_files(paths)
         local found_language
 
         if name == "tags" then
-            found_language = require("modules.utilities.core_helpers")._ENGLISH_LANGUAGE
+            found_language = _ENGLISH_LANGUAGE
             output[found_language] = (output[found_language] or {})
             table.insert(output[found_language], path)
         elseif name:match("^tags%-..$") then
@@ -76,14 +76,13 @@ function _P.select_helptag(vim_options)
         end)
     end
 
-    local core_helpers = require("modules.utilities.core_helpers")
-    local search_paths = core_helpers.get_helptag_search_paths()
+    local search_paths = _P.get_helptag_search_paths()
     local tag_paths = _P.get_tag_files(search_paths)
 
     ---@type string[]
     local options = {}
 
-    for _, path in ipairs(tag_paths[core_helpers._ENGLISH_LANGUAGE]) do
+    for _, path in ipairs(tag_paths[_ENGLISH_LANGUAGE]) do
         _read_file_lines_async(path, function(lines)
             for _, line in ipairs(lines) do
                 if line:match("%s+") then
@@ -99,7 +98,7 @@ function _P.select_helptag(vim_options)
         input = vim_options.args
     end
 
-    require("modules.features.core_editor_setup").select_from_options(options, {
+    _P.select_from_options(options, {
         input = input,
         confirm = function(entry)
             vim.cmd.help(entry.value)
@@ -122,3 +121,4 @@ vim.api.nvim_create_user_command(
     _P.select_helptag,
     { nargs = "?", desc = "Live-Grep and then search Neovim's :help command." }
 )
+end)

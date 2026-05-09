@@ -1,29 +1,29 @@
+local _shared = require("modules.utilities.shared_environment")
+
+_shared.run(function()
 --- A lightweight "toggleterminal". Use <space>T to open and close it.
-
-local _P = {}
-
 ---@type table<integer, _my.ToggleTerminal>
-local _TAB_TERMINALS = {}
+_TAB_TERMINALS = {}
 ---@type table<integer, _my.ToggleTerminal>
-local _BUFFER_TO_TERMINAL = {}
-local _DARKER_TERMINAL_COLOR = "#111111"
+_BUFFER_TO_TERMINAL = {}
+_DARKER_TERMINAL_COLOR = "#111111"
 
-local _Mode = {
+_Mode = {
     insert = "insert",
     normal = "normal",
     unknown = "?",
 }
-local _NEXT_NUMBER = 0
-local _STARTING_MODE = _Mode.insert -- NOTE: Start off in insert mode
+_NEXT_NUMBER = 0
+_STARTING_MODE = _Mode.insert -- NOTE: Start off in insert mode
 
-local _IS_VIM_ENTERED = false
+_IS_VIM_ENTERED = false
 
 --- Check if `buffer` is shown to the user.
 ---
 --- @param buffer number A 0-or-more index pointing to some Vim data.
 --- @return boolean # If at least one window contains `buffer`.
 ---
-local function _is_buffer_visible(buffer)
+function _is_buffer_visible(buffer)
     for _, window in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
         if vim.api.nvim_win_get_buf(window) == buffer then
             return true
@@ -38,7 +38,7 @@ end
 --- @param buffer number A 0-or-more index pointing to some Vim data.
 --- @return number[] # All of the windows found, if any.
 ---
-local function _get_buffer_windows(buffer)
+function _get_buffer_windows(buffer)
     ---@type number[]
     local output = {}
 
@@ -52,7 +52,7 @@ local function _get_buffer_windows(buffer)
 end
 
 --- Get the next UUID so we can use if for terminal buffer names.
-local function _increment_terminal_uuid()
+function _increment_terminal_uuid()
     _NEXT_NUMBER = _NEXT_NUMBER + 1
 end
 
@@ -66,7 +66,7 @@ end
 ---     - This won't be the final, real terminal path name because this name
 ---     doesn't contain a $PWD.
 ---
-local function _suggest_name(name)
+function _suggest_name(name)
     local current = name .. ";::toggleterminal::" .. _NEXT_NUMBER
 
     while vim.fn.bufexists(current) == 1 do
@@ -86,7 +86,7 @@ end
 ---
 --- @param buffer number A 0-or-more index pointing to some Vim data.
 ---
-local function _initialize_terminal_buffer(buffer)
+function _initialize_terminal_buffer(buffer)
     vim.bo[buffer].bufhidden = "hide"
     vim.b[buffer]._toggle_terminal_buffer = true
 end
@@ -95,7 +95,7 @@ end
 ---
 --- @param window number A 1-or-more value of some `toggleterminal` buffer.
 ---
-local function _apply_highlights(window)
+function _apply_highlights(window)
     local namespace = "Normal"
     local window_namespace = "ToggleTerminalNormal"
     vim.api.nvim_set_hl(0, window_namespace, { bg = _DARKER_TERMINAL_COLOR })
@@ -112,7 +112,7 @@ end
 ---@param buffer integer? If not provided, a new terminal is created.
 ---@return _my.ToggleTerminal # Create a buffer from scratch.
 ---
-local function _create_terminal(buffer)
+function _create_terminal(buffer)
     if not buffer then
         vim.cmd("edit! " .. _suggest_name("term://bash"))
 
@@ -120,7 +120,7 @@ local function _create_terminal(buffer)
     end
 
     _initialize_terminal_buffer(buffer)
-    require("modules.utilities.core_helpers").close_terminal_afterwards(buffer)
+    _P.close_terminal_afterwards(buffer)
 
     return { buffer = buffer, mode = _STARTING_MODE }
 end
@@ -129,7 +129,7 @@ end
 ---
 --- @param buffer number A 1-or-more index pointing to a `toggleterm` buffer.
 ---
-local function _handle_term_enter(buffer)
+function _handle_term_enter(buffer)
     local terminal = _BUFFER_TO_TERMINAL[buffer]
 
     if not terminal then
@@ -158,7 +158,7 @@ end
 ---
 --- @param buffer number A 1-or-more index pointing to a `toggleterm` buffer.
 ---
-local function _handle_term_leave(buffer)
+function _handle_term_leave(buffer)
     local raw_mode = vim.api.nvim_get_mode().mode
     local mode = _Mode.unknown
 
@@ -176,7 +176,7 @@ local function _handle_term_leave(buffer)
 end
 
 --- Make a window (non-terminal) so we can assign a terminal into it later.
-local function _prepare_terminal_window()
+function _prepare_terminal_window()
     vim.cmd("set nosplitbelow")
     vim.cmd("split")
     vim.cmd("set splitbelow&") -- Restore the previous split setting
@@ -191,7 +191,7 @@ end
 ---@param keys string The original keymap to run.
 ---@return fun(): string # The wrapped function.
 ---
-local function _save_terminal_state(keys)
+function _save_terminal_state(keys)
     return function()
         _handle_term_leave(vim.fn.bufnr())
 
@@ -200,7 +200,7 @@ local function _save_terminal_state(keys)
 end
 
 --- Open an existing terminal for the current tab or create one if it doesn't exist.
-local function _toggle_terminal()
+function _toggle_terminal()
     local tab = vim.fn.tabpagenr()
     local existing_terminal = _TAB_TERMINALS[tab]
 
@@ -320,3 +320,4 @@ vim.keymap.set({ "n", "t" }, "<C-l>", _save_terminal_state("<C-\\><C-n><C-w>l"),
     expr = true,
     silent = true,
 })
+end)

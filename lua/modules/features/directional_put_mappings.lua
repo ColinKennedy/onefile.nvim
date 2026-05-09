@@ -1,3 +1,6 @@
+local _shared = require("modules.utilities.shared_environment")
+
+_shared.run(function()
 --- Add [p ]p >p <p >P <P mappings.
 --- Paste to the line above or below, and move text left or right.
 ---
@@ -7,7 +10,7 @@
 ---    If not provided, the pasted text is on the same line as the current line.
 ---    Otherwise >> indents right and << indents left.
 ---
-local function _paste_line(direction, indent)
+function _paste_line(direction, indent)
     local row = vim.fn.line(".")
 
     if direction == "above" then
@@ -16,7 +19,7 @@ local function _paste_line(direction, indent)
 
     local register = vim.v.register ~= "" and vim.v.register or '"'
     local line = vim.fn.getreg(register)
-    line = require("modules.utilities.core_helpers").rstrip(line)
+    line = _P.rstrip(line)
     local lines = vim.split(line, "\n")
     vim.api.nvim_buf_set_lines(0, row, row, true, lines)
     local start = row + 1
@@ -47,3 +50,4 @@ end, { desc = "Paste above + indent" })
 vim.keymap.set("n", "<P", function()
     _paste_line("above", "<<")
 end, { desc = "Paste above + dedent" })
+end)

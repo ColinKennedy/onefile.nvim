@@ -1,12 +1,14 @@
---- Configure the default colorscheme and fallback highlight groups.
+local _shared = require("modules.utilities.shared_environment")
 
-local _extend = function(table_to_modify, items)
+_shared.run(function()
+--- Colorscheme
+_extend = function(table_to_modify, items)
     for key, value in pairs(items) do
         table_to_modify[key] = value
     end
 end
 
-local _multi_2 = function(first, second)
+_multi_2 = function(first, second)
     local output = {}
 
     _extend(output, first)
@@ -15,7 +17,7 @@ local _multi_2 = function(first, second)
     return output
 end
 
-local _multi_3 = function(first, second, third)
+_multi_3 = function(first, second, third)
     local output = {}
 
     _extend(output, first)
@@ -28,99 +30,100 @@ end
 vim.cmd("set background=dark")
 
 -- General Palette. Make sure these colors look good!
-local _BLACK_20 = "#2c323c"
-local _BLACK_30 = "#282a2e"
-local _BLACK_50 = "#1d1f21"
+_BLACK_20 = "#2c323c"
+_BLACK_30 = "#282a2e"
+_BLACK_50 = "#1d1f21"
 
-local _WHITE = "#abb2bf"
+_WHITE = "#abb2bf"
 
-local _GRAY_10 = "#c0c0c0"
-local _GRAY_20 = "#707880"
-local _GRAY_30 = "#6c6c6c"
-local _GRAY_50 = "#373b41"
+_GRAY_10 = "#c0c0c0"
+_GRAY_20 = "#707880"
+_GRAY_30 = "#6c6c6c"
+_GRAY_50 = "#373b41"
 
 -- Used for errors
-local _RED_10 = "#cc6666"
-local _RED_20 = "#5f0000"
+_RED_10 = "#cc6666"
+_RED_20 = "#5f0000"
 
 -- Colors that denote "sections"
-local _SECTION_10 = "#de935f"
-local _SECTION_20 = "#DF8239"
-local _SECTION_30 = "#f0c674"
-local _SECTION_40 = "#f0e4c8"
-local _SECTION_50 = "#cccccc"
-local _SECTION_60 = "#ffffff"
+_SECTION_10 = "#de935f"
+_SECTION_20 = "#DF8239"
+_SECTION_30 = "#f0c674"
+_SECTION_40 = "#f0e4c8"
+_SECTION_50 = "#cccccc"
+_SECTION_60 = "#ffffff"
 
 -- "Base" colors, used for "normal" situations
-local _GREEN_10 = "#b5bd68"
-local _GREEN_30 = "#5f875f"
+_GREEN_10 = "#b5bd68"
+_GREEN_30 = "#5f875f"
 
 -- Typically used for "builtin" colors
-local _PURPLE_10 = "#d7d7ff"
-local _PURPLE_30 = "#b294bb"
-local _PURPLE_50 = "#5f005f"
-local _COOL_BLUE_10 = "#81a2be"
-local _COOL_BLUE_20 = "#005f5f"
+_PURPLE_10 = "#d7d7ff"
+_PURPLE_30 = "#b294bb"
+_PURPLE_50 = "#5f005f"
+_COOL_BLUE_10 = "#81a2be"
+_COOL_BLUE_20 = "#005f5f"
 
 -- Special purpose, "don't use these too often" colors
-local _ACCENT_ATTENTION_NORMAL = "#d7ffaf"
-local _ACCENT_BRIGHT_WHITE_10 = "#cccccc"
-local _ACCENT_DEEP_BLUE_10 = "#00005f"
-local _ACCENT_COOL_GRAY = "#5f5f87"
-local _ACCENT_INFO_50 = "DeepSkyBlue2"
-local _ACCENT_ERROR_50 = "#ff2211"
-local _ACCENT_WARNING_50 = "#ffcc00"
+_ACCENT_ATTENTION_NORMAL = "#d7ffaf"
+_ACCENT_BRIGHT_WHITE_10 = "#cccccc"
+_ACCENT_DEEP_BLUE_10 = "#00005f"
+_ACCENT_COOL_GRAY = "#5f5f87"
+_ACCENT_INFO_50 = "DeepSkyBlue2"
+_ACCENT_ERROR_50 = "#ff2211"
+_ACCENT_WARNING_50 = "#ffcc00"
 
-local _ACCENT_CRITICAL_30 = "#FF4400"
+_ACCENT_CRITICAL_30 = "#FF4400"
 
 -- Controller Variables - Colors
-local _BLACK_30_BG = { bg = _BLACK_30, ctermbg = 235 }
-local _ACCENT_BLUE_50_BG = { bg = _ACCENT_DEEP_BLUE_10, ctermbg = 17 }
-local _ACCENT_COOL_GRAY_BG = { bg = _ACCENT_COOL_GRAY, ctermbg = 60 }
-local _CYAN_10_BG = { bg = _COOL_BLUE_10, ctermbg = 109 }
-local _CYAN_10_FG = { fg = _COOL_BLUE_10, ctermfg = 109 }
-local _CYAN_30_BG = { bg = _COOL_BLUE_20, ctermbg = 23 }
-local _GRAY_20_FG = { fg = _GRAY_10, ctermfg = 250 }
-local _GRAY_30_BG = { bg = _GRAY_30, ctermbg = 242 }
-local _KHAKI_GREEN = { fg = _GREEN_10, ctermfg = 143 }
-local _PURPLE_20_FG = { fg = _PURPLE_30, ctermfg = 139 }
-local _PURPLE_50_BG = { bg = _PURPLE_50, ctermbg = 53 }
-local _WHITE_BG = { bg = _WHITE, ctermbg = 249 }
-local _WHITE_FG = { fg = _WHITE, ctermfg = 249 }
-local _WHITE_10_FG = { fg = _BLACK_50, ctermfg = 234 }
+_BLACK_30_BG = { bg = _BLACK_30, ctermbg = 235 }
+_ACCENT_BLUE_50_BG = { bg = _ACCENT_DEEP_BLUE_10, ctermbg = 17 }
+_ACCENT_COOL_GRAY_BG = { bg = _ACCENT_COOL_GRAY, ctermbg = 60 }
+_CYAN_10_BG = { bg = _COOL_BLUE_10, ctermbg = 109 }
+_CYAN_10_FG = { fg = _COOL_BLUE_10, ctermfg = 109 }
+_CYAN_30_BG = { bg = _COOL_BLUE_20, ctermbg = 23 }
+_GRAY_20_FG = { fg = _GRAY_10, ctermfg = 250 }
+_GRAY_30_BG = { bg = _GRAY_30, ctermbg = 242 }
+_KHAKI_GREEN = { fg = _GREEN_10, ctermfg = 143 }
+_PURPLE_20_FG = { fg = _PURPLE_30, ctermfg = 139 }
+_PURPLE_50_BG = { bg = _PURPLE_50, ctermbg = 53 }
+_WHITE_BG = { bg = _WHITE, ctermbg = 249 }
+_WHITE_FG = { fg = _WHITE, ctermfg = 249 }
+_WHITE_10_FG = { fg = _BLACK_50, ctermfg = 234 }
 
 -- Controller Variables - Purposes
-local _BG = { bg = _BLACK_50, ctermbg = 234 }
-local _BG_DARKER_20 = { ctermbg = 16, bg = "#111111" } -- Like _BG, but much darker
-local _BG_AS_FG = { fg = _BLACK_50, ctermfg = 234 }
-local _COMMENT = { fg = _GRAY_20, ctermfg = 243 }
-local _CONSTANT_FG = { fg = _RED_10, ctermfg = 167 }
-local _CURSOR_GRAY_FG = { fg = _BLACK_20, ctermfg = 236 }
-local _DIFF_CHANGE_FG = { fg = _PURPLE_10, ctermfg = 189 }
-local _ERROR_50_BG = { bg = _RED_20, ctermbg = 52 }
-local _ERROR_BG = { bg = _RED_10, ctermbg = 167 }
-local _ERROR_FG = { fg = _RED_10, ctermfg = 167 }
-local _KNOWN_VARIABLE = { fg = _PURPLE_30, ctermfg = 216 } -- LightSalmon1
-local _LINE_GRAY_BG = { bg = _GRAY_20, ctermbg = 243 }
-local _NON_TEXT_FG = { fg = _GRAY_50, ctermfg = 237 }
-local _NOTE_10_FG = { fg = _ACCENT_ATTENTION_NORMAL, ctermfg = 193 }
-local _NOTE_DIFF_ADD_10_FG = _NOTE_10_FG
-local _SEARCH_FG = { fg = _BLACK_50, ctermfg = 234 }
-local _SPECIAL_GRAY_FG = { fg = _GRAY_50, ctermfg = 238 }
-local _SPECIAL_VARIABLE = { fg = _ACCENT_CRITICAL_30, ctermfg = 96 }
-local _STATEMENT = { fg = _COOL_BLUE_10, ctermfg = 109 }
-local _TITLE_BG = { bg = _SECTION_30, ctermbg = 222 }
-local _TITLE_FG = { fg = _SECTION_30, ctermfg = 222 }
-local _TYPE = { fg = _SECTION_10, ctermfg = 173 }
-local _VERT_SPLIT_FG = { fg = _GRAY_50, ctermfg = 236 }
-local _VISUAL_GRAY_BG = { bg = _GRAY_50, ctermbg = 237 }
-local _VISUAL_GRAY_FG = { fg = _GRAY_50, ctermfg = 237 }
+_BG = { bg = _BLACK_50, ctermbg = 234 }
+_BG_DARKER_20 = { ctermbg = 16, bg = "#111111" } -- Like _BG, but much darker
+_BG_AS_FG = { fg = _BLACK_50, ctermfg = 234 }
+_COMMENT = { fg = _GRAY_20, ctermfg = 243 }
+_CONSTANT_FG = { fg = _RED_10, ctermfg = 167 }
+_CURSOR_GRAY_FG = { fg = _BLACK_20, ctermfg = 236 }
+_DIFF_CHANGE_FG = { fg = _PURPLE_10, ctermfg = 189 }
+_ERROR_50_BG = { bg = _RED_20, ctermbg = 52 }
+_ERROR_BG = { bg = _RED_10, ctermbg = 167 }
+_ERROR_FG = { fg = _RED_10, ctermfg = 167 }
+_KNOWN_VARIABLE = { fg = _PURPLE_30, ctermfg = 216 } -- LightSalmon1
+_LINE_GRAY_BG = { bg = _GRAY_20, ctermbg = 243 }
+_NON_TEXT_FG = { fg = _GRAY_50, ctermfg = 237 }
+_NOTE_10_FG = { fg = _ACCENT_ATTENTION_NORMAL, ctermfg = 193 }
+_NOTE_DIFF_ADD_10_FG = _NOTE_10_FG
+_SEARCH_BG = { bg = _BLACK_50, ctermbg = 234 }
+_SEARCH_FG = { fg = _BLACK_50, ctermfg = 234 }
+_SPECIAL_GRAY_FG = { fg = _GRAY_50, ctermfg = 238 }
+_SPECIAL_VARIABLE = { fg = _ACCENT_CRITICAL_30, ctermfg = 96 }
+_STATEMENT = { fg = _COOL_BLUE_10, ctermfg = 109 }
+_TITLE_BG = { bg = _SECTION_30, ctermbg = 222 }
+_TITLE_FG = { fg = _SECTION_30, ctermfg = 222 }
+_TYPE = { fg = _SECTION_10, ctermfg = 173 }
+_VERT_SPLIT_FG = { fg = _GRAY_50, ctermfg = 236 }
+_VISUAL_GRAY_BG = { bg = _GRAY_50, ctermbg = 237 }
+_VISUAL_GRAY_FG = { fg = _GRAY_50, ctermfg = 237 }
 
 -- Controller Variables - Miscellaneous
-local _BOLD = { bold = true }
-local _NONE = { cterm = nil, gui = nil } -- Use this to disable highlighting on a group
-local _REVERSE = { reverse = true }
-local _UNDERLINE = { underline = true }
+_BOLD = { bold = true }
+_NONE = { cterm = nil, gui = nil } -- Use this to disable highlighting on a group
+_REVERSE = { reverse = true }
+_UNDERLINE = { underline = true }
 
 -- General
 vim.api.nvim_set_hl(0, "Boolean", _CONSTANT_FG)
@@ -270,7 +273,7 @@ vim.api.nvim_set_hl(0, "ComplMatchIns", { link = "Comment" })
 -- Plugin - https://github.com/airblade/vim-gitgutter
 vim.api.nvim_set_hl(0, "GitGutterAdd", _NOTE_DIFF_ADD_10_FG)
 vim.api.nvim_set_hl(0, "GitGutterChange", _DIFF_CHANGE_FG)
-vim.api.nvim_set_hl(0, "GitGutterDelete", { fg = _ACCENT_ERROR_50 })
+vim.api.nvim_set_hl(0, "GitGutterDelete", _VERT_SPLIT_FG)
 vim.api.nvim_set_hl(0, "GitGutterAddInvisible", { bg = "Grey", ctermbg = 242 })
 vim.api.nvim_set_hl(0, "GitGutterChangeInvisible", { bg = "Grey", ctermbg = 242 })
 vim.api.nvim_set_hl(0, "GitGutterDeleteInvisible", { bg = "Grey", ctermbg = 242 })
@@ -278,8 +281,7 @@ vim.api.nvim_set_hl(0, "GitGutterDeleteInvisible", { bg = "Grey", ctermbg = 242 
 -- Special: Disable line highlighting of the cursor row BUT highlight the current line as a color
 --
 -- Reference: https://stackoverflow.com/a/26205823
--- Reference:
--- https://www.reddit.com/r/neovim/comments/16zjizx/comment/k3ey1rt/
+-- Reference: https://www.reddit.com/r/neovim/comments/16zjizx/comment/k3ey1rt/?utm_source=share&utm_medium=web2x&context=3
 --
 vim.api.nvim_set_hl(0, "CursorLine", { cterm = nil, ctermbg = nil, ctermfg = nil, bg = nil, fg = nil })
 vim.api.nvim_set_hl(0, "CursorColumn", _BLACK_30_BG)
@@ -329,3 +331,4 @@ vim.api.nvim_set_hl(0, "@lsp.typemod.keyword.documentation.lua", { link = "@stri
 
 -- Neovim 0.10+ ships Python queries that break backwards compatibility
 vim.api.nvim_set_hl(0, "@variable", { link = "Identifier" })
+end)

@@ -1,10 +1,10 @@
---- Strip trailing whitespace only from lines changed in the current buffer.
+local _shared = require("modules.utilities.shared_environment")
 
-local _P = {}
-
-local _GROUP = vim.api.nvim_create_augroup("my.formatter.strip_trailing_whitespace", { clear = true })
+_shared.run(function()
+--- Remove trailing whitespace but only on lines you've modified.
+_GROUP = vim.api.nvim_create_augroup("my.formatter.strip_trailing_whitespace", { clear = true })
 ---@type table<integer, table<integer, boolean>>
-local _LINES = {}
+_LINES = {}
 
 --- Group `values` according to nearest neighbors.
 ---
@@ -119,3 +119,4 @@ vim.api.nvim_create_autocmd("BufWritePre", {
     group = _GROUP,
     callback = _P.strip_trailing_whitespaces,
 })
+end)

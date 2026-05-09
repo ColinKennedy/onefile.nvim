@@ -1,8 +1,8 @@
---- Shared utility functions, type definitions, constants, and state for the Neovim configuration.
+local _shared = require("modules.utilities.shared_environment")
 
-local M = {}
-local _P = {}
-
+_shared.run(function()
+--- Core shared helpers and state
+_P = {}
 
 ---@class _my._datatypes.IntBounds An inclusive or exclusive pair of integers.
 ---@field first integer The starting value.
@@ -98,10 +98,10 @@ local _P = {}
 ---@field buffer integer The Vim buffer of the terminal.
 ---@field mode string The last Vim mode (NORMAL, TERMINAL, etc).
 
-local _ALL_CONTIGUOUS_PROJECT_ROOT_MARKERS = { "CMakeLists.txt", "__init__.py" }
-M._ENGLISH_LANGUAGE = "en"
+_ALL_CONTIGUOUS_PROJECT_ROOT_MARKERS = { "CMakeLists.txt", "__init__.py" }
+_ENGLISH_LANGUAGE = "en"
 
-M._LUA_ROOT_PATHS = {
+_LUA_ROOT_PATHS = {
     ".luacheckrc",
     ".luarc.json",
     ".luarc.jsonc",
@@ -111,7 +111,7 @@ M._LUA_ROOT_PATHS = {
     "stylua.toml",
 }
 
-local _ALL_SINGLE_PROJECT_ROOTS = vim.tbl_deep_extend("force", {}, M._LUA_ROOT_PATHS)
+_ALL_SINGLE_PROJECT_ROOTS = vim.tbl_deep_extend("force", {}, _LUA_ROOT_PATHS)
 _ALL_SINGLE_PROJECT_ROOTS = vim.list_extend(_ALL_SINGLE_PROJECT_ROOTS, {
     -- Language-Agnostic
     ".editorconfig",
@@ -137,44 +137,44 @@ _ALL_SINGLE_PROJECT_ROOTS = vim.list_extend(_ALL_SINGLE_PROJECT_ROOTS, {
     "init.vim",
 })
 
-M._BOOKMARK_MINIMUM = 1
-M._BOOKMARK_MAXIMUM = 9
+_BOOKMARK_MINIMUM = 1
+_BOOKMARK_MAXIMUM = 9
 
 ---@type integer?
-local _CURRENT_RIPGREP_COMMAND = nil
+_CURRENT_RIPGREP_COMMAND = nil
 
-M._FILETYPE_TO_TREESITTER = { python = "python" }
-M._LSP_GROUP = vim.api.nvim_create_augroup("my.lsp.start", { clear = true })
-M._SNIPPET_AUGROUP = vim.api.nvim_create_augroup("my.snippet.completion", { clear = true })
-M._TERMINAL_GROUP = vim.api.nvim_create_augroup("my.terminal.behavior", { clear = true })
+_FILETYPE_TO_TREESITTER = { python = "python" }
+_LSP_GROUP = vim.api.nvim_create_augroup("my.lsp.start", { clear = true })
+_SNIPPET_AUGROUP = vim.api.nvim_create_augroup("my.snippet.completion", { clear = true })
+_TERMINAL_GROUP = vim.api.nvim_create_augroup("my.terminal.behavior", { clear = true })
 
-M._GIT_EXECUTABLE = os.getenv("NEOVIM_GIT_EXECUTABLE_PATH") or "git"
-M._RIPGREP_EXECUTABLE = os.getenv("NEOVIM_RIPGREP_EXECUTABLE_PATH") or "rg"
+_GIT_EXECUTABLE = os.getenv("NEOVIM_GIT_EXECUTABLE_PATH") or "git"
+_RIPGREP_EXECUTABLE = os.getenv("NEOVIM_RIPGREP_EXECUTABLE_PATH") or "rg"
 
 ---@type table<string, boolean>
-local _LANGUAGES_CACHE = {}
+_LANGUAGES_CACHE = {}
 
-local _SNIPPETS = {}
+_SNIPPETS = nil
 
-M._SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
+_SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
 
 -- NOTE: Don't mess with this variable unless you know what you're doing.
 ---@type table<string, _my.Snippet>
-M._TRIGGER_TO_SNIPPET_CACHE = {}
+_TRIGGER_TO_SNIPPET_CACHE = {}
 
 -- NOTE: This is a normal Vim convention for session names.
-M._VIM_SESSION_FILE_NAME = "Session.vim"
+_VIM_SESSION_FILE_NAME = "Session.vim"
 
-M._VIMSCRIPT_COMMENT_MARKER = '"'
+_VIMSCRIPT_COMMENT_MARKER = '"'
 
-M._SESSIONX_NAME = "Sessionx.vim"
+_SESSIONX_NAME = "Sessionx.vim"
 
-M._IS_NERDFONT_ALLOWED = true
+_IS_NERDFONT_ALLOWED = true
 
-local _MAXIMUM_QUICK_FIX_LENGTH = 55
+_MAXIMUM_QUICK_FIX_LENGTH = 55
 
 -- luacheck: push ignore
-local unpack = unpack or table.unpack
+unpack = unpack or table.unpack
 -- luacheck: pop
 
 --- Check if `executable` is a command found on `$PATH`.
@@ -182,7 +182,7 @@ local unpack = unpack or table.unpack
 ---@param executable string Some command. e.g. `"git"` or `"/path/to/foo.exe"`.
 ---@return boolean # If found, return `true`.
 ---
-function M.exists_command(executable)
+function _P.exists_command(executable)
     return vim.fn.executable(executable) == 1
 end
 
@@ -209,7 +209,7 @@ end
 ---@param name string The name of the tree-sitter parser to check.
 ---@return boolean # If `name` exists, return `true`.
 ---
-function M.has_treesitter_parser(name)
+function _P.has_treesitter_parser(name)
     if _LANGUAGES_CACHE[name] then
         return _LANGUAGES_CACHE[name]
     end
@@ -265,7 +265,7 @@ function _P.is_mark_defined(mark)
 end
 
 --- @return boolean # Check if the Neovim is running in tmux right now.
-function M.in_tmux()
+function _P.in_tmux()
     return vim.fn.exists("$TMUX") == 1
 end
 
@@ -391,9 +391,9 @@ _SNIPPETS = {
         -- NOTE: Block Snippets
         {
             body = [[
-            for ${1:item} in ${2:items}:
-                ${3:pass}
-        ]],
+                for ${1:item} in ${2:items}:
+                    ${3:pass}
+            ]],
             description = "for item in items:",
             kind = "Statement",
             on = _P.is_start_of_source_line,
@@ -401,9 +401,9 @@ _SNIPPETS = {
         },
         {
             body = [[
-            with ${1:open()} as ${2:handler}:
-                ${3:pass}
-        ]],
+                with ${1:open()} as ${2:handler}:
+                    ${3:pass}
+            ]],
             description = "with foo as handler:",
             kind = "Statement",
             trigger = "with",
@@ -426,14 +426,14 @@ _SNIPPETS = {
         },
         {
             body = [[
-            _LOGGER = logging.getLogger(${1:__name__})
-            _HANDLER = logging.StreamHandler(sys.stdout)
-            _HANDLER.setLevel(logging.INFO)
-            _FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-            _HANDLER.setFormatter(_FORMATTER)
-            _LOGGER.addHandler(_HANDLER)
-            _LOGGER.setLevel(logging.INFO)
-        ]],
+                _LOGGER = logging.getLogger(${1:__name__})
+                _HANDLER = logging.StreamHandler(sys.stdout)
+                _HANDLER.setLevel(logging.INFO)
+                _FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+                _HANDLER.setFormatter(_FORMATTER)
+                _LOGGER.addHandler(_HANDLER)
+                _LOGGER.setLevel(logging.INFO)
+            ]],
             description = "Create a basic StreamHandler Python logger",
             kind = "Line-Starter",
             on = _P.is_start_of_source_line,
@@ -495,21 +495,21 @@ _SNIPPETS = {
         },
         {
             body = [[
-            @contextlib.contextmanager
-            def profile_and_print():
-                profiler = profile.Profile()
-                profiler.enable()
+                @contextlib.contextmanager
+                def profile_and_print():
+                    profiler = profile.Profile()
+                    profiler.enable()
 
-                try:
-                    yield
-                finally:
-                    profiler.disable()
-                    stats = pstats.Stats(profiler)
-                    stats.sort_stats("cumulative").print_stats(20)
+                    try:
+                        yield
+                    finally:
+                        profiler.disable()
+                        stats = pstats.Stats(profiler)
+                        stats.sort_stats("cumulative").print_stats(20)
 
-            with profile_and_print():
-                ${1:pass}
-        ]],
+                with profile_and_print():
+                    ${1:pass}
+            ]],
             description = 'Add a "profile this code and print it" Python context.',
             kind = "Debugging",
             on = _P.is_start_of_source_line,
@@ -533,9 +533,9 @@ _SNIPPETS = {
         -- NOTE: Qt Snippets
         {
             body = [[
-            parent (Qt.QtCore.QObject, optional):
-                An object which, if provided, holds a reference to this instance.
-        ]],
+                parent (Qt.QtCore.QObject, optional):
+                    An object which, if provided, holds a reference to this instance.
+            ]],
             description = "A docstring auto-fill for a common Qt parameter",
             kind = "Debugging",
             on = _P.is_start_of_source_line,
@@ -544,13 +544,13 @@ _SNIPPETS = {
         {
             -- luacheck: ignore 631
             body = [[
-            if hasattr(${1:menu}, "setToolTipsVisible"):
-                # Important: Requires Qt 6!
-                #
-                # Reference: https://doc.qt.io/qtforpython-6/PySide6/QtWidgets/QMenu.html#PySide6.QtWidgets.PySide6.QtWidgets.QMenu.setToolTipsVisible
-                #
-                $1.setToolTipsVisible(True)
-        ]],
+                if hasattr(${1:menu}, "setToolTipsVisible"):
+                    # Important: Requires Qt 6!
+                    #
+                    # Reference: https://doc.qt.io/qtforpython-6/PySide6/QtWidgets/QMenu.html#PySide6.QtWidgets.PySide6.QtWidgets.QMenu.setToolTipsVisible
+                    #
+                    $1.setToolTipsVisible(True)
+            ]],
             description = "Enable tool-tips for QMenus.",
             trigger = "enable_menu_tooltips",
         },
@@ -570,7 +570,7 @@ _P.dedent_snippets() -- NOTE: We make the all snippet body clean
 --- Close terminal `buffer` after its process exits.
 ---
 ---@param buffer integer A 1-or-more value pointing to the terminal to close.
-function M.close_terminal_afterwards(buffer)
+function _P.close_terminal_afterwards(buffer)
     vim.api.nvim_create_autocmd("TermClose", {
         buffer = buffer,
         callback = vim.schedule_wrap(function()
@@ -585,9 +585,9 @@ end
 ---@param data {file_type: string, start_column: integer} The cursor + completion prefix.
 ---@return _my.completion.Entry[] # All found snippet matches, if any.
 ---
-function M.compute_snippet_completion_options(data)
+function _P.compute_snippet_completion_options(data)
     -- NOTE: Re-populate the cache with snippets which match the completion menu
-    M._TRIGGER_TO_SNIPPET_CACHE = {}
+    _TRIGGER_TO_SNIPPET_CACHE = {}
 
     local snippets = _SNIPPETS[data.file_type] or {}
 
@@ -601,7 +601,7 @@ function M.compute_snippet_completion_options(data)
                 kind = snippet.kind or "Snippet",
                 word = snippet.trigger,
             })
-            M._TRIGGER_TO_SNIPPET_CACHE[snippet.trigger] = snippet
+            _TRIGGER_TO_SNIPPET_CACHE[snippet.trigger] = snippet
         end
     end
 
@@ -620,7 +620,7 @@ end
 ---@param first boolean? Whether to use the arguments of the first call to `caller` or not.
 ---@return fun(...: _Parameters): _Return # The wrapped function.
 ---
-function M.debounce_trailing(caller, timeout, first)
+function _P.debounce_trailing(caller, timeout, first)
     local timer = vim.uv.new_timer()
 
     if not timer then
@@ -679,7 +679,7 @@ end
 ---@param base string Some prefix text to search for in each `candidates`.
 ---@return _my.completion.Entry[] # The found matches, if any.
 ---
-function M.filter_by_text(candidates, base)
+function _P.filter_by_text(candidates, base)
     ---@type _my.completion.Entry[]
     local output = {}
 
@@ -715,7 +715,7 @@ end
 ---@return string
 ---    The user's completion trigger text.
 ---
-function M.get_completion_location()
+function _P.get_completion_location()
     local start_column = _P.find_completion_start()
     local current_column = vim.fn.col(".")
     local line = vim.fn.getline(".")
@@ -767,7 +767,7 @@ end
 ---@param on_fail (fun(obj: vim.SystemCompleted): nil)? If included, a function that runs on-error.
 ---@return string[] # All returned results.
 ---
-function M.get_deferred_shell_command_results(command, on_fail)
+function _P.get_deferred_shell_command_results(command, on_fail)
     ---@param obj vim.SystemCompleted
     local function generic_error(obj)
         vim.notify(
@@ -892,8 +892,7 @@ function _P.levenshtein(a, b)
         for index_b = 1, len_b do
             local character_b = b:sub(index_b, index_b)
             local cost = (character_a == character_b) and 0 or 1
-            current[index_b] =
-                math.min(current[index_b - 1] + 1, previous[index_b] + 1, previous[index_b - 1] + cost)
+            current[index_b] = math.min(current[index_b - 1] + 1, previous[index_b] + 1, previous[index_b - 1] + cost)
         end
 
         previous = current
@@ -910,165 +909,148 @@ end
 ---
 ---@param query string Some user input to check.
 ---@param candidate string A possible match to consider.
----@return number? # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
+---@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
 ---
-function M.get_fuzzy_match_score(query, candidate)
-    --- Return true if `query_` is one small typo away from `candidate_`.
+function _P.get_fuzzy_match_score(query, candidate)
+    --- Remove all punctuation and special characters and lowercase `text`.
     ---
-    --- This is intentionally bounded. It catches the common interactive-search
-    --- mistakes without doing full edit-distance work for every candidate.
+    ---@param text string The user input string to simplify.
+    ---@return string # The simplified, basic-ASCII-only string.
     ---
-    ---@param query_ string Some normalized user input.
-    ---@param candidate_ string Some normalized candidate text.
-    ---@return boolean # Whether the typo-tolerant fallback matched.
-    ---
-    local function is_near_typo(query_, candidate_)
-        local query_length = #query_
-        local candidate_length = #candidate_
+    local function normalize(text)
+        text = text:lower()
 
-        if query_length == 0 then
-            return true
-        end
-
-        if math.abs(query_length - candidate_length) > 1 then
-            return false
-        end
-
-        local query_index = 1
-        local candidate_index = 1
-        local edits = 0
-
-        while query_index <= query_length and candidate_index <= candidate_length do
-            local query_character = query_:sub(query_index, query_index)
-            local candidate_character = candidate_:sub(candidate_index, candidate_index)
-
-            if query_character == candidate_character then
-                query_index = query_index + 1
-                candidate_index = candidate_index + 1
-            else
-                edits = edits + 1
-
-                if edits > 1 then
-                    return false
-                end
-
-                local next_query = query_:sub(query_index + 1, query_index + 1)
-                local next_candidate = candidate_:sub(candidate_index + 1, candidate_index + 1)
-
-                if query_character == next_candidate and next_query == candidate_character then
-                    query_index = query_index + 2
-                    candidate_index = candidate_index + 2
-                elseif query_length > candidate_length then
-                    query_index = query_index + 1
-                elseif candidate_length > query_length then
-                    candidate_index = candidate_index + 1
-                else
-                    query_index = query_index + 1
-                    candidate_index = candidate_index + 1
-                end
-            end
-        end
-
-        if query_index <= query_length or candidate_index <= candidate_length then
-            edits = edits + 1
-        end
-
-        return edits <= 1
+        return (text:gsub("[^%w%s]", ""))
     end
 
-    --- Score a fuzzy subsequence match in a single pass over `candidate_`.
+    --- Score how well a single query matches a single candidate token.
     ---
-    ---@param query_ string Some normalized user input.
-    ---@param candidate_ string Some normalized candidate text.
-    ---@return number? # A sortable score, or nil if the query does not match.
+    ---@param query_ string Some user input to check.
+    ---@param candidate_ string A possible match to consider.
+    ---@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
     ---
-    local function subsequence_score(query_, candidate_)
-        if query_ == '' then
-            return 1
+    local function token_score(query_, candidate_)
+        -- NOTE: Check for an exact or substring match.
+        if candidate_:find(query_, 1, true) then
+            return 1.0
         end
 
-        local direct_start = candidate_:find(query_, 1, true)
+        -- NOTE: Typo tolerance by checking the distance between our numbers.
+        local distance = _P.levenshtein(query_, candidate_)
+        local maximum = math.max(#query_, #candidate_)
+        local similarity = 1.0 - (distance / maximum)
 
-        if direct_start then
-            return 10000 - direct_start - (#candidate_ - #query_)
+        -- NOTE: Discard very weak matches.
+        if similarity < 0.4 then
+            return 0
         end
 
-        local query_index = 1
-        local score = 0
-        local streak = 0
-        local last_match = 0
-        local first_match = nil
-
-        for candidate_index = 1, #candidate_ do
-            if query_index > #query_ then
-                break
-            end
-
-            local query_character = query_:sub(query_index, query_index)
-            local candidate_character = candidate_:sub(candidate_index, candidate_index)
-
-            if query_character == candidate_character then
-                first_match = first_match or candidate_index
-
-                if candidate_index == last_match + 1 then
-                    streak = streak + 1
-                else
-                    streak = 1
-                end
-
-                local previous = candidate_index == 1 and '/' or candidate_:sub(candidate_index - 1, candidate_index - 1)
-                local is_boundary = previous:match('[%s%-%_%.%/]') ~= nil
-
-                score = score + 40 + (streak * 12)
-
-                if is_boundary then
-                    score = score + 35
-                end
-
-                if candidate_index == query_index then
-                    score = score + 20
-                end
-
-                last_match = candidate_index
-                query_index = query_index + 1
-            end
-        end
-
-        if query_index <= #query_ then
-            return nil
-        end
-
-        return score - ((first_match or 1) * 2) - (#candidate_ - #query_)
+        return similarity
     end
 
-    local normalized_query = query:lower():gsub('[^%w%s%-%_%.%/]', '')
-    local normalized_candidate = candidate:lower():gsub('[^%w%s%-%_%.%/]', '')
+    local query_words = _P.get_split_words(normalize(query))
+    local candidate_words = _P.get_split_words(normalize(candidate))
 
-    local score = subsequence_score(normalized_query, normalized_candidate)
+    local score = 0
+    local matched = 0
 
-    if score then
-        return score
-    end
+    for _, query_word in ipairs(query_words) do
+        local best = 0
 
-    -- Keep typo tolerance cheap: only compare the query against individual path
-    -- pieces whose length is close enough for one edit or transposition.
-    for token in normalized_candidate:gmatch('[%w]+') do
-        if math.abs(#normalized_query - #token) <= 1 and is_near_typo(normalized_query, token) then
-            return 15 - math.abs(#normalized_query - #token) - (#token / 100)
+        for _, cw in ipairs(candidate_words) do
+            best = math.max(best, token_score(query_word, cw))
+        end
+
+        if best > 0 then
+            matched = matched + 1
+            score = score + best
+        else
+            -- strong penalty for missing query tokens
+            score = score - 1.5
         end
     end
 
-    return nil
+    -- normalize by query length
+    return score / #query_words
 end
 
+-- TODO: Remove this later
+-- --- Rate how closely `target` matches `input`.
+-- ---
+-- ---@param input string
+-- ---    Some user text to look for. e.g. `"fb"`.
+-- ---@param target string
+-- ---    The possible text to match against. e.g. `"football"`.
+-- ---@return integer?
+-- ---    If no match, return `nil`. If a strong match, return `0`. Weaker matches
+-- ---    will be higher numbers.
+-- ---
+-- function _P.get_fuzzy_match_score(input, target)
+--     local input_lower = input:lower()
+--     local target_lower = target:lower()
+--     local position = 1
+--     local score = 0
+--     local last_match = 0
+--     local first_match = nil
+--
+--     local input_length = #input_lower
+--
+--     for index = 1, input_length do
+--         local character = input_lower:sub(index, index)
+--         local found = false
+--
+--         while position <= #target_lower do
+--             if target_lower:sub(position, position) == character then
+--                 if not first_match then
+--                     first_match = position
+--                 end
+--
+--                 if last_match > 0 then
+--                     score = score + (position - last_match)
+--                 end
+--
+--                 last_match = position
+--                 position = position + 1
+--                 found = true
+--
+--                 break
+--             end
+--
+--             position = position + 1
+--         end
+--
+--         if not found then
+--             return nil
+--         end
+--     end
+--
+--     first_match = first_match or 1
+--     -- NOTE: Late start penalty
+--     score = score + (first_match - 1)
+--
+--     -- NOTE: The span penalty can be pretty harsh whenever `target` is a long
+--     -- string. To prevent any problems, we "normalize" it so short strings
+--     -- don't have an advantage.
+--     --
+--     local span = last_match - first_match
+--     local ideal_span = input_length - 1
+--
+--     if span > ideal_span then
+--         local normalized_spread = (span - ideal_span) / #target_lower
+--         score = score + normalized_spread * input_length
+--     end
+--
+--     return score
+-- end
+
 ---@return string[] # Every file or directory on-disk that could be helpfiles.
-function M.get_helptag_search_paths()
+function _P.get_helptag_search_paths()
     -- TODO: Fix type-hint in Neovim core, later
     return vim.fn.globpath(vim.o.runtimepath, "doc/tag*", true, true)
 end
 
 ---@return table<string, vim.fn.getmarklist.ret.item>
-function M.get_marks_mapping()
+function _P.get_marks_mapping()
     ---@type table<string, vim.fn.getmarklist.ret.item>
     local output = {}
 
@@ -1088,7 +1070,7 @@ end
 ---@param source string | integer The child directory to search from or the Vim buffer.
 ---@return string? # The found root, if any.
 ---
-function M.get_nearest_project_root(source)
+function _P.get_nearest_project_root(source)
     local root = vim.fs.root(source, _ALL_SINGLE_PROJECT_ROOTS)
 
     if root then
@@ -1163,7 +1145,7 @@ end
 ---@param index integer A 1-to-9 value.
 ---@return string # The global character mark. e.g. A, B, C, etc.
 ---
-function M.get_vim_mark_from_bookmark_index(index)
+function _P.get_vim_mark_from_bookmark_index(index)
     return string.char(64 + index) -- A=65, B=66, etc.
 end
 
@@ -1209,9 +1191,9 @@ function _P.get_window_edges()
 end
 
 --- Find the top-level project, if any, and then cd Neovim to it.
-function M.cd_to_parent_project_root()
+function _P.cd_to_parent_project_root()
     local directory = vim.fn.getcwd()
-    local root = M.get_nearest_project_root(directory)
+    local root = _P.get_nearest_project_root(directory)
 
     if root then
         vim.cmd(string.format("silent cd %s", root))
@@ -1230,7 +1212,7 @@ end
 ---@param ok boolean If async writing is okay, this value is `true`.
 ---@param message string If not `ok`, this has an error message.
 ---
-function M.check_async_write(ok, message)
+function _P.check_async_write(ok, message)
     vim.schedule(function()
         if ok then
             vim.cmd.checktime()
@@ -1250,7 +1232,7 @@ end
 ---@return string[]?
 ---    All found auto-completion options, if any.
 ---
-function M.complete_relative(text)
+function _P.complete_relative(text)
     local directory = _P.get_current_buffer_directory()
 
     if not directory then
@@ -1276,9 +1258,9 @@ function M.complete_relative(text)
 end
 
 --- Delete all grapple bookmarks (so we can start from scratch).
-function M.delete_all_bookmarks()
-    for index, _, _ in M.iter_bookmarks() do
-        M.delete_bookmark(index)
+function _P.delete_all_bookmarks()
+    for index, _, _ in _P.iter_bookmarks() do
+        _P.delete_bookmark(index)
     end
 end
 
@@ -1310,7 +1292,7 @@ end
 ---@param severity (string | integer)?
 ---    The type of severity to filter for. If no `severity` is given, allow anything.
 ---
-function M.go_to_diagnostic(next, severity)
+function _P.go_to_diagnostic(next, severity)
     severity = severity and vim.diagnostic.severity[severity] or nil
 
     if vim.diagnostic.jump then
@@ -1342,7 +1324,7 @@ end
 ---    The number of bookmarks to jump. Usually this value is
 ---    just `1`, meaning "next bookmark" and `-1`, meaning "previous bookmark".
 ---
-function M.go_to_relative_bookmark(offset)
+function _P.go_to_relative_bookmark(offset)
     --- Open or load an existing Vim `buffer`.
     ---
     ---@param buffer {index: integer, path: string}
@@ -1358,7 +1340,7 @@ function M.go_to_relative_bookmark(offset)
     ---@type {index: integer, path: string}[]
     local bookmarks = {}
 
-    for _, buffer_number, buffer_path in M.iter_bookmarks() do
+    for _, buffer_number, buffer_path in _P.iter_bookmarks() do
         table.insert(bookmarks, { index = buffer_number, path = buffer_path })
     end
 
@@ -1385,18 +1367,18 @@ end
 ---    The Vim buffer number of the bookmarked file.
 ---    The full path to the Vim buffer.
 ---
-function M.iter_bookmarks()
-    local index = M._BOOKMARK_MINIMUM - 1
+function _P.iter_bookmarks()
+    local index = _BOOKMARK_MINIMUM - 1
 
     return function()
         while true do
             index = index + 1
 
-            if index > M._BOOKMARK_MAXIMUM then
+            if index > _BOOKMARK_MAXIMUM then
                 return nil
             end
 
-            local mark = M.get_vim_mark_from_bookmark_index(index)
+            local mark = _P.get_vim_mark_from_bookmark_index(index)
             local position = vim.api.nvim_get_mark(mark, {})
 
             -- Only return if the mark exists
@@ -1415,7 +1397,7 @@ end
 ---
 ---@param mark string The Vim mark to jump to (or apply) to the current buffer.
 ---
-function M.mark_current_buffer_as_bookmark(mark)
+function _P.mark_current_buffer_as_bookmark(mark)
     if not _P.is_mark_defined(mark) then
         vim.cmd.mark(mark) -- Set the mark
     else
@@ -1432,11 +1414,11 @@ function M.mark_current_buffer_as_bookmark(mark)
 end
 
 --- Find the next-available bookmark number and set the current buffer to it.
-function M.mark_current_buffer_as_next_bookmark()
+function _P.mark_current_buffer_as_next_bookmark()
     local maximum
 
-    for index = M._BOOKMARK_MINIMUM, M._BOOKMARK_MAXIMUM do
-        local mark = M.get_vim_mark_from_bookmark_index(index)
+    for index = _BOOKMARK_MINIMUM, _BOOKMARK_MAXIMUM do
+        local mark = _P.get_vim_mark_from_bookmark_index(index)
 
         if _P.is_mark_defined(mark) then
             maximum = index
@@ -1446,10 +1428,10 @@ function M.mark_current_buffer_as_next_bookmark()
     local next_index = 1
 
     if maximum then
-        next_index = ((maximum + 1) % M._BOOKMARK_MAXIMUM) + 1
+        next_index = ((maximum + 1) % _BOOKMARK_MAXIMUM) + 1
     end
 
-    M.mark_current_buffer_as_bookmark(M.get_vim_mark_from_bookmark_index(next_index))
+    _P.mark_current_buffer_as_bookmark(_P.get_vim_mark_from_bookmark_index(next_index))
 end
 
 --- Open `text` relative path using the current directory as a root.
@@ -1459,7 +1441,7 @@ end
 ---
 ---@param text string Some relative path. e.g. `"foo.txt"` or "../bar.txt"`, etc.
 ---
-function M.open_relative(text)
+function _P.open_relative(text)
     local directory = _P.get_current_buffer_directory()
 
     if not directory then
@@ -1475,15 +1457,15 @@ function M.open_relative(text)
 end
 
 --- Push the current directory's git repository's changes to a stash.
-function M.push_stash_by_name()
+function _P.push_stash_by_name()
     vim.ui.input({ prompt = "Enter git stash name: " }, function(input)
         if not input then
             return
         end
 
-        local command = { M._GIT_EXECUTABLE, "stash", "push", "--message", input }
+        local command = { _GIT_EXECUTABLE, "stash", "push", "--message", input }
 
-        if not M.exists_command(command[1]) then
+        if not _P.exists_command(command[1]) then
             vim.notify("Cannot create state. No `git` command was found.", vim.log.levels.ERROR)
 
             return
@@ -1521,8 +1503,8 @@ end
 ---
 ---@param index integer 1-to-9 bookmark logical index.
 ---
-function M.delete_bookmark(index)
-    local mark = M.get_vim_mark_from_bookmark_index(index)
+function _P.delete_bookmark(index)
+    local mark = _P.get_vim_mark_from_bookmark_index(index)
     vim.cmd.delmarks(mark)
 end
 
@@ -1531,7 +1513,7 @@ end
 ---@param mark string A Vim mark to set. e.g. `"A"`.
 ---@param buffer integer | string A 0-or-more buffer to modify
 ---
-function M.reset_bookmark(mark, buffer)
+function _P.reset_bookmark(mark, buffer)
     --- Save the current buffer, call `caller`, and then return to the current buffer.
     ---
     ---@param caller fun(): nil Something to call and restore later.
@@ -1561,10 +1543,7 @@ function M.reset_bookmark(mark, buffer)
             vim.cmd.mark(mark)
         end)
     else
-        vim.notify(
-            string.format('Bug: expected a string or integer but got "%s" value.', buffer),
-            vim.log.levels.ERROR
-        )
+        vim.notify(string.format('Bug: expected a string or integer but got "%s" value.', buffer), vim.log.levels.ERROR)
     end
 end
 
@@ -1573,7 +1552,7 @@ end
 ---@param direction _my.window.Direction top/down/left/right movement of the current window.
 ---@param distance integer How far to resize the window.
 ---
-function M.resize_window(direction, distance)
+function _P.resize_window(direction, distance)
     local edges = _P.get_window_edges()
 
     if not edges then
@@ -1634,7 +1613,7 @@ end
 ---@param text string Some text that has whitespace at the end. e.g. `"    foo"`.
 ---@return string # The removed text. e.g. `"foo"`.
 ---
-function M.lstrip(text)
+function _P.lstrip(text)
     return text:match("^%s*(.-)$")
 end
 
@@ -1643,7 +1622,7 @@ end
 ---@param text string Some text that has whitespace at the end. e.g. `"foo    "`.
 ---@return string # The removed text. e.g. `"foo"`.
 ---
-function M.rstrip(text)
+function _P.rstrip(text)
     return text:match("^(.-)%s*$")
 end
 
@@ -1666,35 +1645,32 @@ function _P.run_git_generic_command(command)
         end
 
         vim.schedule(function()
-            vim.notify(
-                string.format('`git %s` failed with error: "%s"', command, result.stderr),
-                vim.log.levels.ERROR
-            )
+            vim.notify(string.format('`git %s` failed with error: "%s"', command, result.stderr), vim.log.levels.ERROR)
         end)
     end
 
-    vim.system({ M._GIT_EXECUTABLE, command }, { text = true }, _notify_on_error):wait()
+    vim.system({ _GIT_EXECUTABLE, command }, { text = true }, _notify_on_error):wait()
 end
 
 --- Call `git pull` from the current working directory.
-function M.run_git_pull()
+function _P.run_git_pull()
     _P.run_git_generic_command("pull")
 end
 
 --- Call `git push` from the current working directory.
-function M.run_git_push()
+function _P.run_git_push()
     _P.run_git_generic_command("push")
 end
 
 --- Run `git add -p` in the current tab's `$PWD` in a new terminal.
-function M.run_git_add_p()
+function _P.run_git_add_p()
     vim.cmd.split()
-    vim.cmd.terminal(string.format("%s add -p", M._GIT_EXECUTABLE))
+    vim.cmd.terminal(string.format("%s add -p", _GIT_EXECUTABLE))
     vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
 
     local terminal_buffer = vim.api.nvim_get_current_buf()
 
-    M.close_terminal_afterwards(terminal_buffer)
+    _P.close_terminal_afterwards(terminal_buffer)
 end
 
 --- Run raw ripgrep `command`.
@@ -1710,13 +1686,13 @@ function _P.run_ripgrep(command)
     end
 
     local commands = {
-        M._RIPGREP_EXECUTABLE,
+        _RIPGREP_EXECUTABLE,
         "--vimgrep", -- Format: file:line:column:match
         "--smart-case",
         unpack(command),
     }
 
-    if not M.exists_command(commands[1]) then
+    if not _P.exists_command(commands[1]) then
         vim.notify("Cannot do search. No `rg` command was found.", vim.log.levels.ERROR)
 
         return
@@ -1777,18 +1753,18 @@ end
 ---
 ---@param opts _neovim.commandline.Options
 ---
-function M.run_ripgrep_command(opts)
+function _P.run_ripgrep_command(opts)
     if opts.args == "" then
         vim.notify("Usage: :Rg <pattern>", vim.log.levels.WARN)
 
         return
     end
 
-    _P.run_ripgrep(require("modules.features.core_editor_setup").split_quoted_string(opts.args))
+    _P.run_ripgrep(_P.split_quoted_string(opts.args))
 end
 
 --- Show, Select, and Navigate to a buffer from a list of buffers.
-function M.select_buffer()
+function _P.select_buffer()
     ---@type string[]
     local buffers = {}
 
@@ -1800,7 +1776,7 @@ function M.select_buffer()
 
     local window = vim.api.nvim_get_current_win()
 
-    require("modules.features.core_editor_setup").select_from_options(buffers, {
+    _P.select_from_options(buffers, {
         deserialize = function(choice)
             ---@cast choice integer
 
@@ -1826,4 +1802,4 @@ function M.select_buffer()
     })
 end
 
-return M
+end)

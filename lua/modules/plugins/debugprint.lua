@@ -1,11 +1,11 @@
---- Insert simple debug-print statements for the current word or visual selection.
----
---- (It's https://github.com/andrewferrier/debugprint.nvim, basically)
+local _shared = require("modules.utilities.shared_environment")
 
-local _COUNTER = 1
+_shared.run(function()
+--- Print the current word (It's https://github.com/andrewferrier/debugprint.nvim, basically)
+_COUNTER = 1
 
 ---@return string? # Get the visual selection, if it is in visual mode.
-local function _get_selected_word()
+function _get_selected_word()
     local mode = vim.api.nvim_get_mode().mode
 
     if not mode:match("[vV]") then
@@ -16,7 +16,7 @@ local function _get_selected_word()
     local result = vim.fn.join(characters, "")
 
     if mode:match("V") then
-        result = require("modules.features.core_editor_setup").strip_left(result)
+        result = _P.strip_left(result)
     end
 
     return result
@@ -27,7 +27,7 @@ end
 ---@param direction "above" | "below"
 ---    The placement of the inserted print statement.
 ---
-local function _print_word_under_cursor(direction)
+function _print_word_under_cursor(direction)
     local word = _get_selected_word() or vim.fn.expand("<cword>")
     local row = vim.fn.line(".")
     local file_name = vim.fn.expand("%")
@@ -45,7 +45,7 @@ local function _print_word_under_cursor(direction)
             word
         )
     elseif vim.o.filetype == "python" then
-        line = string.format('print(f"DEBUGPRINT[%s]: %s:%s: %s={%s}")', _COUNTER, file_name, row, word, word)
+        line = string.format('print(f"DEBUGPRINT[%s]: %s:%s: %s={%s}")', _COUNTER, file_name, line, word, word)
     else
         _COUNTER = _COUNTER - 1
         vim.notify(string.format('Type "%s" is not supported yet.', vim.o.filetype), vim.log.levels.ERROR)
@@ -69,3 +69,4 @@ end, { noremap = true, desc = "Print the current word below the cursor line." })
 vim.keymap.set({ "n", "v" }, "<leader>iV", function()
     _print_word_under_cursor("above")
 end, { noremap = true, desc = "Print the current word above the cursor line." })
+end)

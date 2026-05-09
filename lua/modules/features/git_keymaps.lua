@@ -1,7 +1,7 @@
---- Define keymaps for staging, committing, resetting, and running git commands from Neovim.
+local _shared = require("modules.utilities.shared_environment")
 
-local _P = {}
-
+_shared.run(function()
+--- git-related keymaps
 --- Run `git add` on the current Vim buffer.
 function _P.git_add_current_buffer()
     local buffer = 0
@@ -51,7 +51,7 @@ function _P.run_git_command(command, directory)
 
     ---@type string[]
     local full_command = {}
-    vim.list_extend(full_command, { require("modules.utilities.core_helpers")._GIT_EXECUTABLE, "-C", directory })
+    vim.list_extend(full_command, { _GIT_EXECUTABLE, "-C", directory })
     vim.list_extend(full_command, command)
 
     vim.system(full_command, { text = true }, function(object)
@@ -86,43 +86,24 @@ vim.keymap.set(
     { desc = "Run `git reset` for all hunks in the current buffer." }
 )
 
-vim.keymap.set(
-    "n",
-    "<leader>gsp",
-    function()
-        require("modules.utilities.core_helpers").push_stash_by_name()
-    end,
-    { desc = "Create a new, named git stash." }
-)
-vim.keymap.set(
-    "n",
-    "<leader>gsa",
-    function()
-        require("modules.features.core_editor_setup").show_git_stashes()
-    end,
-    { desc = "Show the git stashes that are available." }
-)
+vim.keymap.set("n", "<leader>gsp", _P.push_stash_by_name, { desc = "Create a new, named git stash." })
+vim.keymap.set("n", "<leader>gsa", _P.show_git_stashes, { desc = "Show the git stashes that are available." })
 vim.keymap.set(
     "n",
     "<leader>gap",
-    function()
-        require("modules.utilities.core_helpers").run_git_add_p()
-    end,
+    _P.run_git_add_p,
     { noremap = true, silent = true, desc = "Create a terminal and run `git add -p` on it." }
 )
 vim.keymap.set(
     "n",
     "<leader>gph",
-    function()
-        require("modules.utilities.core_helpers").run_git_push()
-    end,
+    _P.run_git_push,
     { noremap = true, silent = true, desc = "Push the committed to changes to the remote branch." }
 )
 vim.keymap.set(
     "n",
     "<leader>gpl",
-    function()
-        require("modules.utilities.core_helpers").run_git_pull()
-    end,
+    _P.run_git_pull,
     { noremap = true, silent = true, desc = "Push the latest commits from the remote branch." }
 )
+end)

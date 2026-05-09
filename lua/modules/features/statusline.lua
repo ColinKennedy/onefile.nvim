@@ -1,11 +1,9 @@
---- Build the custom statusline with mode colors, git branch, Grapple marks, and cursor progress.
+local _shared = require("modules.utilities.shared_environment")
 
-local M = {}
-local _P = {}
-local core_helpers = require("modules.utilities.core_helpers")
-
+_shared.run(function()
+--- Statusline definition
 -- TODO: Make these colors better later
-local _Color = {
+_Color = {
     command = "#e5c07b",
     normal = "#98c379",
     pending = "#98f390",
@@ -15,7 +13,7 @@ local _Color = {
 }
 
 -- Note: termcodes \19 and \22 are ^S and ^V
-local _ModeColor = {
+_ModeColor = {
     ["n"] = { name = "NORMAL", hl = _Color.normal },
     ["no"] = { name = "OP-PENDING", hl = _Color.pending },
     ["nov"] = { name = "OP-PENDING", hl = _Color.pending },
@@ -76,12 +74,12 @@ function _P.clone_highlight(name, source, overrides)
 end
 
 ---@return string # The Neovim statusline for saved grapple buffers
-function M.get_grapple_statusline()
+function _G.get_grapple_statusline()
     ---@type string[]
     local output = {}
     local current_buffer = vim.api.nvim_get_current_buf()
 
-    for index, buffer_number, buffer_path in core_helpers.iter_bookmarks() do
+    for index, buffer_number, buffer_path in _P.iter_bookmarks() do
         local buffer_name = vim.fs.basename(buffer_path)
         local group = "%#StatusGrappleInactive#"
 
@@ -100,14 +98,8 @@ function M.get_grapple_statusline()
     return " " .. table.concat(output, " ") .. " "
 end
 
-_G.get_git_branch_label_safe = function()
-    return require("modules.features.core_editor_setup").get_git_branch_label_safe()
-end
-_G.get_grapple_statusline = M.get_grapple_statusline
-
-
-local dark_lefthand_background = "#2c323c" -- NOTE: Blueish-dark gray
-local lighter_background = "#3e4452" -- NOTE: Just a bit lighter than `dark_lefthand_background`
+dark_lefthand_background = "#2c323c" -- NOTE: Blueish-dark gray
+lighter_background = "#3e4452" -- NOTE: Just a bit lighter than `dark_lefthand_background`
 
 vim.api.nvim_set_hl(0, "StatusMode", {}) -- NOTE: We auto-replace the `bg` in another section.
 vim.api.nvim_set_hl(0, "StatusLine", { fg = "#dddddd", bg = dark_lefthand_background })
@@ -119,21 +111,24 @@ _P.clone_highlight("StatusProgress", "Comment", { fg = "#aaaaaa", bg = lighter_b
 _P.clone_highlight("StatusGrappleInactive", "Comment", { bg = dark_lefthand_background })
 _P.clone_highlight("StatusGrappleActive", "Special", { bold = true, bg = dark_lefthand_background })
 
-local left_arrow = ">"
-local right_arrow = "<"
+left_arrow = ">"
+right_arrow = "<"
 
-if core_helpers._IS_NERDFONT_ALLOWED then
+if _IS_NERDFONT_ALLOWED then
     -- NOTE: Technically these are regular unicodes, not nerd font. But whatever.
     left_arrow = ""
     right_arrow = ""
 end
+
+-- NOTE: This redefines `_P.get_git_branch_label_safe` as a global function.
+_G.get_git_branch_label_safe = _P.get_git_branch_label_safe
 
 vim.o.statusline = table.concat({
     "%#StatusMode#   ",
     "%#StatusModeArrow#",
     left_arrow,
     "%#StatusGit# ",
-    "%{v:lua.get_git_branch_label_safe()} ",
+    "%{%v:lua.get_git_branch_label_safe()%} ",
     "%#StatusLightArrow#",
     left_arrow,
     "%{%v:lua.get_grapple_statusline()%} ",
@@ -172,5 +167,4 @@ vim.api.nvim_create_autocmd({ "ModeChanged", "InsertEnter" }, {
 })
 
 _P.update_status_mode_colors(vim.api.nvim_get_mode().mode)
-
-return M
+end)

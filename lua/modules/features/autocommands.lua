@@ -1,11 +1,10 @@
---- Register filetype and editor autocommands for LSP setup, file reloads, terminal buffers, and formatting.
+local _shared = require("modules.utilities.shared_environment")
 
-local core_helpers = require("modules.utilities.core_helpers")
-local settings_and_lsp_servers = require("modules.features.settings_and_lsp_servers")
-
-for _, data in ipairs(settings_and_lsp_servers.servers) do
+_shared.run(function()
+--- Autocommands
+for _, data in ipairs(servers) do
     vim.api.nvim_create_autocmd("FileType", {
-        group = core_helpers._LSP_GROUP,
+        group = _LSP_GROUP,
         pattern = data.filetypes,
         callback = data.callback,
     })
@@ -18,7 +17,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
         local buffer = vim.api.nvim_get_current_buf()
         local filetype = vim.bo[buffer].filetype
-        local treesitter_language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
+        local treesitter_language = _FILETYPE_TO_TREESITTER[filetype] or filetype
 
         local success, result = pcall(function()
             treesitter.query.get(treesitter_language, "highlights")
@@ -39,13 +38,7 @@ vim.api.nvim_create_autocmd("FileType", {
     end,
 })
 
-vim.api.nvim_create_autocmd("LspAttach", {
-    callback = function(event)
-        ---@cast event _my.lsp_attach.Result
-        require("modules.features.core_editor_setup").setup_lsp_details(event)
-    end,
-    group = core_helpers._LSP_GROUP,
-})
+vim.api.nvim_create_autocmd("LspAttach", { callback = _P.setup_lsp_details, group = _LSP_GROUP })
 
 -- NOTE: Make sure long lines do not wrap to the next line
 vim.api.nvim_create_autocmd("FileType", {
@@ -57,3 +50,4 @@ vim.api.nvim_create_autocmd("FileType", {
         vim.opt_local.signcolumn = "no"
     end,
 })
+end)

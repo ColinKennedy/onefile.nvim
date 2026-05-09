@@ -1,19 +1,20 @@
---- Basic [obsidian](https://obsidian.md) support.
----
---- Instead of supporting
---- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim), which is
---- a huge I just port the commands that I want to keep. And I only need a few commands.
+local _shared = require("modules.utilities.shared_environment")
 
-local _P = {}
+_shared.run(function()
+--- Basic [obsidian](https://obsidian.md) support
+--
+-- Instead of supporting
+-- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim), which is
+-- a huge I just port the commands that I want to keep. And I only need a few commands.
 
 -- NOTE: obsidian.nvim separates the top-level note data from the rest of the
 -- document using these characters.
 --
-local _METADATA_MARKER = "---"
+_METADATA_MARKER = "---"
 -- NOTE: obsidian.nvim uses YAML and aliases is a string[] that starts with "aliases:"
-local _ALIASES_START_MARKER = "aliases:"
-local _CURRENT_WORKSPACE = "politics"
-local _ROOT = os.getenv("NEOVIM_VAULTS_DIRECTORY") or vim.fs.joinpath(vim.fn.expand("~"), "vaults")
+_ALIASES_START_MARKER = "aliases:"
+_CURRENT_WORKSPACE = "politics"
+_ROOT = os.getenv("NEOVIM_VAULTS_DIRECTORY") or vim.fs.joinpath(vim.fn.expand("~"), "vaults")
 
 --- Find the alias from `text`, if any.
 ---
@@ -167,7 +168,7 @@ function _P.search_notes_by_aliases()
 
     local window = vim.api.nvim_get_current_win()
 
-    require("modules.features.core_editor_setup").select_from_options(found, {
+    _P.select_from_options(found, {
         confirm = function(entry)
             vim.api.nvim_set_current_win(window)
             vim.cmd.edit(entry.value)
@@ -248,3 +249,4 @@ vim.api.nvim_create_user_command("Note", function(opts)
     local title = _strip_whitespace(table.concat(opts.fargs, " "))
     _P.create_note(title)
 end, { nargs = "?", desc = "Make a new Obsidian note." })
+end)

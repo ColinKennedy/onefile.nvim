@@ -1,7 +1,7 @@
---- Create, save, and reopen Session.vim files for repository roots.
+local _shared = require("modules.utilities.shared_environment")
 
-local _P = {}
-
+_shared.run(function()
+--- Add mksession support.
 -- This integrates well with [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect)
 --
 -- Important:
@@ -12,8 +12,7 @@ local _P = {}
 -- It's recommended to add this to your ~/.bash_aliases:
 --
 -- ```sh
--- alias es='cp $PWD/${NEOVIM_SESSIONS_DIRECTORY_NAME:-.sessions}/`git branch --show-current`/Session.vim . \
---     2>/dev/null; NVIM_APPNAME=noplugins nvim -S'
+-- alias es='cp $PWD/${NEOVIM_SESSIONS_DIRECTORY_NAME:-.sessions}/`git branch --show-current`/Session.vim . 2>/dev/null; NVIM_APPNAME=noplugins nvim -S'
 -- ```
 --
 -- How it works:
@@ -34,8 +33,7 @@ local _P = {}
 ---@return string? # The recommended Session.vim save location, if any.
 ---
 function _P.get_session_branch_path(reference_path)
-    local core_helpers = require("modules.utilities.core_helpers")
-    local root = core_helpers.get_nearest_project_root(reference_path)
+    local root = _P.get_nearest_project_root(reference_path)
 
     if not root then
         vim.notify(
@@ -46,7 +44,7 @@ function _P.get_session_branch_path(reference_path)
         return nil
     end
 
-    local branch = require("modules.features.core_editor_setup").get_git_branch_safe()
+    local branch = _P.get_git_branch_safe()
 
     if not branch then
         vim.notify(string.format('Cannot save "%s" project. No branch was found.', root), vim.log.levels.ERROR)
@@ -54,7 +52,7 @@ function _P.get_session_branch_path(reference_path)
         return nil
     end
 
-    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, core_helpers._VIM_SESSION_FILE_NAME)
+    return vim.fs.joinpath(root, _SESSIONS_DIRECTORY_NAME, branch, _VIM_SESSION_FILE_NAME)
 end
 
 --- Keep track of the current Vim Session.vim, if there is one.
@@ -95,7 +93,7 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
 
 vim.api.nvim_create_user_command("SessionWrite", function()
     local directory = vim.fn.getcwd()
-    local root = require("modules.utilities.core_helpers").get_nearest_project_root(directory)
+    local root = _P.get_nearest_project_root(directory)
 
     if not root then
         vim.notify(
@@ -117,7 +115,7 @@ vim.api.nvim_create_user_command("SessionWrite", function()
         return
     end
 
-    local session = vim.fs.joinpath(directory, require("modules.utilities.core_helpers")._VIM_SESSION_FILE_NAME)
+    local session = vim.fs.joinpath(directory, _VIM_SESSION_FILE_NAME)
     _P.save_session(session)
     vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
     vim.uv.fs_copyfile(session, path)
@@ -125,3 +123,4 @@ end, {
     nargs = 0,
     desc = "Write a session to the current git repository's branch.",
 })
+end)

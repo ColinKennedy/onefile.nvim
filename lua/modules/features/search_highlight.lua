@@ -1,10 +1,9 @@
---- Manage search highlighting so matches clear when the cursor leaves them.
+local _shared = require("modules.utilities.shared_environment")
 
-local _P = {}
-
--- Reference: https://github.com/vim/vim/issues/17187#issuecomment-2820531752
-local _GROUP = vim.api.nvim_create_augroup("my.highlighter.word_search", { clear = true })
-local _PLUG_MAPPING = "<Plug>(StopHL)"
+_shared.run(function()
+mouse=a-- Reference: https://github.com/vim/vim/issues/17187#issuecomment-2820531752
+_GROUP = vim.api.nvim_create_augroup("my.highlighter.word_search", { clear = true })
+_PLUG_MAPPING = "<Plug>(StopHL)"
 
 vim.keymap.set({ "n", "i" }, _PLUG_MAPPING, function()
     vim.cmd("nohlsearch")
@@ -42,3 +41,4 @@ vim.api.nvim_create_autocmd("InsertEnter", {
     group = _GROUP,
     callback = _P.stop_highlighting_search_text,
 })
+end)

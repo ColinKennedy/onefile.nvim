@@ -1,11 +1,7 @@
---- Make `p` behave as a text-object operator for replacing motions and text objects.
+local _shared = require("modules.utilities.shared_environment")
 
-local M = {}
-local _P = {}
-
-_P.operatorfunc_caller = nil
-_P.operatorfunc_original = nil
-
+_shared.run(function()
+--- Make text-objects to work with `p`. e.g. `piw`
 --- Change `p` into a text-object-aware operator.
 ---
 ---@param type_ "char" | "line" The type of operator to consider.
@@ -36,33 +32,28 @@ end
 ---
 function _P.wrap_operatorfunc(caller)
     return function()
-        _P.operatorfunc_caller = caller
-        _P.operatorfunc_original = vim.go.operatorfunc
-        vim.go.operatorfunc = "v:lua.require'modules.features.put_text_objects'.temporary_operator_paste"
+        local original = vim.go.operatorfunc
+
+        --- Call operatorfunc with `type_` and then cleanup everything.
+        ---
+        --- We clean up after ourselves so there are no side-effects from
+        --- the operatorfunc work we have been doing up until now.
+        ---
+        ---@param type_ "char" | "line"
+        ---    An indicator from Vim which operator mode we're in.
+        ---    See `:help Operator-pending-mode` for details. e.g. `"char"`.
+        ---
+        function _G.temporary_operator_paste(type_)
+            caller(type_)
+
+            vim.go.operatorfunc = original
+            _G.temporary_operator_paste = nil
+        end
+
+        vim.go.operatorfunc = "v:lua.temporary_operator_paste"
 
         return "g@"
     end
-end
-
---- Call operatorfunc with `type_` and then cleanup everything.
----
---- We clean up after ourselves so there are no side-effects from
---- the operatorfunc work we have been doing up until now.
----
----@param type_ "char" | "line"
----    An indicator from Vim which operator mode we're in.
----    See `:help Operator-pending-mode` for details. e.g. `"char"`.
----
-function M.temporary_operator_paste(type_)
-    local caller = _P.operatorfunc_caller
-
-    if caller then
-        caller(type_)
-    end
-
-    vim.go.operatorfunc = _P.operatorfunc_original or ""
-    _P.operatorfunc_caller = nil
-    _P.operatorfunc_original = nil
 end
 
 vim.keymap.set(
@@ -74,5 +65,4 @@ vim.keymap.set(
 vim.keymap.set("n", "PP", "P", { noremap = true, silent = true, desc = "Paste the text." })
 vim.keymap.set("n", "pp", "p", { noremap = true, silent = true, desc = "Paste the text." })
 vim.keymap.set("n", "P", "<Nop>", { noremap = true, silent = true, desc = "Disable pasting with P." })
-
-return M
+end)

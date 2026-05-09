@@ -1,5 +1,7 @@
---- Define insert-mode auto-pair mappings for brackets, quotes, and backspace cleanup.
+local _shared = require("modules.utilities.shared_environment")
 
+_shared.run(function()
+--- auto-pairs functionality
 --- Whenever `character` is typed, check if we want to move the cursor right instead.
 ---
 --- If `character` like `")"` is already in the buffer and is the cursor is
@@ -8,7 +10,7 @@
 ---
 ---@param character string An ending character. e.g. `")"`.
 ---
-local function _define_close_mapping(character)
+function _define_close_mapping(character)
     vim.keymap.set("i", character, function()
         local line = vim.api.nvim_get_current_line()
         local column = vim.api.nvim_win_get_cursor(0)[2]
@@ -27,7 +29,7 @@ end
 ---@param open string A starting character. e.g. `"("`.
 ---@param close string An ending character. e.g. `")"`.
 ---
-local function _define_open_mapping(open, close)
+function _define_open_mapping(open, close)
     local reverse_characters = string.rep("<Left>", #close)
 
     vim.keymap.set("i", open, function()
@@ -35,7 +37,7 @@ local function _define_open_mapping(open, close)
     end, { expr = true, desc = "Create an open + close pair and move the cursor to the middle." })
 end
 
-local _PAIRS = {
+_PAIRS = {
     ["("] = ")",
     ["["] = "]",
     ["{"] = "}",
@@ -46,7 +48,7 @@ local _PAIRS = {
     ["`"] = "`",
 }
 
-local _CLOSING_PAIRS = {
+_CLOSING_PAIRS = {
     ")",
     "]",
     "}",
@@ -77,3 +79,4 @@ vim.keymap.set("i", "<BS>", function()
 
     return "<BS>"
 end, { expr = true, desc = "Delete the open and close pair characters at once." })
+end)

@@ -1,5 +1,7 @@
---- Configure diagnostic signs and highlight colors.
+local _shared = require("modules.utilities.shared_environment")
 
+_shared.run(function()
+--- Diagnostic symbols and colors
 -- The ctermfg colors are determined by your terminal (``echo $TERM``). Mine is
 -- ``screen-256color`` at the time of writing. Their chart is located here:
 --
@@ -36,8 +38,7 @@ vim.cmd("highlight LspDiagnosticsUnderlineHint guifg=NONE ctermfg=NONE cterm=und
 if vim.fn.has("nvim-0.10") then
     vim.diagnostic.config({
         -- Reference: https://github.com/neovim/neovim/commit/ad191be65e2b1641c181506166b1037b548d14a8
-        -- Reference:
--- https://www.reddit.com/r/neovim/comments/10jh2jm/comment/j5koxew/
+        -- Reference: https://www.reddit.com/r/neovim/comments/10jh2jm/comment/j5koxew/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button
         --
         severity_sort = true,
         signs = {
@@ -98,3 +99,4 @@ vim.lsp.handlers["textDocument/hover"] = function()
 end
 
 vim.diagnostic.config({ float = { border = "rounded" } })
+end)

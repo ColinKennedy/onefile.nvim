@@ -1,15 +1,12 @@
---- Configure editor options and collect built-in LSP server definitions.
+local _shared = require("modules.utilities.shared_environment")
 
-local M = {}
-
+_shared.run(function()
+--- Settings and LSP server definitions
 
 ---------- Saver [Start] ----------
 -- NOTE: Create the :AsyncWrite command (for writing without blocking Neovim)
 vim.api.nvim_create_user_command("AsyncWrite", function()
-    local work = vim.loop.new_work(
-        require("modules.features.core_editor_setup").write_async,
-        require("modules.utilities.core_helpers").check_async_write
-    )
+    local work = vim.loop.new_work(_P.write_async, _P.check_async_write)
     local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
     work:queue(vim.api.nvim_buf_get_name(0), table.concat(lines, "\n"))
 end, { desc = "Write all buffer lines to-disk in a separate thread." })
@@ -24,7 +21,7 @@ vim.opt.guicursor = "" -- Keeps the "fat cursor" in INSERT Mode
 vim.opt.swapfile = false
 vim.opt.backup = false
 vim.opt.undofile = true
-local temporary_directory = os.getenv("HOME") or os.getenv("APPDATA")
+temporary_directory = os.getenv("HOME") or os.getenv("APPDATA")
 vim.opt.undodir = temporary_directory .. "/.vim/undodir"
 vim.api.nvim_create_autocmd("BufWritePost", {
     pattern = "*",
@@ -67,7 +64,7 @@ vim.g.editorconfig = false
 vim.opt.shell = os.getenv("NEOVIM_SHELL_COMMAND") or vim.opt.shell
 
 ---@type _my.lsp.ServerDefinition[]
-M.servers = {
+servers = {
     {
         name = "basedpyright",
         filetypes = "python",
@@ -101,7 +98,7 @@ M.servers = {
         name = "lua_ls",
         filetypes = { "lua" },
         callback = function(event)
-            local paths = vim.tbl_deep_extend("force", {}, require("modules.utilities.core_helpers")._LUA_ROOT_PATHS)
+            local paths = vim.tbl_deep_extend("force", {}, _LUA_ROOT_PATHS)
             table.insert(paths, ".git")
 
             local command = "lua-language-server"
@@ -126,4 +123,4 @@ M.servers = {
     },
 }
 
-return M
+end)

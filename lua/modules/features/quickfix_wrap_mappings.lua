@@ -1,5 +1,7 @@
----- Make [q + ]q / [l + ]l mappings auto-wrap. Seriously why are these not the default?
+local _shared = require("modules.utilities.shared_environment")
 
+_shared.run(function()
+--- Make []q/[]l mappings auto-wrap. Seriously why are these not the default?
 vim.keymap.set("n", "[q", function()
     local success = pcall(vim.cmd.cprevious)
 
@@ -31,3 +33,4 @@ vim.keymap.set("n", "]l", function()
         vim.cmd.lfirst()
     end
 end, { desc = "Go to the next Location List entry or wrap around to the start.", silent = true })
+end)

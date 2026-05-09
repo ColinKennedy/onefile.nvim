@@ -1,8 +1,10 @@
---- Register a :Git command that runs git output in a scratch buffer.
+local _shared = require("modules.utilities.shared_environment")
 
+_shared.run(function()
+--- A really basic git command wrapper.
 vim.api.nvim_create_user_command("Git", function(opts)
     local arguments = table.concat(opts.fargs, " ")
-    local command = string.format("%s %s", require("modules.utilities.core_helpers")._GIT_EXECUTABLE, arguments)
+    local command = string.format("%s %s", _GIT_EXECUTABLE, arguments)
 
     vim.cmd.split()
     vim.cmd.enew()
@@ -28,7 +30,8 @@ vim.api.nvim_create_user_command("Git", function(opts)
 end, {
     desc = "A basic git wrapper.",
     nargs = "+",
-    complete = function(_, _line)
+    complete = function(_, line)
         return { "add", "commit", "diff", "log", "pull", "push", "status" }
     end,
 })
+end)

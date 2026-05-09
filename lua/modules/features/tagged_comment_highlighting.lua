@@ -1,12 +1,12 @@
---- Highlight tagged inline comments such as TODO, NOTE, and FIXME without plugins.
----
+local _shared = require("modules.utilities.shared_environment")
+
+_shared.run(function()
 --- This is a "poor man's https://github.com/folke/todo-comments.nvim".
-
-local _P = {}
-
+---
+--- It highlights tagged inline comments with a unique color.
 
 ---@enum _my.ColorType A custom color alias (used to compute real colors later).
-local _ColorType = {
+_ColorType = {
     default = "default",
     error = "error",
     hint = "hint",
@@ -35,7 +35,7 @@ local _ColorType = {
 ---    The rest of the inline comment is colored using this Vim highlight group.
 
 ---@type table<string, {links: string[], fallback: string}>
-local _COLOR_TYPES = {
+_COLOR_TYPES = {
     default = { links = { "Identifier" }, fallback = "#7C3AED" },
     error = { links = { "DiagnosticError", "ErrorMsg" }, fallback = "#DC2626" },
     hint = { links = { "DiagnosticHint" }, fallback = "#10B981" },
@@ -43,10 +43,10 @@ local _COLOR_TYPES = {
     warning = { links = { "DiagnosticWarn", "WarningMsg" }, fallback = "#FBBF24" },
 }
 
-local _COMMENT_HIGHLIGHT = vim.api.nvim_create_namespace("my.comment.highlighter")
+_COMMENT_HIGHLIGHT = vim.api.nvim_create_namespace("my.comment.highlighter")
 
 ---@type _my.comment.ColorOptions[]
-local _COMMENT_TYPES = {
+_COMMENT_TYPES = {
     {
         highlight_prefix = "Fix",
         match_texts = { "FIX", "FIXME", "BUG", "IMPORTANT", "ISSUE" },
@@ -140,7 +140,7 @@ function _P.get_text_foreground_highlight_name(text)
 end
 
 ---@type table<string, _my.comment.HighlightGroup>
-local _COMMENT_MATCHES = {}
+_COMMENT_MATCHES = {}
 
 for _, group in ipairs(_COMMENT_TYPES) do
     local text_highlight_name = _P.get_text_foreground_highlight_name(group.highlight_prefix)
@@ -167,10 +167,10 @@ end
 --- Check for the last inline comment line, of `lines`, starting from `start`.
 ---
 ---@param start integer The first line to check from, inclusive.
----@param _lines string[] The source code lines to check for more comments.
+---@param lines string[] The source code lines to check for more comments.
 ---@return integer # The last comment line. If none are found, `start` is returned.
 ---
-function _P.get_end_line(start, _lines)
+function _P.get_end_line(start, lines)
     -- TODO: Add support for this later
     return start
 end
@@ -218,7 +218,7 @@ function _P.highlight_matching_line(buffer, highlight_groups, line, columns)
 end
 
 -- TODO: Add support for this later
-function _P.highlight_other_lines(_buffer, _highlight_name, start_line, end_line, _lines)
+function _P.highlight_other_lines(buffer, highlight_name, start_line, end_line, lines)
     local current = start_line
 
     while current < end_line do
@@ -293,10 +293,10 @@ end
 
 --- Use tree-sitter to find and highlight all inline comments.
 ---
----@param _buffer integer A Vim buffer to highlight.
----@param _tree TSTree The parsed tree-sitter graph.
+---@param buffer integer A Vim buffer to highlight.
+---@param tree TSTree The parsed tree-sitter graph.
 ---
-local function _highlight_using_neovim_treesitter(_buffer, _tree)
+function _highlight_using_neovim_treesitter(buffer, tree)
     error("TODO: add support for _highlight_using_neovim_treesitter later")
 end
 
@@ -304,13 +304,14 @@ end
 ---
 --- We use tree-sitter to find the comments if we can. And use regex if we can't.
 ---
-local function _highlight_comments()
+function _highlight_comments()
     local buffer = vim.api.nvim_get_current_buf()
     local status, parser = pcall(function()
         vim.treesitter.get_parser(buffer)
     end)
 
     vim.api.nvim_buf_clear_namespace(0, _COMMENT_HIGHLIGHT, 0, -1)
+    local buffer = vim.api.nvim_get_current_buf()
 
     if not status or not parser then
         _P.highlight_using_vim_commentstring_regex(buffer)
@@ -322,7 +323,7 @@ local function _highlight_comments()
 end
 
 --- Only highlight a buffer's text if needed.
-local function _highlight_comments_if_needed()
+function _highlight_comments_if_needed()
     if vim.bo.buftype == "terminal" then
         -- NOTE: terminals don't need these kind of highlights, ever.
         return
@@ -331,12 +332,11 @@ local function _highlight_comments_if_needed()
     _highlight_comments()
 end
 
-local _ = _highlight_comments_if_needed
-
 -- TODO: This code doesn't work. Fix it later.
 -- vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile", "BufWritePost", "TextChanged", "TextChangedI" }, {
 --     -- TODO: Fix this later. It's broken. The colors are often wrong and don't apply correctly
---     callback = core_helpers.debounce_trailing(_highlight_comments_if_needed, 300),
+--     callback = _P.debounce_trailing(_highlight_comments_if_needed, 300),
 -- })
 --
 -- vim.schedule(_highlight_comments_if_needed)
+end)

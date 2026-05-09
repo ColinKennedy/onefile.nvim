@@ -1,11 +1,13 @@
---- Define the `ii` text object for selecting same-indent blocks.
+local _shared = require("modules.utilities.shared_environment")
 
+_shared.run(function()
+--- The `ii` indentwise text-object
 --- Find the first column that is not whitespace for some `line`.
 ---
 ---@param line integer | string The 1-or-more index of some Vim buffer to search for text.
 ---@return integer # A 1-or-more found column value.
 ---
-local function _get_first_non_whitespace_column(line)
+function _get_first_non_whitespace_column(line)
     line = vim.fn.getline(line)
     local _, column = string.find(line, "^%s*")
 
@@ -17,7 +19,7 @@ end
 ---@param line integer | string The 1-or-more index of some Vim buffer to search for text.
 ---@return integer # A 1-or-more found column value.
 ---
-local function _get_last_non_whitespace_column(line)
+function _get_last_non_whitespace_column(line)
     line = vim.fn.getline(line)
     local trimmed = string.match(line, "^(.-)%s*$")
     return #trimmed + 1 -- again, Lua is 1-indexed
@@ -30,7 +32,7 @@ end
 ---    greater" are selected. If `true` then empty newlines are also included
 ---    in the selection.
 ---
-local function select_same_indent(allow_empty_line)
+function select_same_indent(allow_empty_line)
     allow_empty_line = allow_empty_line or false
     local current_line = vim.fn.line(".")
     local indent = vim.fn.indent(current_line)
@@ -82,7 +84,7 @@ local function select_same_indent(allow_empty_line)
     start_line = start_line + 1
     end_line = end_line - 1
 
-    require("modules.features.core_editor_setup").set_text_object_marks(
+    _P.set_text_object_marks(
         start_line,
         _get_first_non_whitespace_column(start_line) - 1,
         end_line,
@@ -96,3 +98,4 @@ end, { desc = "Select block with same indentation, stop at whitespace lines." })
 vim.keymap.set({ "o", "x" }, "iI", function()
     select_same_indent(true)
 end, { desc = "Select block with same indentation, ignore whitespace lines." })
+end)

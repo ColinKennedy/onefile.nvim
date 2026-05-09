@@ -1,99 +1,99 @@
 local _shared = require("modules.utilities.shared_environment")
 
 _shared.run(function()
---- Commands
-_REPOSITORY_ROOT = { ".git" }
-_REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
-table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
+    --- Commands
+    _REPOSITORY_ROOT = { ".git" }
+    _REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
+    table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
 
-vim.api.nvim_create_user_command("Rg", _P.run_ripgrep_command, { nargs = 1, desc = "Search using ripgrep." })
+    vim.api.nvim_create_user_command("Rg", _P.run_ripgrep_command, { nargs = 1, desc = "Search using ripgrep." })
 
---- Find the nearest directory that matches `pattern`.
----
----@param pattern string[] a file name. e.g. `"tox.ini"`.
----@return string? # The found directory, if any.
----
-function _get_directory(pattern)
-    local directory = vim.fs.root(0, pattern) or vim.fs.root(vim.fn.getcwd(), pattern)
+    --- Find the nearest directory that matches `pattern`.
+    ---
+    ---@param pattern string[] a file name. e.g. `"tox.ini"`.
+    ---@return string? # The found directory, if any.
+    ---
+    function _get_directory(pattern)
+        local directory = vim.fs.root(0, pattern) or vim.fs.root(vim.fn.getcwd(), pattern)
 
-    if directory then
-        return directory
+        if directory then
+            return directory
+        end
+
+        vim.notify(
+            string.format('No "%s" root could be found from this buffer or from "%s" directory.', vim.fn.getcwd()),
+            vim.log.levels.ERROR
+        )
+
+        return nil
     end
 
-    vim.notify(
-        string.format('No "%s" root could be found from this buffer or from "%s" directory.', vim.fn.getcwd()),
-        vim.log.levels.ERROR
+    --- Run ripgrep from `directory` with `options`.
+    ---
+    ---@param directory string The path on-disk to start searching from within.
+    ---@param options {fargs: string[]} User-provided arguments to add to the `rg` command.
+    ---
+    function _run_rg(directory, options)
+        local command = { "Rg" }
+        vim.list_extend(command, options.fargs)
+        table.insert(command, directory)
+        vim.cmd(vim.fn.join(command, " "))
+    end
+
+    vim.api.nvim_create_user_command("Crg", function(options)
+        local path = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
+        local directory
+
+        if path == "" then
+            directory = vim.fn.getcwd()
+        else
+            directory = vim.fs.dirname(path)
+        end
+
+        _run_rg(directory, options)
+    end, {
+        desc = "From the [C]urrent file, search with [r]ip[g]rep.",
+        nargs = "*",
+    })
+
+    vim.api.nvim_create_user_command("Rrg", function(options)
+        local directory = _get_directory(_REPOSITORY_ROOT)
+
+        if not directory then
+            return
+        end
+
+        _run_rg(directory, options)
+    end, {
+        desc = "From the [R]repository, search with [r]ip[g]rep.",
+        nargs = "*",
+    })
+
+    vim.api.nvim_create_user_command("Prg", function(options)
+        local directory = _get_directory(_REPOSITORY_OR_PROJECT_ROOT)
+
+        if not directory then
+            return
+        end
+
+        _run_rg(directory, options)
+    end, {
+        desc = "From the [P]roject directory, search with [r]ip[g]rep.",
+        nargs = "*",
+    })
+
+    vim.api.nvim_create_user_command(
+        "Pcd",
+        _P.cd_to_parent_project_root,
+        { nargs = 0, desc = "From the [P]roject, [c]hange [d]irectory." }
     )
-
-    return nil
-end
-
---- Run ripgrep from `directory` with `options`.
----
----@param directory string The path on-disk to start searching from within.
----@param options {fargs: string[]} User-provided arguments to add to the `rg` command.
----
-function _run_rg(directory, options)
-    local command = { "Rg" }
-    vim.list_extend(command, options.fargs)
-    table.insert(command, directory)
-    vim.cmd(vim.fn.join(command, " "))
-end
-
-vim.api.nvim_create_user_command("Crg", function(options)
-    local path = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
-    local directory
-
-    if path == "" then
-        directory = vim.fn.getcwd()
-    else
-        directory = vim.fs.dirname(path)
-    end
-
-    _run_rg(directory, options)
-end, {
-    desc = "From the [C]urrent file, search with [r]ip[g]rep.",
-    nargs = "*",
-})
-
-vim.api.nvim_create_user_command("Rrg", function(options)
-    local directory = _get_directory(_REPOSITORY_ROOT)
-
-    if not directory then
-        return
-    end
-
-    _run_rg(directory, options)
-end, {
-    desc = "From the [R]repository, search with [r]ip[g]rep.",
-    nargs = "*",
-})
-
-vim.api.nvim_create_user_command("Prg", function(options)
-    local directory = _get_directory(_REPOSITORY_OR_PROJECT_ROOT)
-
-    if not directory then
-        return
-    end
-
-    _run_rg(directory, options)
-end, {
-    desc = "From the [P]roject directory, search with [r]ip[g]rep.",
-    nargs = "*",
-})
-
-vim.api.nvim_create_user_command(
-    "Pcd",
-    _P.cd_to_parent_project_root,
-    { nargs = 0, desc = "From the [P]roject, [c]hange [d]irectory." }
-)
-vim.api.nvim_create_user_command("Cedit", function(opts)
-    _P.open_relative(opts.args)
-end, {
-    complete = function(text)
-        return _P.complete_relative(text)
-    end,
-    nargs = 1,
-    desc = "Open a file using a relative file path.",
-})
+    vim.api.nvim_create_user_command("Cedit", function(opts)
+        _P.open_relative(opts.args)
+    end, {
+        complete = function(text)
+            return _P.complete_relative(text)
+        end,
+        nargs = 1,
+        desc = "Open a file using a relative file path.",
+    })
 end)

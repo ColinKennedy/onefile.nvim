@@ -910,139 +910,156 @@ end
 ---
 ---@param query string Some user input to check.
 ---@param candidate string A possible match to consider.
----@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
+---@return number? # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
 ---
 function M.get_fuzzy_match_score(query, candidate)
-    --- Remove all punctuation and special characters and lowercase `text`.
+    --- Return true if `query_` is one small typo away from `candidate_`.
     ---
-    ---@param text string The user input string to simplify.
-    ---@return string # The simplified, basic-ASCII-only string.
+    --- This is intentionally bounded. It catches the common interactive-search
+    --- mistakes without doing full edit-distance work for every candidate.
     ---
-    local function normalize(text)
-        text = text:lower()
+    ---@param query_ string Some normalized user input.
+    ---@param candidate_ string Some normalized candidate text.
+    ---@return boolean # Whether the typo-tolerant fallback matched.
+    ---
+    local function is_near_typo(query_, candidate_)
+        local query_length = #query_
+        local candidate_length = #candidate_
 
-        return (text:gsub("[^%w%s]", ""))
+        if query_length == 0 then
+            return true
+        end
+
+        if math.abs(query_length - candidate_length) > 1 then
+            return false
+        end
+
+        local query_index = 1
+        local candidate_index = 1
+        local edits = 0
+
+        while query_index <= query_length and candidate_index <= candidate_length do
+            local query_character = query_:sub(query_index, query_index)
+            local candidate_character = candidate_:sub(candidate_index, candidate_index)
+
+            if query_character == candidate_character then
+                query_index = query_index + 1
+                candidate_index = candidate_index + 1
+            else
+                edits = edits + 1
+
+                if edits > 1 then
+                    return false
+                end
+
+                local next_query = query_:sub(query_index + 1, query_index + 1)
+                local next_candidate = candidate_:sub(candidate_index + 1, candidate_index + 1)
+
+                if query_character == next_candidate and next_query == candidate_character then
+                    query_index = query_index + 2
+                    candidate_index = candidate_index + 2
+                elseif query_length > candidate_length then
+                    query_index = query_index + 1
+                elseif candidate_length > query_length then
+                    candidate_index = candidate_index + 1
+                else
+                    query_index = query_index + 1
+                    candidate_index = candidate_index + 1
+                end
+            end
+        end
+
+        if query_index <= query_length or candidate_index <= candidate_length then
+            edits = edits + 1
+        end
+
+        return edits <= 1
     end
 
-    --- Score how well a single query matches a single candidate token.
+    --- Score a fuzzy subsequence match in a single pass over `candidate_`.
     ---
-    ---@param query_ string Some user input to check.
-    ---@param candidate_ string A possible match to consider.
-    ---@return number # A 0-to-1 similarity score. 1 means "exact match", 0 means "no match".
+    ---@param query_ string Some normalized user input.
+    ---@param candidate_ string Some normalized candidate text.
+    ---@return number? # A sortable score, or nil if the query does not match.
     ---
-    local function token_score(query_, candidate_)
-        -- NOTE: Check for an exact or substring match.
-        if candidate_:find(query_, 1, true) then
-            return 1.0
+    local function subsequence_score(query_, candidate_)
+        if query_ == '' then
+            return 1
         end
 
-        -- NOTE: Typo tolerance by checking the distance between our numbers.
-        local distance = _P.levenshtein(query_, candidate_)
-        local maximum = math.max(#query_, #candidate_)
-        local similarity = 1.0 - (distance / maximum)
+        local direct_start = candidate_:find(query_, 1, true)
 
-        -- NOTE: Discard very weak matches.
-        if similarity < 0.4 then
-            return 0
+        if direct_start then
+            return 10000 - direct_start - (#candidate_ - #query_)
         end
 
-        return similarity
+        local query_index = 1
+        local score = 0
+        local streak = 0
+        local last_match = 0
+        local first_match = nil
+
+        for candidate_index = 1, #candidate_ do
+            if query_index > #query_ then
+                break
+            end
+
+            local query_character = query_:sub(query_index, query_index)
+            local candidate_character = candidate_:sub(candidate_index, candidate_index)
+
+            if query_character == candidate_character then
+                first_match = first_match or candidate_index
+
+                if candidate_index == last_match + 1 then
+                    streak = streak + 1
+                else
+                    streak = 1
+                end
+
+                local previous = candidate_index == 1 and '/' or candidate_:sub(candidate_index - 1, candidate_index - 1)
+                local is_boundary = previous:match('[%s%-%_%.%/]') ~= nil
+
+                score = score + 40 + (streak * 12)
+
+                if is_boundary then
+                    score = score + 35
+                end
+
+                if candidate_index == query_index then
+                    score = score + 20
+                end
+
+                last_match = candidate_index
+                query_index = query_index + 1
+            end
+        end
+
+        if query_index <= #query_ then
+            return nil
+        end
+
+        return score - ((first_match or 1) * 2) - (#candidate_ - #query_)
     end
 
-    local query_words = _P.get_split_words(normalize(query))
-    local candidate_words = _P.get_split_words(normalize(candidate))
+    local normalized_query = query:lower():gsub('[^%w%s%-%_%.%/]', '')
+    local normalized_candidate = candidate:lower():gsub('[^%w%s%-%_%.%/]', '')
 
-    local score = 0
-    local matched = 0
+    local score = subsequence_score(normalized_query, normalized_candidate)
 
-    for _, query_word in ipairs(query_words) do
-        local best = 0
+    if score then
+        return score
+    end
 
-        for _, cw in ipairs(candidate_words) do
-            best = math.max(best, token_score(query_word, cw))
-        end
-
-        if best > 0 then
-            matched = matched + 1
-            score = score + best
-        else
-            -- strong penalty for missing query tokens
-            score = score - 1.5
+    -- Keep typo tolerance cheap: only compare the query against individual path
+    -- pieces whose length is close enough for one edit or transposition.
+    for token in normalized_candidate:gmatch('[%w]+') do
+        if math.abs(#normalized_query - #token) <= 1 and is_near_typo(normalized_query, token) then
+            return 15 - math.abs(#normalized_query - #token) - (#token / 100)
         end
     end
 
-    -- normalize by query length
-    return score / #query_words
+    return nil
 end
-
--- TODO: Remove this later
--- --- Rate how closely `target` matches `input`.
--- ---
--- ---@param input string
--- ---    Some user text to look for. e.g. `"fb"`.
--- ---@param target string
--- ---    The possible text to match against. e.g. `"football"`.
--- ---@return integer?
--- ---    If no match, return `nil`. If a strong match, return `0`. Weaker matches
--- ---    will be higher numbers.
--- ---
--- function M.get_fuzzy_match_score(input, target)
---     local input_lower = input:lower()
---     local target_lower = target:lower()
---     local position = 1
---     local score = 0
---     local last_match = 0
---     local first_match = nil
---
---     local input_length = #input_lower
---
---     for index = 1, input_length do
---         local character = input_lower:sub(index, index)
---         local found = false
---
---         while position <= #target_lower do
---             if target_lower:sub(position, position) == character then
---                 if not first_match then
---                     first_match = position
---                 end
---
---                 if last_match > 0 then
---                     score = score + (position - last_match)
---                 end
---
---                 last_match = position
---                 position = position + 1
---                 found = true
---
---                 break
---             end
---
---             position = position + 1
---         end
---
---         if not found then
---             return nil
---         end
---     end
---
---     first_match = first_match or 1
---     -- NOTE: Late start penalty
---     score = score + (first_match - 1)
---
---     -- NOTE: The span penalty can be pretty harsh whenever `target` is a long
---     -- string. To prevent any problems, we "normalize" it so short strings
---     -- don't have an advantage.
---     --
---     local span = last_match - first_match
---     local ideal_span = input_length - 1
---
---     if span > ideal_span then
---         local normalized_spread = (span - ideal_span) / #target_lower
---         score = score + normalized_spread * input_length
---     end
---
---     return score
--- end
 
 ---@return string[] # Every file or directory on-disk that could be helpfiles.
 function M.get_helptag_search_paths()

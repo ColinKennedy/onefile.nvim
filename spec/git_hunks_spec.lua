@@ -1,3 +1,8 @@
+--- Run a Git command inside `root`.
+---
+---@param root string The Git repository root.
+---@param arguments string[] The Git arguments to run after `-C root`.
+---@return string # The command's standard output.
 local function run_git(root, arguments)
     local command = { "git", "-C", root }
     vim.list_extend(command, arguments)
@@ -9,12 +14,19 @@ local function run_git(root, arguments)
     return result.stdout or ""
 end
 
+--- Write exact text to `path`.
+---
+---@param path string The path to write.
+---@param text string The text contents to write.
 local function write_text(path, text)
     local file = assert(vim.uv.fs_open(path, "w", 438))
     assert(vim.uv.fs_write(file, text, 0))
     vim.uv.fs_close(file)
 end
 
+--- Create a temporary Git repository for integration tests.
+---
+---@return string # The temporary repository root.
 local function make_repo()
     local root = vim.fn.tempname()
     assert.equal(1, vim.fn.mkdir(root, "p"))
@@ -28,18 +40,28 @@ local function make_repo()
     return root
 end
 
+--- Remove a temporary test directory after leaving its buffer.
+---
+---@param path string The directory to remove.
 local function remove_tree(path)
     vim.cmd("enew!")
     vim.wait(20)
     vim.fn.delete(path, "rf")
 end
 
+--- Edit `path` in the current Neovim session and replace its lines.
+---
+---@param path string The file path to edit.
+---@param lines string[] The buffer lines to set.
 local function edit_file(path, lines)
     vim.cmd("silent edit " .. vim.fn.fnameescape(path))
     vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
     vim.bo.endofline = true
 end
 
+--- Capture notifications while `callback` runs and replay them only on failure.
+---
+---@param callback fun(): nil The test body to run quietly.
 local function with_captured_notifications(callback)
     local notify = vim.notify
     local messages = {}
@@ -62,6 +84,9 @@ local function with_captured_notifications(callback)
     assert(ok, err)
 end
 
+--- Get the currently placed git-gutter sign lines.
+---
+---@return integer[] # The sorted sign line numbers.
 local function get_gutter_lines()
     local placed = vim.fn.sign_getplaced(vim.api.nvim_get_current_buf(), { group = "my.git_gutter" })
     local signs = placed[1] and placed[1].signs or {}

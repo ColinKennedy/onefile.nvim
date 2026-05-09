@@ -27,6 +27,10 @@ local function _notify_error(message)
     vim.notify(message, vim.log.levels.ERROR)
 end
 
+---@class _my.git_hunks.RangeCommandOptions
+---@field line1 integer The first command range line.
+---@field line2 integer The last command range line.
+
 --- Run a visual Git hunk action for selected lines.
 ---
 ---@param action "stage" | "reset" The index operation to run.
@@ -131,13 +135,29 @@ function M.apply_selection(action, start_line, end_line)
     require("modules.features.git_gutter").update(buffer)
 end
 
-vim.api.nvim_create_user_command("GitStageSelection", function(options)
+--- Stage a ranged Git hunk selection.
+---
+---@param options _my.git_hunks.RangeCommandOptions The command range details.
+local function _stage_selection_command(options)
     M.apply_selection("stage", options.line1, options.line2)
-end, { range = true, desc = "Stage selected Git hunk lines." })
+end
 
-vim.api.nvim_create_user_command("GitResetSelection", function(options)
+--- Reset a ranged Git hunk selection from the index.
+---
+---@param options _my.git_hunks.RangeCommandOptions The command range details.
+local function _reset_selection_command(options)
     M.apply_selection("reset", options.line1, options.line2)
-end, { range = true, desc = "Reset selected Git hunk lines from the index." })
+end
+
+vim.api.nvim_create_user_command("GitStageSelection", _stage_selection_command, {
+    range = true,
+    desc = "Stage selected Git hunk lines.",
+})
+
+vim.api.nvim_create_user_command("GitResetSelection", _reset_selection_command, {
+    range = true,
+    desc = "Reset selected Git hunk lines from the index.",
+})
 
 vim.keymap.set("x", "<leader>gah", ":GitStageSelection<CR>", { desc = "Stage selected Git hunk lines." })
 

@@ -3,6 +3,7 @@
 local core_helpers = require("modules.utilities.core_helpers")
 
 local M = {}
+local _P = {}
 
 ---@class _my.git_diff.FileDetails
 ---@field absolute_path string
@@ -36,7 +37,13 @@ local M = {}
 ---@field deletes _my.git_diff.Operation[]
 ---@field adds _my.git_diff.Operation[]
 
-local _CONTEXT_LINE_COUNT = 3
+---@class _my.git_diff.SelectionHunk
+---@field old_start integer
+---@field old_count integer
+---@field new_start integer
+---@field new_count integer
+---@field removed string[]
+---@field added string[]
 
 --- Split `text` into lines without keeping a trailing empty item from final newline.
 ---
@@ -62,7 +69,7 @@ end
 ---@param lines string[] Some lines to join.
 ---@return string # The joined text.
 ---
-local function _join_lines(lines)
+function _P.join_lines(lines)
     if #lines == 0 then
         return ""
     end
@@ -82,7 +89,17 @@ function M.run_git(arguments, directory, stdin)
     local command = { core_helpers._GIT_EXECUTABLE }
     vim.list_extend(command, arguments)
 
-    local result = vim.system(command, { cwd = directory, stdin = stdin, text = true }):wait()
+    local success, result = pcall(function()
+        return vim.system(command, { cwd = directory, stdin = stdin, text = true }):wait()
+    end)
+
+    if not success then
+        return {
+            code = 1,
+            stderr = tostring(result),
+            stdout = "",
+        }
+    end
 
     return {
         code = result.code or 1,
@@ -105,6 +122,11 @@ function M.get_file_details(buffer)
     end
 
     local directory = vim.fs.dirname(absolute_path)
+
+    if not directory or vim.fn.isdirectory(directory) == 0 then
+        return nil, "Current buffer directory does not exist."
+    end
+
     local repository = M.run_git({ "-C", directory, "rev-parse", "--show-toplevel" }, directory)
 
     if repository.code ~= 0 then
@@ -141,6 +163,22 @@ function M.get_head_lines(details)
 
     if result.code ~= 0 then
         return {}, true
+    end
+
+    return _split_lines(result.stdout), false
+end
+
+--- Get the index version of `path`.
+---
+---@param details _my.git_diff.FileDetails The file details to query.
+---@return string[] # The index lines.
+---@return boolean # If `true`, the file is not in the index yet.
+---
+function M.get_index_lines(details)
+    local result = M.run_git({ "-C", details.repository, "show", ":" .. details.relative_path }, details.repository)
+
+    if result.code ~= 0 then
+        return M.get_head_lines(details)
     end
 
     return _split_lines(result.stdout), false
@@ -345,6 +383,182 @@ local function _is_line_selected(line, start_line, end_line)
     return start_line <= line and line <= end_line
 end
 
+--- Split file text into lines and remember whether it ended in a newline.
+---
+---@param text string Some file contents.
+---@return string[] # The file lines.
+---@return boolean # If `true`, the original text ended in a newline.
+---
+function M.split_git_text(text)
+    local has_eol = text:sub(-1) == "\n"
+    local body = has_eol and text:sub(1, -2) or text
+
+    if body == "" then
+        if has_eol then
+            return { "" }, has_eol
+        end
+
+        return {}, has_eol
+    end
+
+    return vim.split(body, "\n", { plain = true }), has_eol
+end
+
+--- Join file lines back into text.
+---
+---@param lines string[] Some file contents without newline characters.
+---@param has_eol boolean If `true`, add a final newline.
+---@return string # The joined file text.
+---
+function M.join_git_text(lines, has_eol)
+    if #lines == 0 then
+        return ""
+    end
+
+    local text = table.concat(lines, "\n")
+
+    if has_eol then
+        text = text .. "\n"
+    end
+
+    return text
+end
+
+--- Parse a zero-context unified diff into hunks.
+---
+---@param diff string The output from `git diff --unified=0`.
+---@return _my.git_diff.SelectionHunk[] # The parsed hunks.
+---
+function M.parse_selection_diff(diff)
+    ---@type _my.git_diff.SelectionHunk[]
+    local hunks = {}
+    ---@type _my.git_diff.SelectionHunk?
+    local current = nil
+
+    for line in diff:gmatch("[^\r\n]+") do
+        local old_start, old_count, new_start, new_count = line:match("^@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@")
+
+        if old_start and new_start then
+            old_count = old_count == "" and "1" or old_count
+            new_count = new_count == "" and "1" or new_count
+
+            current = {
+                added = {},
+                new_count = tonumber(new_count) or 0,
+                new_start = tonumber(new_start) or 0,
+                old_count = tonumber(old_count) or 0,
+                old_start = tonumber(old_start) or 0,
+                removed = {},
+            }
+            table.insert(hunks, current)
+        elseif current and line:sub(1, 1) == "-" then
+            table.insert(current.removed, line:sub(2))
+        elseif current and line:sub(1, 1) == "+" then
+            table.insert(current.added, line:sub(2))
+        end
+    end
+
+    return hunks
+end
+
+--- Build text containing only selected changes from `base_text` to `target_text`.
+---
+---@param base_text string The text to patch from.
+---@param target_text string The text containing all candidate changes.
+---@param diff string A zero-context diff from `base_text` to `target_text`.
+---@param start_line integer The first selected target line.
+---@param end_line integer The last selected target line.
+---@param invert boolean? If `true`, keep unselected changes instead of selected changes.
+---@return string # The partially-applied file text.
+---@return integer # The number of selected changed lines.
+---
+function M.build_selection_target(base_text, target_text, diff, start_line, end_line, invert)
+    invert = invert == true
+
+    local base_lines, base_has_eol = M.split_git_text(base_text)
+    local _, target_has_eol = M.split_git_text(target_text)
+    local hunks = M.parse_selection_diff(diff)
+
+    ---@type string[]
+    local output = {}
+    local old_cursor = 1
+    local selected_changes = 0
+
+    --- Copy base lines up to `stop`.
+    ---
+    ---@param stop integer The last base line to copy.
+    local function _copy_base_until(stop)
+        for index = old_cursor, stop do
+            table.insert(output, base_lines[index])
+        end
+    end
+
+    for _, hunk in ipairs(hunks) do
+        if hunk.old_count == 0 then
+            _copy_base_until(hunk.old_start)
+            old_cursor = hunk.old_start + 1
+        else
+            _copy_base_until(hunk.old_start - 1)
+            old_cursor = hunk.old_start + hunk.old_count
+        end
+
+        local max_count = math.max(hunk.old_count, hunk.new_count)
+
+        for index = 1, max_count do
+            local removed = hunk.removed[index]
+            local added = hunk.added[index]
+
+            if removed and added then
+                local line = hunk.new_start + index - 1
+                local selected = _is_line_selected(line, start_line, end_line)
+
+                if selected then
+                    selected_changes = selected_changes + 1
+                end
+
+                if selected ~= invert then
+                    table.insert(output, added)
+                else
+                    table.insert(output, removed)
+                end
+            elseif added then
+                local line = hunk.new_start + index - 1
+                local selected = _is_line_selected(line, start_line, end_line)
+
+                if selected then
+                    selected_changes = selected_changes + 1
+                end
+
+                if selected ~= invert then
+                    table.insert(output, added)
+                end
+            elseif removed then
+                local anchor = math.max(hunk.new_start + hunk.new_count - 1, 1)
+
+                if hunk.new_count > 0 then
+                    anchor = hunk.new_start + index - 1
+                end
+
+                local selected = _is_line_selected(anchor, start_line, end_line)
+
+                if selected then
+                    selected_changes = selected_changes + 1
+                end
+
+                if selected == invert then
+                    table.insert(output, removed)
+                end
+            end
+        end
+    end
+
+    _copy_base_until(#base_lines)
+
+    local has_eol = selected_changes > 0 and target_has_eol or base_has_eol
+
+    return M.join_git_text(output, has_eol), selected_changes
+end
+
 --- Build lines that contain only selected buffer changes applied to HEAD.
 ---
 ---@param old_lines string[] The original lines.
@@ -354,257 +568,223 @@ end
 ---@return string[] # The partially-applied file lines.
 ---
 function M.make_selected_lines(old_lines, new_lines, start_line, end_line)
-    local groups = M.get_change_groups(M.compute_operations(old_lines, new_lines))
-    ---@type string[]
-    local output = {}
-    local old_cursor = 1
+    local base_text = _P.join_lines(old_lines)
+    local target_text = _P.join_lines(new_lines)
+    local diff = M.build_zero_context_diff(base_text, target_text)
+    local partial_text = M.build_selection_target(base_text, target_text, diff or "", start_line, end_line)
 
-    for _, group in ipairs(groups) do
-        while old_cursor < group.old_start do
-            table.insert(output, old_lines[old_cursor])
-            old_cursor = old_cursor + 1
-        end
-
-        if group.old_count == 0 then
-            for _, operation in ipairs(group.adds) do
-                if operation.new_line and _is_line_selected(operation.new_line, start_line, end_line) then
-                    table.insert(output, operation.text)
-                end
-            end
-        elseif group.new_count == 0 then
-            local anchor = math.max(1, group.new_start)
-
-            if not _is_line_selected(anchor, start_line, end_line) then
-                for _, operation in ipairs(group.deletes) do
-                    table.insert(output, operation.text)
-                end
-            end
-        else
-            local count = math.max(#group.deletes, #group.adds)
-
-            for index = 1, count do
-                local delete = group.deletes[index]
-                local add = group.adds[index]
-
-                if add and add.new_line and _is_line_selected(add.new_line, start_line, end_line) then
-                    table.insert(output, add.text)
-                elseif delete then
-                    table.insert(output, delete.text)
-                end
-            end
-        end
-
-        old_cursor = group.old_start + group.old_count
-    end
-
-    while old_cursor <= #old_lines do
-        table.insert(output, old_lines[old_cursor])
-        old_cursor = old_cursor + 1
-    end
-
-    return output
+    return _split_lines(partial_text)
 end
 
---- Get counts of old / new lines consumed before each operation.
+--- Write `text` without using Vim's line-based writefile behavior.
 ---
----@param operations _my.git_diff.Operation[] The operations to inspect.
----@return integer[] # Old-line counts before each operation.
----@return integer[] # New-line counts before each operation.
+---@param path string The path to write.
+---@param text string The text to write into `path`.
+---@return boolean # If `true`, the file was written.
+---@return string? # The error message, if any.
 ---
-local function _get_operation_offsets(operations)
-    ---@type integer[]
-    local old_offsets = {}
-    ---@type integer[]
-    local new_offsets = {}
-    local old_count = 0
-    local new_count = 0
+function M.write_text(path, text)
+    local file, open_error = vim.uv.fs_open(path, "w", 438)
 
-    for index, operation in ipairs(operations) do
-        old_offsets[index] = old_count
-        new_offsets[index] = new_count
-
-        if operation.type ~= "add" then
-            old_count = old_count + 1
-        end
-
-        if operation.type ~= "delete" then
-            new_count = new_count + 1
-        end
+    if not file then
+        return false, open_error
     end
 
-    return old_offsets, new_offsets
+    local ok, write_error = vim.uv.fs_write(file, text, 0)
+    vim.uv.fs_close(file)
+
+    return ok ~= nil, write_error
 end
 
---- Build operation index ranges that should become unified hunks.
+--- Quote a path for a Git patch header, if needed.
 ---
----@param operations _my.git_diff.Operation[] The operations to inspect.
----@return _my._datatypes.IntBounds[] # The operation index ranges.
+---@param path string A patch path, e.g. `a/foo.txt`.
+---@return string # The quoted path.
 ---
-local function _get_patch_ranges(operations)
-    ---@type _my._datatypes.IntBounds[]
-    local ranges = {}
-    local index = 1
-
-    while index <= #operations do
-        if operations[index].type == "equal" then
-            index = index + 1
-        else
-            local first = math.max(1, index - _CONTEXT_LINE_COUNT)
-
-            while operations[index] and operations[index].type ~= "equal" do
-                index = index + 1
-            end
-
-            local last = math.min(#operations, index + _CONTEXT_LINE_COUNT - 1)
-            local previous = ranges[#ranges]
-
-            if previous and first <= previous.last + 1 then
-                previous.last = last
-            else
-                table.insert(ranges, { first = first, last = last })
-            end
-        end
+local function _quote_patch_path(path)
+    if not path:find("[%s\"]") then
+        return path
     end
 
-    return ranges
+    path = path:gsub("\\", "\\\\"):gsub('"', '\\"')
+
+    return '"' .. path .. '"'
 end
 
---- Convert a zero-or-more line count to a unified-diff starting line.
+--- Get the hunks from a unified diff, without file headers.
 ---
----@param offset integer The number of lines before a hunk.
----@param count integer The number of lines inside a hunk.
----@return integer # The unified diff starting line.
+---@param diff string The output from `git diff`.
+---@return string? # The hunk text, if found.
 ---
-local function _make_patch_start(offset, count)
-    if count == 0 then
-        return offset
+local function _get_patch_hunks(diff)
+    local start = diff:find("\n@@ ", 1, true)
+
+    if start then
+        return diff:sub(start + 1)
     end
 
-    return offset + 1
+    if diff:sub(1, 3) == "@@ " then
+        return diff
+    end
+
+    return nil
 end
 
---- Build one unified diff hunk.
+--- Build a no-index diff from `base_text` to `target_text`.
 ---
----@param operations _my.git_diff.Operation[] The diff operations.
----@param old_offsets integer[] Old-line counts before each operation.
----@param new_offsets integer[] New-line counts before each operation.
----@param range _my._datatypes.IntBounds The operation range to render.
----@return string[] # The patch lines.
+---@param base_text string The text to patch from.
+---@param target_text string The text to patch to.
+---@param context integer The unified diff context line count.
+---@return string? # The diff, if generated.
+---@return string? # An error message, if any.
 ---
-local function _make_patch_hunk(operations, old_offsets, new_offsets, range)
-    local old_count = 0
-    local new_count = 0
-    ---@type string[]
-    local lines = {}
+local function _build_no_index_diff(base_text, target_text, context)
+    local before = vim.fn.tempname()
+    local after = vim.fn.tempname()
+    local ok, message = M.write_text(before, base_text)
 
-    for index = range.first, range.last do
-        local operation = operations[index]
-
-        if operation.type == "equal" then
-            old_count = old_count + 1
-            new_count = new_count + 1
-            table.insert(lines, " " .. operation.text)
-        elseif operation.type == "delete" then
-            old_count = old_count + 1
-            table.insert(lines, "-" .. operation.text)
-        else
-            new_count = new_count + 1
-            table.insert(lines, "+" .. operation.text)
-        end
+    if ok then
+        ok, message = M.write_text(after, target_text)
     end
 
-    table.insert(
-        lines,
-        1,
-        string.format(
-            "@@ -%s,%s +%s,%s @@",
-            _make_patch_start(old_offsets[range.first], old_count),
-            old_count,
-            _make_patch_start(new_offsets[range.first], new_count),
-            new_count
-        )
+    if not ok then
+        pcall(vim.uv.fs_unlink, before)
+        pcall(vim.uv.fs_unlink, after)
+
+        return nil, message
+    end
+
+    local result = vim.system(
+        {
+            core_helpers._GIT_EXECUTABLE,
+            "diff",
+            "--no-index",
+            "--unified=" .. context,
+            "--no-color",
+            "--",
+            before,
+            after,
+        },
+        { text = true }
+    ):wait()
+
+    pcall(vim.uv.fs_unlink, before)
+    pcall(vim.uv.fs_unlink, after)
+
+    if result.code ~= 0 and result.code ~= 1 then
+        return nil, result.stderr
+    end
+
+    return result.stdout or "", nil
+end
+
+--- Generate a zero-context diff from `base_text` to `target_text`.
+---
+---@param base_text string The text to patch from.
+---@param target_text string The text containing all candidate changes.
+---@return string? # The diff, if generated.
+---@return string? # An error message, if any.
+---
+function M.build_zero_context_diff(base_text, target_text)
+    return _build_no_index_diff(base_text, target_text, 0)
+end
+
+--- Create a Git patch from `base_text` to `target_text` for `relative_path`.
+---
+---@param base_text string The text to patch from.
+---@param target_text string The text to patch to.
+---@param relative_path string The repository-relative file path.
+---@return string? # The patch, if generated.
+---@return string? # An error message, if any.
+---
+function M.build_selection_patch(base_text, target_text, relative_path)
+    local diff, diff_error = _build_no_index_diff(base_text, target_text, 3)
+
+    if not diff then
+        return nil, diff_error
+    end
+
+    local hunks = _get_patch_hunks(diff)
+
+    if not hunks then
+        return nil, "No patch hunks were generated."
+    end
+
+    relative_path = relative_path:gsub("\\", "/")
+
+    local old_path = _quote_patch_path("a/" .. relative_path)
+    local new_path = _quote_patch_path("b/" .. relative_path)
+    local header = table.concat({
+        string.format("diff --git %s %s", old_path, new_path),
+        "--- " .. old_path,
+        "+++ " .. new_path,
+    }, "\n")
+
+    return header .. "\n" .. hunks, nil
+end
+
+--- Get a Git blob as text.
+---
+---@param details _my.git_diff.FileDetails The file details to use.
+---@param object string The object name to read.
+---@return string? # The blob text, if found.
+---@return string? # An error message, if any.
+---
+function M.get_blob_text(details, object)
+    local result = M.run_git({ "-C", details.repository, "show", object }, details.repository)
+
+    if result.code ~= 0 then
+        return nil, result.stderr
+    end
+
+    return result.stdout or "", nil
+end
+
+--- Check if a path has unresolved merge entries.
+---
+---@param details _my.git_diff.FileDetails The file details to use.
+---@return boolean # If `true`, unmerged entries exist.
+---
+function M.has_unmerged_entries(details)
+    local result = M.run_git(
+        { "-C", details.repository, "ls-files", "-u", "--", details.relative_path },
+        details.repository
     )
 
-    return lines
-end
-
---- Build a patch from `old_lines` to `new_lines`.
----
----@param old_lines string[] The original lines.
----@param new_lines string[] The desired lines.
----@param relative_path string The repository-relative file path.
----@param is_new_file boolean If `true`, render a new-file patch.
----@return string # The unified patch.
----
-function M.build_patch(old_lines, new_lines, relative_path, is_new_file)
-    local operations = M.compute_operations(old_lines, new_lines)
-    local ranges = _get_patch_ranges(operations)
-
-    if #ranges == 0 then
-        return ""
-    end
-
-    local old_offsets, new_offsets = _get_operation_offsets(operations)
-    ---@type string[]
-    local lines = {
-        string.format("diff --git a/%s b/%s", relative_path, relative_path),
-    }
-
-    if is_new_file then
-        table.insert(lines, "new file mode 100644")
-        table.insert(lines, "--- /dev/null")
-    else
-        table.insert(lines, string.format("--- a/%s", relative_path))
-    end
-
-    table.insert(lines, string.format("+++ b/%s", relative_path))
-
-    for _, range in ipairs(ranges) do
-        vim.list_extend(lines, _make_patch_hunk(operations, old_offsets, new_offsets, range))
-    end
-
-    return _join_lines(lines)
-end
-
---- Build a patch containing only selected changed lines.
----
----@param old_lines string[] The original lines.
----@param new_lines string[] The changed buffer lines.
----@param relative_path string The repository-relative file path.
----@param start_line integer The first selected buffer line.
----@param end_line integer The last selected buffer line.
----@param is_new_file boolean If `true`, render a new-file patch.
----@return string # The selected patch.
----
-function M.build_selected_patch(old_lines, new_lines, relative_path, start_line, end_line, is_new_file)
-    local selected_lines = M.make_selected_lines(old_lines, new_lines, start_line, end_line)
-
-    return M.build_patch(old_lines, selected_lines, relative_path, is_new_file)
+    return result.code == 0 and result.stdout ~= ""
 end
 
 --- Apply `patch` to the git index.
 ---
 ---@param details _my.git_diff.FileDetails The file details to use.
 ---@param patch string The patch to apply.
----@param reverse boolean If `true`, apply the patch in reverse.
 ---@return boolean # If the patch was applied, return `true`.
 ---@return string? # An error message, if any.
 ---
-function M.apply_cached_patch(details, patch, reverse)
+function M.apply_cached_patch(details, patch)
     if patch == "" then
         return false, "No selected git changes found."
     end
 
-    ---@type string[]
-    local arguments = { "-C", details.repository, "apply", "--cached" }
+    local path = vim.fn.tempname()
+    local ok, message = M.write_text(path, patch)
 
-    if reverse then
-        table.insert(arguments, "--reverse")
+    if not ok then
+        pcall(vim.uv.fs_unlink, path)
+
+        return false, message
     end
 
-    table.insert(arguments, "-")
+    local check = M.run_git({ "-C", details.repository, "apply", "--cached", "--check", path }, details.repository)
 
-    local result = M.run_git(arguments, details.repository, patch)
+    if check.code ~= 0 then
+        pcall(vim.uv.fs_unlink, path)
+
+        return false, vim.trim(check.stderr)
+    end
+
+    local result = M.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository)
+    pcall(vim.uv.fs_unlink, path)
 
     if result.code ~= 0 then
         return false, vim.trim(result.stderr)

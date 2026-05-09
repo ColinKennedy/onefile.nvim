@@ -270,7 +270,7 @@ vim.api.nvim_set_hl(0, "ComplMatchIns", { link = "Comment" })
 -- Plugin - https://github.com/airblade/vim-gitgutter
 vim.api.nvim_set_hl(0, "GitGutterAdd", _NOTE_DIFF_ADD_10_FG)
 vim.api.nvim_set_hl(0, "GitGutterChange", _DIFF_CHANGE_FG)
-vim.api.nvim_set_hl(0, "GitGutterDelete", _VERT_SPLIT_FG)
+vim.api.nvim_set_hl(0, "GitGutterDelete", { fg = _ACCENT_ERROR_50 })
 vim.api.nvim_set_hl(0, "GitGutterAddInvisible", { bg = "Grey", ctermbg = 242 })
 vim.api.nvim_set_hl(0, "GitGutterChangeInvisible", { bg = "Grey", ctermbg = 242 })
 vim.api.nvim_set_hl(0, "GitGutterDeleteInvisible", { bg = "Grey", ctermbg = 242 })

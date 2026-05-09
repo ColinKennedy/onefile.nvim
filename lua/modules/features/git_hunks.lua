@@ -4,22 +4,20 @@ local git_diff = require("modules.utilities.git_diff")
 
 local M = {}
 
---- Get the current visual selection line range.
+--- Get all current buffer text as a single string.
 ---
----@return integer # The first selected line.
----@return integer # The last selected line.
+---@param buffer integer The Vim buffer to inspect.
+---@return string # The buffer text.
 ---
-local function _get_visual_line_range()
-    local start_position = vim.api.nvim_buf_get_mark(0, "<")
-    local end_position = vim.api.nvim_buf_get_mark(0, ">")
-    local start_line = start_position[1]
-    local end_line = end_position[1]
+local function _get_buffer_text(buffer)
+    local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+    local text = table.concat(lines, "\n")
 
-    if end_line < start_line then
-        start_line, end_line = end_line, start_line
+    if vim.bo[buffer].endofline then
+        text = text .. "\n"
     end
 
-    return start_line, end_line
+    return text
 end
 
 --- Notify the user about a git hunk operation failure.
@@ -29,10 +27,16 @@ local function _notify_error(message)
     vim.notify(message, vim.log.levels.ERROR)
 end
 
---- Apply the current visual selection to the git index.
+--- Run a visual Git hunk action for selected lines.
 ---
----@param reverse boolean If `true`, unstage the selected changes.
-function M.apply_visual_selection(reverse)
+---@param action "stage" | "reset" The index operation to run.
+---@param start_line integer The first selected line.
+---@param end_line integer The last selected line.
+function M.apply_selection(action, start_line, end_line)
+    if start_line > end_line then
+        start_line, end_line = end_line, start_line
+    end
+
     local buffer = vim.api.nvim_get_current_buf()
     local details, details_error = git_diff.get_file_details(buffer)
 
@@ -42,34 +46,103 @@ function M.apply_visual_selection(reverse)
         return
     end
 
-    local start_line, end_line = _get_visual_line_range()
-    local old_lines, is_new_file = git_diff.get_head_lines(details)
-    local new_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
-    local patch = git_diff.build_selected_patch(
-        old_lines,
-        new_lines,
-        details.relative_path,
-        start_line,
-        end_line,
-        is_new_file
-    )
-    local success, apply_error = git_diff.apply_cached_patch(details, patch, reverse)
-
-    if not success then
-        _notify_error(apply_error or "Could not apply selected git hunk.")
+    if git_diff.has_unmerged_entries(details) then
+        _notify_error("Cannot use Git hunk selection on a file with unresolved merge entries.")
 
         return
     end
 
+    local base_text
+    local target_text
+    local success_message
+
+    if action == "stage" then
+        local show_error
+        base_text, show_error = git_diff.get_blob_text(details, ":" .. details.relative_path)
+
+        if not base_text then
+            _notify_error(
+                string.format("Cannot stage selected hunks for an untracked or non-text file: %s", show_error or "")
+            )
+
+            return
+        end
+
+        target_text = _get_buffer_text(buffer)
+        success_message = "Staged selected Git hunk lines."
+    else
+        local base_error
+        local target_error
+        base_text, base_error = git_diff.get_blob_text(details, "HEAD:" .. details.relative_path)
+        target_text, target_error = git_diff.get_blob_text(details, ":" .. details.relative_path)
+
+        if not base_text or not target_text then
+            _notify_error(
+                string.format("Cannot reset selected hunks for this file: %s%s", base_error or "", target_error or "")
+            )
+
+            return
+        end
+
+        success_message = "Reset selected Git hunk lines from the index."
+    end
+
+    if base_text:find("\0", 1, true) or target_text:find("\0", 1, true) then
+        _notify_error("Cannot use Git hunk selection on binary files.")
+
+        return
+    end
+
+    local diff, diff_error = git_diff.build_zero_context_diff(base_text, target_text)
+
+    if not diff then
+        _notify_error(string.format("Cannot calculate selected Git hunks: %s", diff_error or ""))
+
+        return
+    end
+
+    local partial_text, selected_changes =
+        git_diff.build_selection_target(base_text, target_text, diff, start_line, end_line, action == "reset")
+
+    if selected_changes == 0 then
+        vim.notify("No Git hunk lines were selected.", vim.log.levels.INFO)
+
+        return
+    end
+
+    local patch_base_text = action == "reset" and target_text or base_text
+    local patch, patch_error = git_diff.build_selection_patch(patch_base_text, partial_text, details.relative_path)
+
+    if not patch then
+        _notify_error(string.format("Cannot create selected Git hunk patch: %s", patch_error or ""))
+
+        return
+    end
+
+    local success, apply_error = git_diff.apply_cached_patch(details, patch)
+
+    if not success then
+        _notify_error(string.format("Cannot apply selected Git hunk patch: %s", apply_error or ""))
+
+        return
+    end
+
+    vim.notify(success_message, vim.log.levels.INFO)
     require("modules.features.git_gutter").update(buffer)
 end
 
-vim.keymap.set("x", "<leader>gah", function()
-    M.apply_visual_selection(false)
-end, { desc = "Stage selected git hunk lines." })
+vim.api.nvim_create_user_command("GitStageSelection", function(options)
+    M.apply_selection("stage", options.line1, options.line2)
+end, { range = true, desc = "Stage selected Git hunk lines." })
 
-vim.keymap.set("x", "<leader>grh", function()
-    M.apply_visual_selection(true)
-end, { desc = "Unstage selected git hunk lines." })
+vim.api.nvim_create_user_command("GitResetSelection", function(options)
+    M.apply_selection("reset", options.line1, options.line2)
+end, { range = true, desc = "Reset selected Git hunk lines from the index." })
+
+vim.keymap.set("x", "<leader>gah", ":GitStageSelection<CR>", { desc = "Stage selected Git hunk lines." })
+
+vim.keymap.set("x", "<leader>grh", ":GitResetSelection<CR>", {
+    desc = "Reset selected Git hunk lines from the index.",
+})
 
 return M

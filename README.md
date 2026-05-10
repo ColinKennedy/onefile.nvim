@@ -19,8 +19,8 @@ cp ./init.lua `nvim --clean --headless --cmd 'lua print(vim.fn.stdpath("config")
 
 
 ### Side-loaded Install
-If you have an existing Neovim configuration that you don't want to touch, you can "try
-out" this configuration by doing ...
+If you have an existing Neovim configuration that you don't want to touch, you
+can "try out" this configuration by doing ...
 
 ```sh
 root=`nvim --clean --headless --cmd 'lua print(vim.fn.stdpath("config"))' --cmd 'quit'`
@@ -29,14 +29,24 @@ mkdir -p $parent/noplugins
 cp ./init.lua $parent/noplugins/init.lua
 ```
 
-This will create a separate Neovim app directory, located at `~/config/noplugins` (or
-wherever your `$XDG_CONFIG_HOME` is set to)
+This will create a separate Neovim app directory, located at
+`~/config/noplugins` (or wherever your `$XDG_CONFIG_HOME` is set to)
 
 Now run it with
 
 ```sh
 NVIM_APPNAME=noplugins nvim
 ```
+
+
+## Environment Variables
+`VIM_LOG_LEVEL` sets the minimum `vim.notify` level shown by Neovim. It
+defaults to `2`, which hides `DEBUG` notifications unless you opt in with
+a lower value.
+
+`VIM_ENABLE_NOTIFY_LOGGING` enables notification logging when set to a non-zero
+value. When enabled, notifications are appended to a temporary log file that
+can be opened with `:OpenLogPath`.
 
 
 ## Testing

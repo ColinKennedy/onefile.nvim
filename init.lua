@@ -8,8 +8,7 @@ require("modules.features.diagnostics")
 require("modules.features.settings_and_lsp_servers")
 require("modules.features.autocommands")
 require("modules.features.commands")
-
-
+require("modules.features.notify")
 require("modules.features.messages_buffer")
 require("modules.features.keymaps")
 require("modules.features.git_keymaps")

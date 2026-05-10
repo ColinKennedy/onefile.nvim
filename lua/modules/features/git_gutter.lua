@@ -1,7 +1,5 @@
 --- Show HEAD-relative git signs for unsaved buffer edits.
 
-local git_diff = require("modules.utilities.git_diff")
-
 local M = {}
 
 local _P = {}
@@ -71,6 +69,7 @@ function M.update(buffer)
         return
     end
 
+    local git_diff = require("modules.utilities.git_diff")
     local details = git_diff.get_file_details(buffer)
 
     vim.fn.sign_unplace(_SIGN_GROUP, { buffer = buffer })

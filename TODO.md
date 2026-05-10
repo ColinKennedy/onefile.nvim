@@ -1,3 +1,4 @@
+- add <leader>gac, <leader>grc
 - Add gitgutter + git navigation [g + ]g support
  + multi-file navigation (so I can emulate `git add -p`)
   - This navigation I guess should be separate from quickfix but it also should be possible to load it into the quickfix
@@ -7,7 +8,6 @@
 - A <M-S-{1,2,3,4}> for grapple
 - The remote update plugin needs to exist still, it seems
 - Add the more advanced statusline (git push up, git remote down, rebase conflict + conflict steps, etc)
-- add <leader>gac, <leader>grc
 
 https://github.com/cole-clark/onefile.nvim/commit/00cb04b342ce73d5bf113e06f713364f50c96ef7
 - Make it an async git gutter plugin and add <leader>gah etc

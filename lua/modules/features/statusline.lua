@@ -1,6 +1,4 @@
 --- Build the custom statusline with mode colors, git branch, Grapple marks, and cursor progress.
-
-local M = {}
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
 
@@ -76,7 +74,7 @@ function _P.clone_highlight(name, source, overrides)
 end
 
 ---@return string # The Neovim statusline for saved grapple buffers
-function M.get_grapple_statusline()
+function _P.get_grapple_statusline()
     ---@type string[]
     local output = {}
     local current_buffer = vim.api.nvim_get_current_buf()
@@ -103,8 +101,7 @@ end
 _G.get_git_branch_label_safe = function()
     return require("modules.features.core_editor_setup").get_git_branch_label_safe()
 end
-_G.get_grapple_statusline = M.get_grapple_statusline
-
+_G.get_grapple_statusline = _P.get_grapple_statusline
 
 local dark_lefthand_background = "#2c323c" -- NOTE: Blueish-dark gray
 local lighter_background = "#3e4452" -- NOTE: Just a bit lighter than `dark_lefthand_background`
@@ -172,5 +169,3 @@ vim.api.nvim_create_autocmd({ "ModeChanged", "InsertEnter" }, {
 })
 
 _P.update_status_mode_colors(vim.api.nvim_get_mode().mode)
-
-return M

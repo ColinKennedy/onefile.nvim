@@ -84,7 +84,7 @@ end
 ---@param stdin string? Optional standard input.
 ---@return _my.git_diff.SystemResult # The command result.
 ---
-function M.run_git(arguments, directory, stdin)
+function _P.run_git(arguments, directory, stdin)
     ---@type string[]
     local command = { core_helpers._GIT_EXECUTABLE }
     vim.list_extend(command, arguments)
@@ -127,7 +127,7 @@ function M.get_file_details(buffer)
         return nil, "Current buffer directory does not exist."
     end
 
-    local repository = M.run_git({ "-C", directory, "rev-parse", "--show-toplevel" }, directory)
+    local repository = _P.run_git({ "-C", directory, "rev-parse", "--show-toplevel" }, directory)
 
     if repository.code ~= 0 then
         return nil, "Current buffer is not inside a git repository."
@@ -135,11 +135,11 @@ function M.get_file_details(buffer)
 
     local repository_path = vim.trim(repository.stdout)
     local relative =
-        M.run_git({ "-C", repository_path, "ls-files", "--full-name", "--", absolute_path }, repository_path)
+        _P.run_git({ "-C", repository_path, "ls-files", "--full-name", "--", absolute_path }, repository_path)
     local relative_path = vim.trim(relative.stdout)
 
     if relative_path == "" then
-        local prefix = M.run_git({ "-C", repository_path, "rev-parse", "--show-prefix" }, repository_path)
+        local prefix = _P.run_git({ "-C", repository_path, "rev-parse", "--show-prefix" }, repository_path)
         local filename = vim.fs.basename(absolute_path)
         relative_path = vim.trim(prefix.stdout) .. filename
     end
@@ -158,8 +158,11 @@ end
 ---@return string[] # The HEAD lines.
 ---@return boolean # If `true`, the file is not in HEAD yet.
 ---
-function M.get_head_lines(details)
-    local result = M.run_git({ "-C", details.repository, "show", "HEAD:" .. details.relative_path }, details.repository)
+function _P.get_head_lines(details)
+    local result = _P.run_git(
+        { "-C", details.repository, "show", "HEAD:" .. details.relative_path },
+        details.repository
+    )
 
     if result.code ~= 0 then
         return {}, true
@@ -175,10 +178,10 @@ end
 ---@return boolean # If `true`, the file is not in the index yet.
 ---
 function M.get_index_lines(details)
-    local result = M.run_git({ "-C", details.repository, "show", ":" .. details.relative_path }, details.repository)
+    local result = _P.run_git({ "-C", details.repository, "show", ":" .. details.relative_path }, details.repository)
 
     if result.code ~= 0 then
-        return M.get_head_lines(details)
+        return _P.get_head_lines(details)
     end
 
     return _split_lines(result.stdout), false
@@ -222,7 +225,7 @@ end
 ---@param new_lines string[] The changed lines.
 ---@return _my.git_diff.Operation[] # The diff operations.
 ---
-function M.compute_operations(old_lines, new_lines)
+function _P.compute_operations(old_lines, new_lines)
     local table_ = _make_lcs_table(old_lines, new_lines)
     local old_index = 1
     local new_index = 1
@@ -282,7 +285,7 @@ end
 ---@param operations _my.git_diff.Operation[] The operations to group.
 ---@return _my.git_diff.ChangeGroup[] # The changed groups.
 ---
-function M.get_change_groups(operations)
+function _P.get_change_groups(operations)
     ---@type _my.git_diff.ChangeGroup[]
     local groups = {}
     local index = 1
@@ -339,7 +342,7 @@ end
 ---@return _my.git_diff.Hunk[] # The hunks.
 ---
 function M.compute_hunks(old_lines, new_lines)
-    local groups = M.get_change_groups(M.compute_operations(old_lines, new_lines))
+    local groups = _P.get_change_groups(_P.compute_operations(old_lines, new_lines))
     ---@type _my.git_diff.Hunk[]
     local hunks = {}
 
@@ -405,7 +408,7 @@ end
 ---@return string[] # The file lines.
 ---@return boolean # If `true`, the original text ended in a newline.
 ---
-function M.split_git_text(text)
+function _P.split_git_text(text)
     local has_eol = text:sub(-1) == "\n"
     local body = has_eol and text:sub(1, -2) or text
 
@@ -426,7 +429,7 @@ end
 ---@param has_eol boolean If `true`, add a final newline.
 ---@return string # The joined file text.
 ---
-function M.join_git_text(lines, has_eol)
+function _P.join_git_text(lines, has_eol)
     if #lines == 0 then
         return ""
     end
@@ -445,7 +448,7 @@ end
 ---@param diff string The output from `git diff --unified=0`.
 ---@return _my.git_diff.SelectionHunk[] # The parsed hunks.
 ---
-function M.parse_selection_diff(diff)
+function _P.parse_selection_diff(diff)
     ---@type _my.git_diff.SelectionHunk[]
     local hunks = {}
     ---@type _my.git_diff.SelectionHunk?
@@ -491,9 +494,9 @@ end
 function M.build_selection_target(base_text, target_text, diff, start_line, end_line, invert)
     invert = invert == true
 
-    local base_lines, base_has_eol = M.split_git_text(base_text)
-    local _, target_has_eol = M.split_git_text(target_text)
-    local hunks = M.parse_selection_diff(diff)
+    local base_lines, base_has_eol = _P.split_git_text(base_text)
+    local _, target_has_eol = _P.split_git_text(target_text)
+    local hunks = _P.parse_selection_diff(diff)
 
     ---@type string[]
     local output = {}
@@ -573,7 +576,7 @@ function M.build_selection_target(base_text, target_text, diff, start_line, end_
 
     local has_eol = selected_changes > 0 and target_has_eol or base_has_eol
 
-    return M.join_git_text(output, has_eol), selected_changes
+    return _P.join_git_text(output, has_eol), selected_changes
 end
 
 --- Build lines that contain only selected buffer changes applied to HEAD.
@@ -584,7 +587,7 @@ end
 ---@param end_line integer The last selected buffer line.
 ---@return string[] # The partially-applied file lines.
 ---
-function M.make_selected_lines(old_lines, new_lines, start_line, end_line)
+function _P.make_selected_lines(old_lines, new_lines, start_line, end_line)
     local base_text = _P.join_lines(old_lines)
     local target_text = _P.join_lines(new_lines)
     local diff = M.build_zero_context_diff(base_text, target_text)
@@ -600,7 +603,7 @@ end
 ---@return boolean # If `true`, the file was written.
 ---@return string? # The error message, if any.
 ---
-function M.write_text(path, text)
+function _P.write_text(path, text)
     local file, open_error = vim.uv.fs_open(path, "w", 438)
 
     if not file then
@@ -658,10 +661,10 @@ end
 local function _build_no_index_diff(base_text, target_text, context)
     local before = vim.fn.tempname()
     local after = vim.fn.tempname()
-    local ok, message = M.write_text(before, base_text)
+    local ok, message = _P.write_text(before, base_text)
 
     if ok then
-        ok, message = M.write_text(after, target_text)
+        ok, message = _P.write_text(after, target_text)
     end
 
     if not ok then
@@ -748,7 +751,7 @@ end
 ---@return string? # An error message, if any.
 ---
 function M.get_blob_text(details, object)
-    local result = M.run_git({ "-C", details.repository, "show", object }, details.repository)
+    local result = _P.run_git({ "-C", details.repository, "show", object }, details.repository)
 
     if result.code ~= 0 then
         return nil, result.stderr
@@ -763,7 +766,7 @@ end
 ---@return boolean # If `true`, unmerged entries exist.
 ---
 function M.has_unmerged_entries(details)
-    local result = M.run_git(
+    local result = _P.run_git(
         { "-C", details.repository, "ls-files", "-u", "--", details.relative_path },
         details.repository
     )
@@ -784,7 +787,7 @@ function M.apply_cached_patch(details, patch)
     end
 
     local path = vim.fn.tempname()
-    local ok, message = M.write_text(path, patch)
+    local ok, message = _P.write_text(path, patch)
 
     if not ok then
         pcall(vim.uv.fs_unlink, path)
@@ -792,7 +795,7 @@ function M.apply_cached_patch(details, patch)
         return false, message
     end
 
-    local check = M.run_git({ "-C", details.repository, "apply", "--cached", "--check", path }, details.repository)
+    local check = _P.run_git({ "-C", details.repository, "apply", "--cached", "--check", path }, details.repository)
 
     if check.code ~= 0 then
         pcall(vim.uv.fs_unlink, path)
@@ -800,7 +803,7 @@ function M.apply_cached_patch(details, patch)
         return false, vim.trim(check.stderr)
     end
 
-    local result = M.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository)
+    local result = _P.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository)
     pcall(vim.uv.fs_unlink, path)
 
     if result.code ~= 0 then

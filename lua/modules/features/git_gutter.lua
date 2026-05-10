@@ -4,6 +4,7 @@ local git_diff = require("modules.utilities.git_diff")
 
 local M = {}
 
+local _P = {}
 local _AUGROUP = vim.api.nvim_create_augroup("my.git_gutter", { clear = true })
 local _SIGN_GROUP = "my.git_gutter"
 local _SIGN_ADD = "MyGitGutterAdd"
@@ -11,7 +12,7 @@ local _SIGN_CHANGE = "MyGitGutterChange"
 local _SIGN_DELETE = "MyGitGutterDelete"
 
 --- Define git gutter highlight groups and signs.
-function M.define_signs()
+function _P.define_signs()
     vim.api.nvim_set_hl(0, "GitGutterAdd", { default = true, fg = "#50fa7b" })
     vim.api.nvim_set_hl(0, "GitGutterChange", { default = true, fg = "#56b6c2" })
     vim.api.nvim_set_hl(0, "GitGutterDelete", { default = true, fg = "#ff5555" })
@@ -107,7 +108,7 @@ local function _schedule_update(event)
     end)
 end
 
-M.define_signs()
+_P.define_signs()
 
 vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "TextChanged", "TextChangedI" }, {
     callback = _schedule_update,

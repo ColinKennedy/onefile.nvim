@@ -620,7 +620,7 @@ end
 ---@param first boolean? Whether to use the arguments of the first call to `caller` or not.
 ---@return fun(...: _Parameters): _Return # The wrapped function.
 ---
-function M.debounce_trailing(caller, timeout, first)
+function _P.debounce_trailing(caller, timeout, first)
     local timer = vim.uv.new_timer()
 
     if not timer then

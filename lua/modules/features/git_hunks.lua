@@ -1,9 +1,7 @@
 --- Stage and unstage visual selections from unsaved buffer edits.
 
 local git_diff = require("modules.utilities.git_diff")
-
-local M = {}
-
+local _P = {}
 --- Get all current buffer text as a single string.
 ---
 ---@param buffer integer The Vim buffer to inspect.
@@ -36,7 +34,7 @@ end
 ---@param action "stage" | "reset" The index operation to run.
 ---@param start_line integer The first selected line.
 ---@param end_line integer The last selected line.
-function M.apply_selection(action, start_line, end_line)
+function _P.apply_selection(action, start_line, end_line)
     if start_line > end_line then
         start_line, end_line = end_line, start_line
     end
@@ -139,14 +137,14 @@ end
 ---
 ---@param options _my.git_hunks.RangeCommandOptions The command range details.
 local function _stage_selection_command(options)
-    M.apply_selection("stage", options.line1, options.line2)
+    _P.apply_selection("stage", options.line1, options.line2)
 end
 
 --- Reset a ranged Git hunk selection from the index.
 ---
 ---@param options _my.git_hunks.RangeCommandOptions The command range details.
 local function _reset_selection_command(options)
-    M.apply_selection("reset", options.line1, options.line2)
+    _P.apply_selection("reset", options.line1, options.line2)
 end
 
 vim.api.nvim_create_user_command("GitStageSelection", _stage_selection_command, {
@@ -164,5 +162,3 @@ vim.keymap.set("x", "<leader>gah", ":GitStageSelection<CR>", { desc = "Stage sel
 vim.keymap.set("x", "<leader>grh", ":GitResetSelection<CR>", {
     desc = "Reset selected Git hunk lines from the index.",
 })
-
-return M

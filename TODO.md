@@ -4,9 +4,6 @@
 - Add :Gcd
 - Add tests
 - Add my lazy + plugins back
-- Make M into _P, as much as possible
- - Make sure that functions that ARE being exported actually we being used in at least one other module. Otherwise, demote them to _P
- - If any modules no longer use M/_P, make sure to remove the `return` line as well
 - A <M-S-{1,2,3,4}> for grapple
 - The remote update plugin needs to exist still, it seems
 - Add the more advanced statusline (git push up, git remote down, rebase conflict + conflict steps, etc)

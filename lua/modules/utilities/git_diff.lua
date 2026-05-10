@@ -108,6 +108,16 @@ function _P.run_git(arguments, directory, stdin)
     }
 end
 
+--- Run a git command and wait for it to finish.
+---
+---@param arguments string[] Git arguments, without the leading executable.
+---@param directory string The directory to run within.
+---@param stdin string? Optional standard input.
+---@return _my.git_diff.SystemResult # The command result.
+function M.run_git(arguments, directory, stdin)
+    return _P.run_git(arguments, directory, stdin)
+end
+
 --- Get git details for `buffer`.
 ---
 ---@param buffer integer The buffer to inspect.

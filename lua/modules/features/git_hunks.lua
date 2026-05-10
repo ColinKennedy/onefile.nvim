@@ -18,6 +18,23 @@ local function _get_buffer_text(buffer)
     return text
 end
 
+--- Replace all text in `buffer` with exact file `text`.
+---
+---@param buffer integer The Vim buffer to modify.
+---@param text string The full text to place into the buffer.
+local function _set_buffer_text(buffer, text)
+    local has_eol = text:sub(-1) == "\n"
+    local body = has_eol and text:sub(1, -2) or text
+    local lines = {}
+
+    if body ~= "" then
+        lines = vim.split(body, "\n", { plain = true })
+    end
+
+    vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+    vim.bo[buffer].endofline = has_eol
+end
+
 --- Notify the user about a git hunk operation failure.
 ---
 ---@param message string The failure message to show.
@@ -31,7 +48,7 @@ end
 
 --- Run a visual Git hunk action for selected lines.
 ---
----@param action "stage" | "reset" The index operation to run.
+---@param action "stage" | "reset" | "checkout" The hunk operation to run.
 ---@param start_line integer The first selected line.
 ---@param end_line integer The last selected line.
 function _P.apply_selection(action, start_line, end_line)
@@ -58,7 +75,7 @@ function _P.apply_selection(action, start_line, end_line)
     local target_text
     local success_message
 
-    if action == "stage" then
+    if action == "stage" or action == "checkout" then
         local show_error
         base_text, show_error = git_diff.get_blob_text(details, ":" .. details.relative_path)
 
@@ -71,7 +88,12 @@ function _P.apply_selection(action, start_line, end_line)
         end
 
         target_text = _get_buffer_text(buffer)
-        success_message = "Staged selected Git hunk lines."
+
+        if action == "stage" then
+            success_message = "Staged selected Git hunk lines."
+        else
+            success_message = "Checked out selected Git hunk lines."
+        end
     else
         local base_error
         local target_error
@@ -112,6 +134,17 @@ function _P.apply_selection(action, start_line, end_line)
         return
     end
 
+    if action == "checkout" then
+        local checkout_text =
+            git_diff.build_selection_target(base_text, target_text, diff, start_line, end_line, true)
+
+        _set_buffer_text(buffer, checkout_text)
+        vim.notify(success_message, vim.log.levels.INFO)
+        require("modules.features.git_gutter").update(buffer)
+
+        return
+    end
+
     local patch_base_text = action == "reset" and target_text or base_text
     local patch, patch_error = git_diff.build_selection_patch(patch_base_text, partial_text, details.relative_path)
 
@@ -147,6 +180,13 @@ local function _reset_selection_command(options)
     _P.apply_selection("reset", options.line1, options.line2)
 end
 
+--- Check out a ranged Git hunk selection from the index.
+---
+---@param options _my.git_hunks.RangeCommandOptions The command range details.
+local function _checkout_selection_command(options)
+    _P.apply_selection("checkout", options.line1, options.line2)
+end
+
 vim.api.nvim_create_user_command("GitStageSelection", _stage_selection_command, {
     range = true,
     desc = "Stage selected Git hunk lines.",
@@ -157,8 +197,17 @@ vim.api.nvim_create_user_command("GitResetSelection", _reset_selection_command, 
     desc = "Reset selected Git hunk lines from the index.",
 })
 
+vim.api.nvim_create_user_command("GitCheckoutSelection", _checkout_selection_command, {
+    range = true,
+    desc = "Check out selected Git hunk lines from the index.",
+})
+
 vim.keymap.set("x", "<leader>gah", ":GitStageSelection<CR>", { desc = "Stage selected Git hunk lines." })
 
 vim.keymap.set("x", "<leader>grh", ":GitResetSelection<CR>", {
     desc = "Reset selected Git hunk lines from the index.",
+})
+
+vim.keymap.set("x", "<leader>gch", ":GitCheckoutSelection<CR>", {
+    desc = "Check out selected Git hunk lines from the index.",
 })

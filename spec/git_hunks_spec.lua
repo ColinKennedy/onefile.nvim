@@ -233,6 +233,96 @@ describe("git visual hunk selection commands", function()
         remove_tree(root)
     end)
 
+    it("checks out selected unstaged buffer lines from the index", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            edit_file(path, { "one", "TWO", "THREE", "four" })
+            vim.cmd("2,2GitCheckoutSelection")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+            local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+
+            assert.equal("", cached)
+            assert.equal("one\ntwo\nTHREE\nfour", buffer_text)
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("does not check out already-staged selected lines", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            write_text(path, "one\nTWO\nthree\nfour\n")
+            run_git(root, { "add", "file.txt" })
+            edit_file(path, { "one", "TWO", "THREE", "four" })
+            vim.cmd("2,3GitCheckoutSelection")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+            local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+
+            assert.matches("-two\n+TWO", cached, 1, true)
+            assert.equal("one\nTWO\nthree\nfour", buffer_text)
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("checks out selected deleted lines from the visible deletion sign line", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            edit_file(path, { "one", "four" })
+            vim.cmd("2,2GitCheckoutSelection")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+            local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+
+            assert.equal("", cached)
+            assert.equal("one\ntwo\nthree\nfour", buffer_text)
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("checks out multiple selected hunks from one visual range", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\nfive\nsix\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            edit_file(path, { "one", "TWO", "three", "four", "FIVE", "six" })
+            vim.cmd("2,5GitCheckoutSelection")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+            local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+
+            assert.equal("", cached)
+            assert.equal("one\ntwo\nthree\nfour\nfive\nsix", buffer_text)
+        end)
+
+        remove_tree(root)
+    end)
+
     it("refreshes gutter signs after staging selected unsaved lines", function()
         local root = make_repo()
 

@@ -1,3 +1,4 @@
+2. Is recomputed whenever changes to the repository is made (you may need to add some kind of filesystem watcher for that. But don't start on that until
 - add <leader>gac, <leader>grc
 - Add gitgutter + git navigation [g + ]g support
  + multi-file navigation (so I can emulate `git add -p`)

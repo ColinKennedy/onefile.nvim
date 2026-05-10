@@ -61,6 +61,10 @@ vim.opt.laststatus = 3
 -- Reference: https://youtu.be/3TRouzuWOuQ?t=107
 --
 vim.g.editorconfig = false
+
+-- Keep Neovim's cursor always centered
+vim.o.scrolloffpad = 1
+
 ---------- Settings [End] ----------
 
 -- NOTE: If you need to override the shell, use $NEOVIM_SHELL_COMMAND

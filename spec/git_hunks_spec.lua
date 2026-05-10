@@ -467,4 +467,49 @@ describe("git visual hunk selection commands", function()
 
         remove_tree(root)
     end)
+
+    it("stages the entire unsaved current buffer", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            edit_file(path, { "ONE", "two", "THREE" })
+            press_normal_keys(",gac")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+
+            assert.matches("-one\n+ONE", cached, 1, true)
+            assert.matches("-three\n+THREE", cached, 1, true)
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("resets the entire current file from the index", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            write_text(path, "ONE\ntwo\nTHREE\n")
+            run_git(root, { "add", "file.txt" })
+            edit_file(path, { "ONE", "two", "THREE" })
+            press_normal_keys(",grc")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+            local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+
+            assert.equal("", cached)
+            assert.equal("ONE\ntwo\nTHREE", buffer_text)
+        end)
+
+        remove_tree(root)
+    end)
 end)

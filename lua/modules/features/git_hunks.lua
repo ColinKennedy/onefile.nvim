@@ -42,6 +42,14 @@ local function _notify_error(message)
     vim.notify(message, vim.log.levels.ERROR)
 end
 
+--- Refresh Git-dependent UI after an index mutation.
+---
+---@param buffer integer The buffer that changed.
+local function _refresh_git_views(buffer)
+    require("modules.features.git_gutter").update(buffer)
+    require("modules.features.git_hunk_navigation").mark_stale_for_buffer(buffer)
+end
+
 ---@class _my.git_hunks.RangeCommandOptions
 ---@field line1 integer The first command range line.
 ---@field line2 integer The last command range line.
@@ -145,7 +153,7 @@ local function _apply_selection_from_details(action, buffer, data, diff, start_l
 
         _set_buffer_text(buffer, checkout_text)
         vim.notify(data.success_message, vim.log.levels.INFO)
-        require("modules.features.git_gutter").update(buffer)
+        _refresh_git_views(buffer)
 
         return
     end
@@ -168,7 +176,107 @@ local function _apply_selection_from_details(action, buffer, data, diff, start_l
     end
 
     vim.notify(data.success_message, vim.log.levels.INFO)
-    require("modules.features.git_gutter").update(buffer)
+    _refresh_git_views(buffer)
+end
+
+--- Get the Git index file mode for `details`.
+---
+---@param details _my.git_diff.FileDetails The Git file details.
+---@return string # The index mode to use.
+local function _get_index_mode(details)
+    local result = git_diff.run_git(
+        { "-C", details.repository, "ls-files", "-s", "--", details.relative_path },
+        details.repository
+    )
+    local mode = result.stdout:match("^(%d+)%s")
+
+    if mode then
+        return mode
+    end
+
+    return "100644"
+end
+
+--- Stage exact text into the index for `details`.
+---
+---@param details _my.git_diff.FileDetails The Git file details.
+---@param text string The text to stage.
+---@return boolean # If the text was staged, return `true`.
+---@return string? # An error message, if any.
+local function _stage_text(details, text)
+    local object =
+        git_diff.run_git({ "-C", details.repository, "hash-object", "-w", "--stdin" }, details.repository, text)
+
+    if object.code ~= 0 then
+        return false, vim.trim(object.stderr)
+    end
+
+    local object_id = vim.trim(object.stdout)
+    local result = git_diff.run_git(
+        {
+            "-C",
+            details.repository,
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            _get_index_mode(details),
+            object_id,
+            details.relative_path,
+        },
+        details.repository
+    )
+
+    if result.code ~= 0 then
+        return false, vim.trim(result.stderr)
+    end
+
+    return true, nil
+end
+
+--- Run a whole-file Git hunk action for the current buffer.
+---
+---@param action "stage" | "reset" The whole-file operation to run.
+function _P.apply_current_file(action)
+    local buffer = vim.api.nvim_get_current_buf()
+    local details, details_error = git_diff.get_file_details(buffer)
+
+    if not details then
+        _notify_error(details_error or "Cannot find git details for current buffer.")
+
+        return
+    end
+
+    if git_diff.has_unmerged_entries(details) then
+        _notify_error("Cannot use Git whole-file actions on a file with unresolved merge entries.")
+
+        return
+    end
+
+    local success
+    local message
+
+    if action == "stage" then
+        success, message = _stage_text(details, _get_buffer_text(buffer))
+    else
+        local result =
+            git_diff.run_git({ "-C", details.repository, "reset", "--", details.relative_path }, details.repository)
+        success = result.code == 0
+        message = vim.trim(result.stderr)
+    end
+
+    if not success then
+        _notify_error(string.format("Cannot %s current Git file: %s", action, message or ""))
+
+        return
+    end
+
+    if action == "stage" then
+        vim.notify("Staged current Git file.", vim.log.levels.INFO)
+    else
+        vim.notify("Reset current Git file from the index.", vim.log.levels.INFO)
+    end
+
+    _refresh_git_views(buffer)
 end
 
 --- Run a visual Git hunk action for selected lines.
@@ -371,3 +479,11 @@ vim.keymap.set("x", "<leader>gch", ":GitCheckoutSelection<CR>", {
 vim.keymap.set("n", "<leader>gch", function()
     _P.apply_closest_hunk("checkout")
 end, { desc = "Check out closest Git hunk from the index." })
+
+vim.keymap.set("n", "<leader>gac", function()
+    _P.apply_current_file("stage")
+end, { desc = "Stage current Git file." })
+
+vim.keymap.set("n", "<leader>grc", function()
+    _P.apply_current_file("reset")
+end, { desc = "Reset current Git file from the index." })

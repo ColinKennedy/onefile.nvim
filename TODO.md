@@ -1,6 +1,20 @@
-- Add gitgutter + git navigation [g + ]g support + multi-file navigation
+- Add gitgutter + git navigation [g + ]g support
+ + multi-file navigation (so I can emulate `git add -p`)
+  - This navigation I guess should be separate from quickfix but it also should be possible to load it into the quickfix
 - Add :Gcd
 - Add tests
+- Add my lazy + plugins back
+- Make M into _P, as much as possible
+ - Make sure that functions that ARE being exported actually we being used in at least one other module. Otherwise, demote them to _P
+ - If any modules no longer use M/_P, make sure to remove the `return` line as well
+- A <M-S-{1,2,3,4}> for grapple
+- The remote update plugin needs to exist still, it seems
+- Add the more advanced statusline (git push up, git remote down, rebase conflict + conflict steps, etc)
+- add <leader>gac, <leader>grc
+
+https://github.com/cole-clark/onefile.nvim/commit/00cb04b342ce73d5bf113e06f713364f50c96ef7
+- Make it an async git gutter plugin and add <leader>gah etc
+- Add a CI/CD process that inlines all of the modules and compresses them into a single file
 
 - Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
 - Add quickscope support
@@ -75,7 +89,7 @@ vim.keymap.set("n", "J", "mzJ`z", {
     desc = "Keep the cursor in the same position while pressing ``J``.",
 })
 
-vim.keymap.set("n", "J", "mzJ`z:delmarks z<cr>") 
+vim.keymap.set("n", "J", "mzJ`z:delmarks z<cr>")
 
 from this code and from my actual config
 ```

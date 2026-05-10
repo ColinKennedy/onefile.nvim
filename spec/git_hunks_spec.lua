@@ -59,6 +59,13 @@ local function edit_file(path, lines)
     vim.bo.endofline = true
 end
 
+--- Press normal-mode keys and execute their mapping.
+---
+---@param keys string The key sequence to press.
+local function press_normal_keys(keys)
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "x", false)
+end
+
 --- Capture notifications while `callback` runs and replay them only on failure.
 ---
 ---@param callback fun(): nil The test body to run quietly.
@@ -318,6 +325,98 @@ describe("git visual hunk selection commands", function()
 
             assert.equal("", cached)
             assert.equal("one\ntwo\nthree\nfour\nfive\nsix", buffer_text)
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("stages the closest hunk from normal mode", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\nfive\nsix\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            edit_file(path, { "one", "TWO", "three", "four", "FIVE", "six" })
+            vim.api.nvim_win_set_cursor(0, { 4, 0 })
+            press_normal_keys(",gah")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+
+            assert.is_nil(cached:find("-two\n+TWO", 1, true))
+            assert.matches("-five\n+FIVE", cached, 1, true)
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("resets the closest hunk from normal mode", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\nfive\nsix\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            write_text(path, "one\nTWO\nthree\nfour\nFIVE\nsix\n")
+            run_git(root, { "add", "file.txt" })
+            edit_file(path, { "one", "TWO", "three", "four", "FIVE", "six" })
+            vim.api.nvim_win_set_cursor(0, { 3, 0 })
+            press_normal_keys(",grh")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+
+            assert.is_nil(cached:find("-two\n+TWO", 1, true))
+            assert.matches("-five\n+FIVE", cached, 1, true)
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("checks out the closest hunk from normal mode", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\nfive\nsix\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            write_text(path, "one\nTWO\nthree\nfour\nfive\nsix\n")
+            run_git(root, { "add", "file.txt" })
+            edit_file(path, { "one", "TWO", "three", "four", "FIVE", "six" })
+            vim.api.nvim_win_set_cursor(0, { 4, 0 })
+            press_normal_keys(",gch")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+            local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+
+            assert.matches("-two\n+TWO", cached, 1, true)
+            assert.equal("one\nTWO\nthree\nfour\nfive\nsix", buffer_text)
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("stages the closest deleted hunk from normal mode", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            edit_file(path, { "one", "four" })
+            vim.api.nvim_win_set_cursor(0, { 2, 0 })
+            press_normal_keys(",gah")
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+
+            assert.matches("-two\n-three", cached, 1, true)
         end)
 
         remove_tree(root)

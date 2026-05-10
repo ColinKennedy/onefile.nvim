@@ -480,6 +480,14 @@ function _P.parse_selection_diff(diff)
     return hunks
 end
 
+--- Parse a zero-context unified diff into hunks.
+---
+---@param diff string The output from `git diff --unified=0`.
+---@return _my.git_diff.SelectionHunk[] # The parsed hunks.
+function M.parse_selection_diff(diff)
+    return _P.parse_selection_diff(diff)
+end
+
 --- Build text containing only selected changes from `base_text` to `target_text`.
 ---
 ---@param base_text string The text to patch from.

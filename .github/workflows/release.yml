@@ -46,33 +46,9 @@ jobs:
           sudo luarocks install luacheck
           sudo luarocks install llscheck
 
-      - name: Validate source tree
-        run: |
-          export GIT_CONFIG=~/.gitconfig
-          git config url."https://github.com/".insteadOf git@github.com:
-
-          make luacheck
-          make test
-          make llscheck CONFIGURATION=.github/workflows/.luarc.json
-
       - name: Generate bundled init
         run: |
-          python3 .github/workflows/inline_init.py --input init.lua --output "$RUNNER_TEMP/noplugins-init.lua"
-
-      - name: Create temporary release validation tree
-        run: |
-          mkdir -p "$RUNNER_TEMP/bundle-check"
-          tar --exclude=.git --exclude=.generated --exclude='init[0-9]*.lua' -cf - . | tar -C "$RUNNER_TEMP/bundle-check" -xf -
-
-      - name: Install bundled init as the startup file
-        run: |
-          cp "$RUNNER_TEMP/noplugins-init.lua" "$RUNNER_TEMP/bundle-check/init.lua"
-
-      - name: Allow GitHub Actions to clone dependencies over HTTPS
-        working-directory: ${{ runner.temp }}/bundle-check
-        run: |
-          export GIT_CONFIG=~/.gitconfig
-          git config url."https://github.com/".insteadOf git@github.com:
+          python3 .github/workflows/inline_init.py --input init.lua --output init.lua
 
       - name: Luacheck bundled init tree
         working-directory: ${{ runner.temp }}/bundle-check

@@ -1,7 +1,7 @@
 --- Stage and unstage visual selections from unsaved buffer edits.
 
-local git_diff = require("modules.utilities.git_diff")
 local _P = {}
+
 --- Get all current buffer text as a single string.
 ---
 ---@param buffer integer The Vim buffer to inspect.
@@ -67,60 +67,76 @@ end
 ---@param action _my.git_hunks.Action The hunk operation to run.
 ---@param buffer integer The Vim buffer to inspect.
 ---@param details _my.git_diff.FileDetails The Git file details.
----@return _my.git_hunks.ActionDetails? # The resolved action details.
-local function _get_action_details(action, buffer, details)
-    local base_text
-    local target_text
-    local success_message
+---@param callback fun(data: _my.git_hunks.ActionDetails?): nil Callback with the resolved action details.
+local function _get_action_details(action, buffer, details, callback)
+    local git_diff = require("modules.utilities.git_diff")
 
     if action == "stage" or action == "checkout" then
-        local show_error
-        base_text, show_error = git_diff.get_blob_text(details, ":" .. details.relative_path)
+        git_diff.get_blob_text(details, ":" .. details.relative_path, function(base_text, show_error)
+            if not base_text then
+                _notify_error(
+                    string.format("Cannot stage selected hunks for an untracked or non-text file: %s", show_error or "")
+                )
 
-        if not base_text then
-            _notify_error(
-                string.format("Cannot stage selected hunks for an untracked or non-text file: %s", show_error or "")
-            )
+                callback(nil)
 
-            return nil
-        end
+                return
+            end
 
-        target_text = _get_buffer_text(buffer)
+            local target_text = _get_buffer_text(buffer)
 
-        if action == "stage" then
-            success_message = "Staged selected Git hunk lines."
-        else
-            success_message = "Checked out selected Git hunk lines."
-        end
-    else
-        local base_error
-        local target_error
-        base_text, base_error = git_diff.get_blob_text(details, "HEAD:" .. details.relative_path)
-        target_text, target_error = git_diff.get_blob_text(details, ":" .. details.relative_path)
+            if base_text:find("\0", 1, true) or target_text:find("\0", 1, true) then
+                _notify_error("Cannot use Git hunk selection on binary files.")
 
-        if not base_text or not target_text then
-            _notify_error(
-                string.format("Cannot reset selected hunks for this file: %s%s", base_error or "", target_error or "")
-            )
+                callback(nil)
 
-            return nil
-        end
+                return
+            end
 
-        success_message = "Reset selected Git hunk lines from the index."
+            callback({
+                base_text = base_text,
+                details = details,
+                success_message = action == "stage" and "Staged selected Git hunk lines."
+                    or "Checked out selected Git hunk lines.",
+                target_text = target_text,
+            })
+        end)
+
+        return
     end
 
-    if base_text:find("\0", 1, true) or target_text:find("\0", 1, true) then
-        _notify_error("Cannot use Git hunk selection on binary files.")
+    git_diff.get_blob_text(details, "HEAD:" .. details.relative_path, function(base_text, base_error)
+        git_diff.get_blob_text(details, ":" .. details.relative_path, function(target_text, target_error)
+            if not base_text or not target_text then
+                _notify_error(
+                    string.format(
+                        "Cannot reset selected hunks for this file: %s%s",
+                        base_error or "",
+                        target_error or ""
+                    )
+                )
 
-        return nil
-    end
+                callback(nil)
 
-    return {
-        base_text = base_text,
-        details = details,
-        success_message = success_message,
-        target_text = target_text,
-    }
+                return
+            end
+
+            if base_text:find("\0", 1, true) or target_text:find("\0", 1, true) then
+                _notify_error("Cannot use Git hunk selection on binary files.")
+
+                callback(nil)
+
+                return
+            end
+
+            callback({
+                base_text = base_text,
+                details = details,
+                success_message = "Reset selected Git hunk lines from the index.",
+                target_text = target_text,
+            })
+        end)
+    end)
 end
 
 --- Run a hunk operation using already-resolved texts and range.
@@ -132,6 +148,8 @@ end
 ---@param start_line integer The first selected line.
 ---@param end_line integer The last selected line.
 local function _apply_selection_from_details(action, buffer, data, diff, start_line, end_line)
+    local git_diff = require("modules.utilities.git_diff")
+
     local partial_text, selected_changes = git_diff.build_selection_target(
         data.base_text,
         data.target_text,
@@ -159,124 +177,156 @@ local function _apply_selection_from_details(action, buffer, data, diff, start_l
     end
 
     local patch_base_text = action == "reset" and data.target_text or data.base_text
-    local patch, patch_error = git_diff.build_selection_patch(patch_base_text, partial_text, data.details.relative_path)
+    git_diff.build_selection_patch(
+        patch_base_text,
+        partial_text,
+        data.details.relative_path,
+        function(patch, patch_error)
+            if not patch then
+                _notify_error(string.format("Cannot create selected Git hunk patch: %s", patch_error or ""))
 
-    if not patch then
-        _notify_error(string.format("Cannot create selected Git hunk patch: %s", patch_error or ""))
+                return
+            end
 
-        return
-    end
+            git_diff.apply_cached_patch(data.details, patch, function(success, apply_error)
+                if not success then
+                    _notify_error(string.format("Cannot apply selected Git hunk patch: %s", apply_error or ""))
 
-    local success, apply_error = git_diff.apply_cached_patch(data.details, patch)
+                    return
+                end
 
-    if not success then
-        _notify_error(string.format("Cannot apply selected Git hunk patch: %s", apply_error or ""))
-
-        return
-    end
-
-    vim.notify(data.success_message, vim.log.levels.INFO)
-    _refresh_git_views(buffer)
+                vim.notify(data.success_message, vim.log.levels.INFO)
+                _refresh_git_views(buffer)
+            end)
+        end
+    )
 end
 
 --- Get the Git index file mode for `details`.
 ---
 ---@param details _my.git_diff.FileDetails The Git file details.
----@return string # The index mode to use.
-local function _get_index_mode(details)
-    local result = git_diff.run_git(
+---@param callback fun(mode: string): nil Callback with the index mode to use.
+local function _get_index_mode(details, callback)
+    local git_diff = require("modules.utilities.git_diff")
+
+    git_diff.run_git(
         { "-C", details.repository, "ls-files", "-s", "--", details.relative_path },
-        details.repository
+        details.repository,
+        nil,
+        function(result)
+            callback(result.stdout:match("^(%d+)%s") or "100644")
+        end
     )
-    local mode = result.stdout:match("^(%d+)%s")
-
-    if mode then
-        return mode
-    end
-
-    return "100644"
 end
 
 --- Stage exact text into the index for `details`.
 ---
 ---@param details _my.git_diff.FileDetails The Git file details.
 ---@param text string The text to stage.
----@return boolean # If the text was staged, return `true`.
----@return string? # An error message, if any.
-local function _stage_text(details, text)
-    local object =
-        git_diff.run_git({ "-C", details.repository, "hash-object", "-w", "--stdin" }, details.repository, text)
+---@param callback fun(success: boolean, message: string?): nil
+---    Callback with whether the text was staged.
+local function _stage_text(details, text, callback)
+    local git_diff = require("modules.utilities.git_diff")
 
-    if object.code ~= 0 then
-        return false, vim.trim(object.stderr)
-    end
+    git_diff.run_git(
+        { "-C", details.repository, "hash-object", "-w", "--stdin" },
+        details.repository,
+        text,
+        function(object)
+            if object.code ~= 0 then
+                callback(false, vim.trim(object.stderr))
 
-    local object_id = vim.trim(object.stdout)
-    local result = git_diff.run_git(
-        {
-            "-C",
-            details.repository,
-            "update-index",
-            "--add",
-            "--cacheinfo",
-            _get_index_mode(details),
-            object_id,
-            details.relative_path,
-        },
-        details.repository
+                return
+            end
+
+            local object_id = vim.trim(object.stdout)
+
+            _get_index_mode(details, function(mode)
+                git_diff.run_git(
+                    {
+                        "-C",
+                        details.repository,
+                        "update-index",
+                        "--add",
+                        "--cacheinfo",
+                        mode,
+                        object_id,
+                        details.relative_path,
+                    },
+                    details.repository,
+                    nil,
+                    function(result)
+                        if result.code ~= 0 then
+                            callback(false, vim.trim(result.stderr))
+
+                            return
+                        end
+
+                        callback(true, nil)
+                    end
+                )
+            end)
+        end
     )
-
-    if result.code ~= 0 then
-        return false, vim.trim(result.stderr)
-    end
-
-    return true, nil
 end
 
 --- Run a whole-file Git hunk action for the current buffer.
 ---
 ---@param action "stage" | "reset" The whole-file operation to run.
 function _P.apply_current_file(action)
+    local git_diff = require("modules.utilities.git_diff")
+
     local buffer = vim.api.nvim_get_current_buf()
-    local details, details_error = git_diff.get_file_details(buffer)
+    git_diff.get_file_details(buffer, function(details, details_error)
+        if not details then
+            _notify_error(details_error or "Cannot find git details for current buffer.")
 
-    if not details then
-        _notify_error(details_error or "Cannot find git details for current buffer.")
+            return
+        end
 
-        return
-    end
+        git_diff.has_unmerged_entries(details, function(has_unmerged)
+            if has_unmerged then
+                _notify_error("Cannot use Git whole-file actions on a file with unresolved merge entries.")
 
-    if git_diff.has_unmerged_entries(details) then
-        _notify_error("Cannot use Git whole-file actions on a file with unresolved merge entries.")
+                return
+            end
 
-        return
-    end
+            --- Finish the whole-file action.
+            ---
+            ---@param success boolean If `true`, the action succeeded.
+            ---@param message string? The error message, if any.
+            local function _finish(success, message)
+                if not success then
+                    _notify_error(string.format("Cannot %s current Git file: %s", action, message or ""))
 
-    local success
-    local message
+                    return
+                end
 
-    if action == "stage" then
-        success, message = _stage_text(details, _get_buffer_text(buffer))
-    else
-        local result =
-            git_diff.run_git({ "-C", details.repository, "reset", "--", details.relative_path }, details.repository)
-        success = result.code == 0
-        message = vim.trim(result.stderr)
-    end
+                if action == "stage" then
+                    vim.notify("Staged current Git file.", vim.log.levels.INFO)
+                else
+                    vim.notify("Reset current Git file from the index.", vim.log.levels.INFO)
+                end
 
-    if not success then
-        _notify_error(string.format("Cannot %s current Git file: %s", action, message or ""))
+                _refresh_git_views(buffer)
+            end
 
-        return
-    end
+            if action == "stage" then
+                _stage_text(details, _get_buffer_text(buffer), _finish)
 
-    if action == "stage" then
-        vim.notify("Staged current Git file.", vim.log.levels.INFO)
-    else
-        vim.notify("Reset current Git file from the index.", vim.log.levels.INFO)
-    end
+                return
+            end
 
-    _refresh_git_views(buffer)
+            git_diff.run_git(
+                { "-C", details.repository, "reset", "--", details.relative_path },
+                details.repository,
+                nil,
+                function(result)
+                    _finish(result.code == 0, vim.trim(result.stderr))
+                end
+            )
+        end)
+    end)
 end
 
 --- Run a visual Git hunk action for selected lines.
@@ -285,39 +335,44 @@ end
 ---@param start_line integer The first selected line.
 ---@param end_line integer The last selected line.
 function _P.apply_selection(action, start_line, end_line)
+    local git_diff = require("modules.utilities.git_diff")
+
     if start_line > end_line then
         start_line, end_line = end_line, start_line
     end
 
     local buffer = vim.api.nvim_get_current_buf()
-    local details, details_error = git_diff.get_file_details(buffer)
+    git_diff.get_file_details(buffer, function(details, details_error)
+        if not details then
+            _notify_error(details_error or "Cannot find git details for current buffer.")
 
-    if not details then
-        _notify_error(details_error or "Cannot find git details for current buffer.")
+            return
+        end
 
-        return
-    end
+        git_diff.has_unmerged_entries(details, function(has_unmerged)
+            if has_unmerged then
+                _notify_error("Cannot use Git hunk selection on a file with unresolved merge entries.")
 
-    if git_diff.has_unmerged_entries(details) then
-        _notify_error("Cannot use Git hunk selection on a file with unresolved merge entries.")
+                return
+            end
 
-        return
-    end
+            _get_action_details(action, buffer, details, function(data)
+                if not data then
+                    return
+                end
 
-    local data = _get_action_details(action, buffer, details)
-    if not data then
-        return
-    end
+                git_diff.build_zero_context_diff(data.base_text, data.target_text, function(diff, diff_error)
+                    if not diff then
+                        _notify_error(string.format("Cannot calculate selected Git hunks: %s", diff_error or ""))
 
-    local diff, diff_error = git_diff.build_zero_context_diff(data.base_text, data.target_text)
+                        return
+                    end
 
-    if not diff then
-        _notify_error(string.format("Cannot calculate selected Git hunks: %s", diff_error or ""))
-
-        return
-    end
-
-    _apply_selection_from_details(action, buffer, data, diff, start_line, end_line)
+                    _apply_selection_from_details(action, buffer, data, diff, start_line, end_line)
+                end)
+            end)
+        end)
+    end)
 end
 
 --- Get the target line range that selects all changes in `hunk`.
@@ -382,44 +437,50 @@ end
 ---
 ---@param action _my.git_hunks.Action The hunk operation to run.
 function _P.apply_closest_hunk(action)
+    local git_diff = require("modules.utilities.git_diff")
+
     local buffer = vim.api.nvim_get_current_buf()
-    local details, details_error = git_diff.get_file_details(buffer)
+    git_diff.get_file_details(buffer, function(details, details_error)
+        if not details then
+            _notify_error(details_error or "Cannot find git details for current buffer.")
 
-    if not details then
-        _notify_error(details_error or "Cannot find git details for current buffer.")
+            return
+        end
 
-        return
-    end
+        git_diff.has_unmerged_entries(details, function(has_unmerged)
+            if has_unmerged then
+                _notify_error("Cannot use Git hunk selection on a file with unresolved merge entries.")
 
-    if git_diff.has_unmerged_entries(details) then
-        _notify_error("Cannot use Git hunk selection on a file with unresolved merge entries.")
+                return
+            end
 
-        return
-    end
+            _get_action_details(action, buffer, details, function(data)
+                if not data then
+                    return
+                end
 
-    local data = _get_action_details(action, buffer, details)
-    if not data then
-        return
-    end
+                git_diff.build_zero_context_diff(data.base_text, data.target_text, function(diff, diff_error)
+                    if not diff then
+                        _notify_error(string.format("Cannot calculate selected Git hunks: %s", diff_error or ""))
 
-    local diff, diff_error = git_diff.build_zero_context_diff(data.base_text, data.target_text)
+                        return
+                    end
 
-    if not diff then
-        _notify_error(string.format("Cannot calculate selected Git hunks: %s", diff_error or ""))
+                    local hunk =
+                        _find_closest_hunk(git_diff.parse_selection_diff(diff), vim.api.nvim_win_get_cursor(0)[1])
 
-        return
-    end
+                    if not hunk then
+                        vim.notify("No Git hunk lines were found.", vim.log.levels.INFO)
 
-    local hunk = _find_closest_hunk(git_diff.parse_selection_diff(diff), vim.api.nvim_win_get_cursor(0)[1])
+                        return
+                    end
 
-    if not hunk then
-        vim.notify("No Git hunk lines were found.", vim.log.levels.INFO)
-
-        return
-    end
-
-    local start_line, end_line = _get_hunk_line_range(hunk)
-    _apply_selection_from_details(action, buffer, data, diff, start_line, end_line)
+                    local start_line, end_line = _get_hunk_line_range(hunk)
+                    _apply_selection_from_details(action, buffer, data, diff, start_line, end_line)
+                end)
+            end)
+        end)
+    end)
 end
 
 --- Stage a ranged Git hunk selection.

@@ -1,6 +1,4 @@
---- Navigate repository Git hunks with [g and ]g.
-
-local git_diff = require("modules.utilities.git_diff")
+--- Navigate cached repository Git hunks without using the quickfix list.
 
 local M = {}
 
@@ -64,16 +62,19 @@ end
 --- Get a Git repository root from `path`.
 ---
 ---@param path string The path to search from.
----@return string? # The repository root, if found.
----@return string? # An error message, if any.
-local function _get_repository(path)
-    local result = git_diff.run_git({ "-C", path, "rev-parse", "--show-toplevel" }, path)
+---@param callback fun(repository: string?, message: string?): nil Callback with the repository root.
+local function _get_repository(path, callback)
+    local git_diff = require("modules.utilities.git_diff")
 
-    if result.code ~= 0 then
-        return nil, vim.trim(result.stderr)
-    end
+    git_diff.run_git({ "-C", path, "rev-parse", "--show-toplevel" }, path, nil, function(result)
+        if result.code ~= 0 then
+            callback(nil, vim.trim(result.stderr))
 
-    return vim.trim(result.stdout), nil
+            return
+        end
+
+        callback(vim.trim(result.stdout), nil)
+    end)
 end
 
 --- Build the command-line arguments for `git diff`.
@@ -183,46 +184,70 @@ end
 ---
 ---@param repository string The repository root.
 ---@param buffer integer The buffer to inspect.
----@return _my.git_hunk_navigation.Entry[] # The current buffer hunks.
----@return string? # The repository-relative path, if the buffer belongs to the repository.
-local function _make_buffer_entries(repository, buffer)
+---@param callback fun(entries: _my.git_hunk_navigation.Entry[], relative_path: string?): nil
+---    Callback with buffer hunks.
+local function _make_buffer_entries(repository, buffer, callback)
     if not vim.api.nvim_buf_is_valid(buffer) or vim.api.nvim_buf_get_name(buffer) == "" then
-        return {}, nil
+        callback({}, nil)
+
+        return
     end
 
-    local details = git_diff.get_file_details(buffer)
+    local git_diff = require("modules.utilities.git_diff")
 
-    if not details or details.repository ~= repository then
-        return {}, nil
-    end
+    git_diff.get_file_details(buffer, function(details)
+        if not details or details.repository ~= repository then
+            callback({}, nil)
 
-    local old_lines = git_diff.get_index_lines(details)
-    local new_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
-    ---@type _my.git_hunk_navigation.Entry[]
-    local entries = {}
+            return
+        end
 
-    for _, hunk in ipairs(git_diff.compute_hunks(old_lines, new_lines)) do
-        table.insert(entries, _make_entry(repository, details.relative_path, hunk))
-    end
+        git_diff.get_index_lines(details, function(old_lines)
+            local new_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+            ---@type _my.git_hunk_navigation.Entry[]
+            local entries = {}
 
-    return entries, details.relative_path
+            for _, hunk in ipairs(git_diff.compute_hunks(old_lines, new_lines)) do
+                table.insert(entries, _make_entry(repository, details.relative_path, hunk))
+            end
+
+            callback(entries, details.relative_path)
+        end)
+    end)
 end
 
 --- Replace disk-based entries with unsaved hunks from loaded buffers.
 ---
 ---@param repository string The repository root.
 ---@param entries _my.git_hunk_navigation.Entry[] The loaded entries to modify.
-local function _merge_loaded_buffer_hunks(repository, entries)
-    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
-        local buffer_entries, relative_path = _make_buffer_entries(repository, buffer)
+---@param callback fun(): nil Callback after loaded buffer hunks are merged.
+local function _merge_loaded_buffer_hunks(repository, entries, callback)
+    local buffers = vim.api.nvim_list_bufs()
+    local index = 1
 
-        if relative_path then
-            _remove_file_entries(entries, relative_path)
-            vim.list_extend(entries, buffer_entries)
+    --- Merge the next buffer.
+    local function _next()
+        local buffer = buffers[index]
+        index = index + 1
+
+        if not buffer then
+            _sort_cached_entries(entries)
+            callback()
+
+            return
         end
+
+        _make_buffer_entries(repository, buffer, function(buffer_entries, relative_path)
+            if relative_path then
+                _remove_file_entries(entries, relative_path)
+                vim.list_extend(entries, buffer_entries)
+            end
+
+            _next()
+        end)
     end
 
-    _sort_cached_entries(entries)
+    _next()
 end
 
 --- Parse `git diff --unified=0` output into cached navigation entries.
@@ -231,6 +256,8 @@ end
 ---@param diff string The unified diff text.
 ---@return _my.git_hunk_navigation.Entry[] # The parsed entries.
 function M.parse_diff(repository, diff)
+    local git_diff = require("modules.utilities.git_diff")
+
     ---@type _my.git_hunk_navigation.Entry[]
     local entries = {}
     local relative_path
@@ -341,34 +368,43 @@ end
 --- Load repository hunks from `git diff`.
 ---
 ---@param arguments string[]? User-provided arguments after `:LoadGitDiff`.
----@return boolean # If hunks loaded, return `true`.
-function M.load(arguments)
+---@param callback fun(success: boolean): nil Callback with whether hunks loaded.
+function M.load(arguments, callback)
+    local git_diff = require("modules.utilities.git_diff")
+
     arguments = arguments or {}
+    callback = callback or function() end
 
-    local repository, repository_error = _get_repository(_get_current_path())
+    _get_repository(_get_current_path(), function(repository, repository_error)
+        if not repository then
+            vim.notify(string.format("Cannot load Git hunks: %s", repository_error or ""), vim.log.levels.ERROR)
 
-    if not repository then
-        vim.notify(string.format("Cannot load Git hunks: %s", repository_error or ""), vim.log.levels.ERROR)
+            callback(false)
 
-        return false
-    end
+            return
+        end
 
-    local command = { "-C", repository }
-    vim.list_extend(command, _make_diff_arguments(arguments))
-    local diff = git_diff.run_git(command, repository)
+        local command = { "-C", repository }
+        vim.list_extend(command, _make_diff_arguments(arguments))
+        git_diff.run_git(command, repository, nil, function(diff)
+            if diff.code ~= 0 then
+                vim.notify(string.format("Cannot load Git hunks: %s", vim.trim(diff.stderr)), vim.log.levels.ERROR)
 
-    if diff.code ~= 0 then
-        vim.notify(string.format("Cannot load Git hunks: %s", vim.trim(diff.stderr)), vim.log.levels.ERROR)
+                callback(false)
 
-        return false
-    end
+                return
+            end
 
-    local entries = M.parse_diff(repository, diff.stdout)
-    _merge_loaded_buffer_hunks(repository, entries)
-    M.set_state(repository, arguments, entries)
-    vim.notify(string.format("Loaded %s Git hunks.", #entries), vim.log.levels.INFO)
+            local entries = M.parse_diff(repository, diff.stdout)
 
-    return true
+            _merge_loaded_buffer_hunks(repository, entries, function()
+                M.set_state(repository, arguments, entries)
+                vim.notify(string.format("Loaded %s Git hunks.", #entries), vim.log.levels.INFO)
+
+                callback(true)
+            end)
+        end)
+    end)
 end
 
 --- Jump to `entry`.
@@ -383,22 +419,27 @@ end
 --- Get the best current location for position-aware hunk navigation.
 ---
 ---@param repository string The repository root.
----@return string? # The current repository-relative file path.
----@return integer # The current cursor line.
-local function _get_current_location(repository)
+---@param callback fun(relative_path: string?, line: integer): nil Callback with the current location.
+local function _get_current_location(repository, callback)
     local buffer_path = _get_buffer_path(0)
 
     if not buffer_path then
-        return nil, 1
+        callback(nil, 1)
+
+        return
     end
 
-    local details = git_diff.get_file_details(0)
+    local git_diff = require("modules.utilities.git_diff")
 
-    if not details or details.repository ~= repository then
-        return nil, 1
-    end
+    git_diff.get_file_details(0, function(details)
+        if not details or details.repository ~= repository then
+            callback(nil, 1)
 
-    return details.relative_path, vim.api.nvim_win_get_cursor(0)[1]
+            return
+        end
+
+        callback(details.relative_path, vim.api.nvim_win_get_cursor(0)[1])
+    end)
 end
 
 --- Check if `entry` is after a repository-relative cursor location.
@@ -456,33 +497,47 @@ end
 ---
 ---@param direction 1 | -1 The direction to move.
 function M.jump(direction)
-    local repository, repository_error = _get_repository(_get_current_path())
+    _get_repository(_get_current_path(), function(repository, repository_error)
+        if not repository then
+            vim.notify(string.format("Cannot jump to Git hunk: %s", repository_error or ""), vim.log.levels.ERROR)
 
-    if not repository then
-        vim.notify(string.format("Cannot jump to Git hunk: %s", repository_error or ""), vim.log.levels.ERROR)
+            return
+        end
 
-        return
-    end
+        local repository_state = M.get_repository_state(repository)
+        local arguments = repository_state and repository_state.arguments or {}
 
-    local repository_state = M.get_repository_state(repository)
-    local arguments = repository_state and repository_state.arguments or {}
+        --- Finish jumping after the cache is current.
+        ---
+        ---@param success boolean If `true`, loading succeeded.
+        local function _finish(success)
+            if not success then
+                return
+            end
 
-    if (not repository_state or repository_state.stale) and not M.load(arguments) then
-        return
-    end
+            repository_state = M.get_repository_state(repository)
 
-    repository_state = M.get_repository_state(repository)
+            if not repository_state or #repository_state.entries == 0 then
+                vim.notify("No Git hunks loaded.", vim.log.levels.INFO)
 
-    if not repository_state or #repository_state.entries == 0 then
-        vim.notify("No Git hunks loaded.", vim.log.levels.INFO)
+                return
+            end
 
-        return
-    end
+            _STATE.active_repository = repository
+            _get_current_location(repository, function(relative_path, line)
+                repository_state.index = _find_target_index(repository_state, direction, relative_path, line)
+                _jump_to_entry(repository_state.entries[repository_state.index])
+            end)
+        end
 
-    _STATE.active_repository = repository
-    local relative_path, line = _get_current_location(repository)
-    repository_state.index = _find_target_index(repository_state, direction, relative_path, line)
-    _jump_to_entry(repository_state.entries[repository_state.index])
+        if not repository_state or repository_state.stale then
+            M.load(arguments, _finish)
+
+            return
+        end
+
+        _finish(true)
+    end)
 end
 
 --- Convert the cached hunks to quickfix entries.
@@ -513,32 +568,43 @@ end
 ---
 ---@param arguments string[]? User-provided arguments after `:LoadGitDiff`.
 function M.load_quickfix(arguments)
-    local repository, repository_error = _get_repository(_get_current_path())
+    _get_repository(_get_current_path(), function(repository, repository_error)
+        if not repository then
+            vim.notify(string.format("Cannot load Git hunks: %s", repository_error or ""), vim.log.levels.ERROR)
 
-    if not repository then
-        vim.notify(string.format("Cannot load Git hunks: %s", repository_error or ""), vim.log.levels.ERROR)
-
-        return
-    end
-
-    local repository_state = M.get_repository_state(repository)
-
-    if arguments or not repository_state or repository_state.stale then
-        if not M.load(arguments or (repository_state and repository_state.arguments or {})) then
             return
         end
-    end
 
-    repository_state = M.get_repository_state(repository)
+        local repository_state = M.get_repository_state(repository)
 
-    if not repository_state or #repository_state.entries == 0 then
-        vim.fn.setqflist({}, "r")
+        --- Finish loading the quickfix list.
+        ---
+        ---@param success boolean If `true`, loading succeeded.
+        local function _finish(success)
+            if not success then
+                return
+            end
 
-        return
-    end
+            repository_state = M.get_repository_state(repository)
 
-    vim.fn.setqflist(M.to_quickfix(repository), "r")
-    vim.cmd.copen()
+            if not repository_state or #repository_state.entries == 0 then
+                vim.fn.setqflist({}, "r")
+
+                return
+            end
+
+            vim.fn.setqflist(M.to_quickfix(repository), "r")
+            vim.cmd.copen()
+        end
+
+        if arguments or not repository_state or repository_state.stale then
+            M.load(arguments or (repository_state and repository_state.arguments or {}), _finish)
+
+            return
+        end
+
+        _finish(true)
+    end)
 end
 
 vim.api.nvim_create_user_command("LoadGitDiff", function(options)

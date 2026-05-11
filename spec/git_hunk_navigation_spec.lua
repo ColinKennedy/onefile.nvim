@@ -115,6 +115,24 @@ end
 ---@param keys string The key sequence to press.
 local function press_normal_keys(keys)
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "x", false)
+    vim.wait(400)
+end
+
+--- Load repository hunks and wait for async completion.
+---
+---@return boolean # If hunks loaded, return `true`.
+local function load_hunks()
+    local loaded
+
+    git_hunk_navigation.load(nil, function(success)
+        loaded = success
+    end)
+
+    vim.wait(1000, function()
+        return loaded ~= nil
+    end)
+
+    return loaded == true
 end
 
 describe("modules.features.git_hunk_navigation", function()
@@ -154,11 +172,11 @@ index 2222222..3333333 100644
 
             local ok, err = pcall(function()
                 with_cwd(first, function()
-                    assert.True(git_hunk_navigation.load())
+                    assert.True(load_hunks())
                 end)
 
                 with_cwd(second, function()
-                    assert.True(git_hunk_navigation.load())
+                    assert.True(load_hunks())
                 end)
 
                 local state = git_hunk_navigation.get_state()
@@ -187,7 +205,7 @@ index 2222222..3333333 100644
             local ok, err = pcall(function()
                 with_cwd(root, function()
                     vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "file.txt")))
-                    assert.True(git_hunk_navigation.load())
+                    assert.True(load_hunks())
 
                     vim.api.nvim_win_set_cursor(0, { 2, 0 })
                     press_normal_keys("]g")
@@ -218,7 +236,7 @@ index 2222222..3333333 100644
             local ok, err = pcall(function()
                 with_cwd(root, function()
                     vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "file.txt")))
-                    assert.True(git_hunk_navigation.load())
+                    assert.True(load_hunks())
 
                     vim.api.nvim_buf_set_lines(0, 1, 2, false, { "TWO" })
                     git_hunk_navigation.mark_stale_for_buffer(0)
@@ -251,6 +269,9 @@ index 2222222..3333333 100644
             local ok, err = pcall(function()
                 with_cwd(root, function()
                     vim.cmd("LoadGitDiff")
+                    vim.wait(1000, function()
+                        return git_hunk_navigation.get_repository_state(root) ~= nil
+                    end)
 
                     local repository_state = assert(git_hunk_navigation.get_repository_state(root))
                     assert.equal(#repository_state.entries, #vim.fn.getqflist())

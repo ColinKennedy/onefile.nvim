@@ -1,13 +1,18 @@
---- Show HEAD-relative git signs for unsaved buffer edits.
+--- Show index-relative git signs for unsaved buffer edits.
 
 local M = {}
-
 local _P = {}
+
 local _AUGROUP = vim.api.nvim_create_augroup("my.git_gutter", { clear = true })
 local _SIGN_GROUP = "my.git_gutter"
 local _SIGN_ADD = "MyGitGutterAdd"
 local _SIGN_CHANGE = "MyGitGutterChange"
 local _SIGN_DELETE = "MyGitGutterDelete"
+
+--- Tracks the newest async update request for each buffer so stale callbacks cannot place outdated signs.
+---
+---@type table<integer, integer>
+local _UPDATE_GENERATION_BY_BUFFER = {}
 
 --- Define git gutter highlight groups and signs.
 function _P.define_signs()
@@ -69,31 +74,44 @@ function M.update(buffer)
         return
     end
 
+    _UPDATE_GENERATION_BY_BUFFER[buffer] = (_UPDATE_GENERATION_BY_BUFFER[buffer] or 0) + 1
+    local generation = _UPDATE_GENERATION_BY_BUFFER[buffer]
+
     local git_diff = require("modules.utilities.git_diff")
-    local details = git_diff.get_file_details(buffer)
 
-    vim.fn.sign_unplace(_SIGN_GROUP, { buffer = buffer })
-
-    if not details then
-        return
-    end
-
-    local old_lines = git_diff.get_index_lines(details)
-    local new_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
-    local hunks = git_diff.compute_hunks(old_lines, new_lines)
-
-    for _, hunk in ipairs(hunks) do
-        if hunk.type == "delete" then
-            _place_sign(buffer, _SIGN_DELETE, hunk.line)
-        else
-            local sign = hunk.type == "add" and _SIGN_ADD or _SIGN_CHANGE
-            local count = math.max(hunk.new_count, 1)
-
-            for offset = 0, count - 1 do
-                _place_sign(buffer, sign, hunk.new_start + offset)
-            end
+    git_diff.get_file_details(buffer, function(details)
+        if generation ~= _UPDATE_GENERATION_BY_BUFFER[buffer] then
+            return
         end
-    end
+
+        vim.fn.sign_unplace(_SIGN_GROUP, { buffer = buffer })
+
+        if not details then
+            return
+        end
+
+        git_diff.get_index_lines(details, function(old_lines)
+            if generation ~= _UPDATE_GENERATION_BY_BUFFER[buffer] or not _is_supported_buffer(buffer) then
+                return
+            end
+
+            local new_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+            local hunks = git_diff.compute_hunks(old_lines, new_lines)
+
+            for _, hunk in ipairs(hunks) do
+                if hunk.type == "delete" then
+                    _place_sign(buffer, _SIGN_DELETE, hunk.line)
+                else
+                    local sign = hunk.type == "add" and _SIGN_ADD or _SIGN_CHANGE
+                    local count = math.max(hunk.new_count, 1)
+
+                    for offset = 0, count - 1 do
+                        _place_sign(buffer, sign, hunk.new_start + offset)
+                    end
+                end
+            end
+        end)
+    end)
 end
 
 --- Schedule a sign refresh for a buffer event.

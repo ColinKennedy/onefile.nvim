@@ -51,17 +51,25 @@ jobs:
         run: |
           python3 .github/workflows/inline_init.py --input init.lua --output init.lua
 
+      - name: Configure for local git cloning
+        run: |
+        # We use SSH in the `Makefile` but GitHub actions don't allow that. So
+        # we force git to clone using HTTP instead.
+        #
+        export GIT_CONFIG=~/.gitconfig
+        git config url."https://github.com/".insteadOf git@github.com:
+
       - name: Luacheck bundled init tree
         run: |
           make luacheck
 
-      - name: Test bundled init tree
-        run: |
-          make test
-
       - name: llscheck bundled init tree
         run: |
           make llscheck CONFIGURATION=.github/workflows/.luarc_release.json
+
+      - name: Test bundled init tree
+        run: |
+          make test
 
       - name: Create release
         uses: softprops/action-gh-release@v2

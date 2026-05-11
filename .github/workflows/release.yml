@@ -1,3 +1,12 @@
+# If you have issues with `release.yml`, use this code to troubleshoot!
+#
+# ```sh
+# python3 .github/workflows/inline_init.py --input init.lua --output init.lua
+# make luacheck
+# make test
+# make llscheck CONFIGURATION=.github/workflows/.luarc_release.json
+# ```
+
 name: Release
 
 on:

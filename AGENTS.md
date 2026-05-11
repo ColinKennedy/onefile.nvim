@@ -94,6 +94,8 @@ make check-stylua
 
 Run `eval $(luarocks path --lua-version 5.1 --bin)` first, then `make llscheck` when changing annotations, public helper shapes, or language-server-sensitive code, if the required tooling is available.
 
+For release workflow issues, use the README release troubleshooting flow. It generates the single-file bundle into a temporary directory, copies the repository to another temporary directory, replaces only that copy's `init.lua`, and then runs `make luacheck`, `make test`, and `make llscheck CONFIGURATION=.github/workflows/.luarc_release.json`. Do not replace the real working-tree `init.lua` just to debug the release artifact.
+
 ## Installation / Manual Use
 
 The config can be installed in-place by copying `init.lua` into Neovim's config directory, or side-loaded as an appname config:

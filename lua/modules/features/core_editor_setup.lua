@@ -24,7 +24,7 @@ function M.select_file_in_directory(root)
     end
 
     root = root or vim.fn.getcwd()
-    local command = { core_helpers._RIPGREP_EXECUTABLE, "--files", root }
+    local command = { core_helpers._RIPGREP_EXECUTABLE, "--files", "--hidden", "--glob", "!.git", root }
 
     if not core_helpers.exists_command(command[1]) then
         vim.notify("Cannot do search. No `rg` command was found.", vim.log.levels.ERROR)

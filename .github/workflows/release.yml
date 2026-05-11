@@ -30,7 +30,8 @@ jobs:
         uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
-          version: stable
+          # TODO: Replace with a stable version once stable includes newer features (e.g. scrolloffpad)
+          version: nightly
 
       - name: Install lua-language-server
         uses: jdx/mise-action@v2

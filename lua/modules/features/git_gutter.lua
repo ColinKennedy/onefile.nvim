@@ -60,6 +60,68 @@ local function _place_sign(buffer, sign, line)
     vim.fn.sign_place(0, _SIGN_GROUP, sign, buffer, { lnum = lnum, priority = 6 })
 end
 
+--- Get a stable key for an already-placed or pending sign.
+---
+---@param sign {name: string, lnum: integer} The sign data to identify.
+---@return string # A comparable sign key.
+local function _get_sign_key(sign)
+    return string.format("%s:%s", sign.name, sign.lnum)
+end
+
+--- Check if the git gutter already shows exactly `signs`.
+---
+---@param buffer integer The buffer to inspect.
+---@param signs {name: string, lnum: integer}[] The pending signs to compare.
+---@return boolean # If the displayed signs match `signs`, return `true`.
+local function _has_same_signs(buffer, signs)
+    local placed = vim.fn.sign_getplaced(buffer, { group = _SIGN_GROUP })
+    local current = placed[1] and placed[1].signs or {}
+
+    if #current ~= #signs then
+        return false
+    end
+
+    ---@type string[]
+    local current_keys = {}
+    ---@type string[]
+    local next_keys = {}
+
+    for _, sign in ipairs(current) do
+        table.insert(current_keys, _get_sign_key(sign))
+    end
+
+    for _, sign in ipairs(signs) do
+        table.insert(next_keys, _get_sign_key(sign))
+    end
+
+    table.sort(current_keys)
+    table.sort(next_keys)
+
+    for index, key in ipairs(current_keys) do
+        if key ~= next_keys[index] then
+            return false
+        end
+    end
+
+    return true
+end
+
+--- Replace all git gutter signs in `buffer`.
+---
+---@param buffer integer The buffer to update.
+---@param signs {name: string, lnum: integer}[] The signs to show.
+local function _replace_signs(buffer, signs)
+    if _has_same_signs(buffer, signs) then
+        return
+    end
+
+    vim.fn.sign_unplace(_SIGN_GROUP, { buffer = buffer })
+
+    for _, sign in ipairs(signs) do
+        _place_sign(buffer, sign.name, sign.lnum)
+    end
+end
+
 --- Update git gutter signs for `buffer`.
 ---
 ---@param buffer integer? The buffer to update. Defaults to current buffer.
@@ -84,9 +146,9 @@ function M.update(buffer)
             return
         end
 
-        vim.fn.sign_unplace(_SIGN_GROUP, { buffer = buffer })
-
         if not details then
+            _replace_signs(buffer, {})
+
             return
         end
 
@@ -97,19 +159,23 @@ function M.update(buffer)
 
             local new_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
             local hunks = git_diff.compute_hunks(old_lines, new_lines)
+            ---@type {name: string, lnum: integer}[]
+            local signs = {}
 
             for _, hunk in ipairs(hunks) do
                 if hunk.type == "delete" then
-                    _place_sign(buffer, _SIGN_DELETE, hunk.line)
+                    table.insert(signs, { name = _SIGN_DELETE, lnum = hunk.line })
                 else
                     local sign = hunk.type == "add" and _SIGN_ADD or _SIGN_CHANGE
                     local count = math.max(hunk.new_count, 1)
 
                     for offset = 0, count - 1 do
-                        _place_sign(buffer, sign, hunk.new_start + offset)
+                        table.insert(signs, { name = sign, lnum = hunk.new_start + offset })
                     end
                 end
             end
+
+            _replace_signs(buffer, signs)
         end)
     end)
 end

@@ -1254,21 +1254,31 @@ function M.complete_relative(text)
     local directory = _P.get_current_buffer_directory()
 
     if not directory then
-        vim.cmd.edit(text)
-
-        return nil
+        return vim.fn.getcompletion(text, "file")
     end
 
-    local options = _P.enable_autochdir(function()
-        return vim.fn.getcompletion("edit ", "cmdline")
-    end)
+    local parent = vim.fs.dirname(text)
+    local prefix = vim.fs.basename(text)
+    local relative_parent = parent == "." and "" or parent
+    local search_directory = relative_parent == "" and directory or vim.fs.joinpath(directory, relative_parent)
+
+    if vim.fn.isdirectory(search_directory) ~= 1 then
+        return {}
+    end
 
     ---@type string[]
     local output = {}
 
-    for _, item in ipairs(options or {}) do
-        if vim.startswith(item, text) then
-            table.insert(output, item)
+    for _, name in ipairs(vim.fn.readdir(search_directory)) do
+        if vim.startswith(name, prefix) then
+            local relative = relative_parent == "" and name or vim.fs.joinpath(relative_parent, name)
+            local full = vim.fs.joinpath(search_directory, name)
+
+            if vim.fn.isdirectory(full) == 1 then
+                relative = relative .. "/"
+            end
+
+            table.insert(output, relative)
         end
     end
 

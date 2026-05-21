@@ -79,8 +79,9 @@ function _P.get_grapple_statusline()
     ---@type string[]
     local output = {}
     local current_buffer = vim.api.nvim_get_current_buf()
+    local native_grapple = require("modules.plugins.native_grapple.core")
 
-    for index, buffer_number, buffer_path in core_helpers.iter_bookmarks() do
+    for index, buffer_number, buffer_path in native_grapple.iter_bookmarks() do
         local buffer_name = vim.fs.basename(buffer_path)
         local group = "%#StatusGrappleInactive#"
 
@@ -106,11 +107,18 @@ _G.get_git_branch_label_safe = function()
     return core_editor_setup.get_git_branch_label_safe()
 end
 
-local function _refresh_git_branch_statusline()
+---@param args vim.api.keyset.create_autocmd.callback_args
+local function _refresh_git_branch_statusline(args)
     local core_editor_setup = require("modules.features.core_editor_setup")
 
     core_editor_setup.refresh_git_branch_safe()
     git_status.refresh()
+
+    if args and args.event == "DirChanged" then
+        require("modules.plugins.native_grapple.core").sync_branch(vim.v.event.cwd)
+    end
+
+    vim.cmd.redrawstatus()
 end
 
 vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "DirChanged", "FocusGained" }, {

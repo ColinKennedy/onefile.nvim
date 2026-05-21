@@ -133,7 +133,7 @@ describe("modules.plugins.native_grapple", function()
     after_each(function()
         native_grapple._reset_state_for_tests()
         native_grapple.delete_all_bookmarks()
-        vim.cmd("silent enew!")
+        vim.cmd("silent noautocmd enew!")
     end)
 
     it("loads marks from the current branch session file", function()
@@ -194,6 +194,133 @@ describe("modules.plugins.native_grapple", function()
         vim.fn.delete(root, "rf")
     end)
 
+
+    it("uses cwd instead of the current buffer path when choosing the mark scope", function()
+        local root, branch = make_repository()
+        local other_root = make_repository()
+        local other_file = vim.fs.joinpath(other_root, "feature.txt")
+
+        write_marks_file(root, branch, "main.txt", 1)
+
+        with_cwd(root, function()
+            vim.cmd("silent noautocmd edit " .. vim.fn.fnameescape(other_file))
+            native_grapple.sync_branch(nil, true)
+        end)
+
+        assert.same({ "1:main.txt:1" }, get_bookmark_summaries())
+        vim.fn.delete(root, "rf")
+        vim.fn.delete(other_root, "rf")
+    end)
+
+
+
+    it("caches bookmark collection for redraw-heavy callers", function()
+        local root, branch = make_repository()
+        local original_get_mark = vim.api.nvim_get_mark
+        local calls = 0
+
+        write_marks_file(root, branch, "main.txt", 1)
+
+        with_cwd(root, function()
+            native_grapple.load_branch_marks(root, branch)
+            assert.same({ "1:main.txt:1" }, get_bookmark_summaries())
+        end)
+
+        rawset(vim.api, "nvim_get_mark", function(...)
+            calls = calls + 1
+
+            return original_get_mark(...)
+        end)
+
+        local ok, message = pcall(function()
+            native_grapple.get_bookmarks()
+            native_grapple.get_bookmarks()
+        end)
+
+        rawset(vim.api, "nvim_get_mark", original_get_mark)
+        vim.fn.delete(root, "rf")
+
+        if not ok then
+            error(message)
+        end
+
+        assert.equal(0, calls)
+    end)
+
+    it("does no cwd or Git work for cached hot-path syncs", function()
+        local root = vim.fn.tempname()
+        local original_getcwd = vim.fn.getcwd
+        local original_systemlist = vim.fn.systemlist
+        local calls = 0
+
+        assert.equal(1, vim.fn.mkdir(vim.fs.joinpath(root, ".git"), "p"))
+
+        rawset(vim.fn, "systemlist", function()
+            return { "main" }
+        end)
+
+        with_cwd(root, function()
+            native_grapple.sync_branch(nil, true)
+        end)
+
+        rawset(vim.fn, "getcwd", function()
+            calls = calls + 1
+
+            return root
+        end)
+        rawset(vim.fn, "systemlist", function()
+            calls = calls + 1
+
+            return { "main" }
+        end)
+
+        local ok, message = pcall(function()
+            native_grapple.sync_branch()
+            native_grapple.sync_branch()
+        end)
+
+        rawset(vim.fn, "getcwd", original_getcwd)
+        rawset(vim.fn, "systemlist", original_systemlist)
+        vim.fn.delete(root, "rf")
+
+        if not ok then
+            error(message)
+        end
+
+        assert.equal(0, calls)
+    end)
+
+    it("reuses the current branch cache when sync is not forced", function()
+        local root = vim.fn.tempname()
+        local original_systemlist = vim.fn.systemlist
+        local calls = 0
+
+        assert.equal(1, vim.fn.mkdir(vim.fs.joinpath(root, ".git"), "p"))
+
+        rawset(vim.fn, "systemlist", function()
+            calls = calls + 1
+
+            return { "main" }
+        end)
+
+        local ok, message = pcall(function()
+            with_cwd(root, function()
+                native_grapple.sync_branch(nil, true)
+                native_grapple.sync_branch()
+                native_grapple.sync_branch()
+            end)
+        end)
+
+        rawset(vim.fn, "systemlist", original_systemlist)
+        vim.fn.delete(root, "rf")
+
+        if not ok then
+            error(message)
+        end
+
+        assert.equal(1, calls)
+    end)
+
     it("uses the current directory as a storage root outside Git repositories", function()
         local root = vim.fn.tempname()
         local file_path = vim.fs.joinpath(root, "notes.txt")
@@ -233,7 +360,7 @@ describe("modules.plugins.native_grapple", function()
             assert.same({ "1:main.txt:1" }, get_bookmark_summaries())
 
             run_git(root, { "checkout", "feature" })
-            native_grapple.sync_branch(root)
+            native_grapple.sync_branch(root, true)
             assert.same({ "1:feature.txt:1" }, get_bookmark_summaries())
         end)
 

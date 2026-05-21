@@ -40,8 +40,14 @@ vim.api.nvim_create_autocmd({ "BufEnter", "DirChanged", "FocusGained", "ShellCmd
             reference_path = vim.v.event.cwd
         end
 
-        require("modules.plugins.native_grapple.core").sync_branch(reference_path, args.event ~= "BufEnter")
-        vim.cmd.redrawstatus()
+        local changed = require("modules.plugins.native_grapple.core").sync_branch(
+            reference_path,
+            args.event ~= "BufEnter"
+        )
+
+        if changed then
+            vim.cmd.redrawstatus()
+        end
     end,
 })
 

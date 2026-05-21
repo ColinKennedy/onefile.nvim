@@ -81,16 +81,15 @@ function _P.get_grapple_statusline()
     local current_buffer = vim.api.nvim_get_current_buf()
     local native_grapple = require("modules.plugins.native_grapple.core")
 
-    for index, buffer_number, buffer_path in native_grapple.iter_bookmarks() do
-        local buffer_name = vim.fs.basename(buffer_path)
+    for _, bookmark in ipairs(native_grapple.get_bookmarks()) do
         local group = "%#StatusGrappleInactive#"
 
-        if buffer_number == current_buffer then
+        if bookmark.buffer == current_buffer then
             group = "%#StatusGrappleActive#"
         end
 
         table.insert(output, group)
-        table.insert(output, string.format("%s. %s", index, buffer_name))
+        table.insert(output, string.format("%s. %s", bookmark.index, bookmark.name))
     end
 
     if vim.tbl_isempty(output) then
@@ -121,7 +120,7 @@ local function _refresh_git_branch_statusline(args)
     vim.cmd.redrawstatus()
 end
 
-vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "DirChanged", "FocusGained" }, {
+vim.api.nvim_create_autocmd({ "DirChanged", "FocusGained" }, {
     callback = _refresh_git_branch_statusline,
 })
 

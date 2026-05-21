@@ -1,4 +1,4 @@
-local core_helpers = require("modules.utilities.core_helpers")
+local native_grapple = require("modules.plugins.native_grapple.core")
 local git_status = require("modules.utilities.git_status")
 
 require("modules.features.statusline")
@@ -17,12 +17,12 @@ describe("modules.features.statusline", function()
 
     before_each(function()
         original_get_statusline = git_status.get_statusline
-        core_helpers.delete_all_bookmarks()
+        native_grapple.delete_all_bookmarks()
     end)
 
     after_each(function()
         git_status.get_statusline = original_get_statusline
-        core_helpers.delete_all_bookmarks()
+        native_grapple.delete_all_bookmarks()
     end)
 
     it("does not render git-detail or grapple separators when both are empty", function()

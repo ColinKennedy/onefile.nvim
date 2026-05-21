@@ -15,10 +15,55 @@ local _STATE = {
     root = nil, ---@type string?
 }
 
+---@class modules.plugins.native_grapple.Bookmark
+---@field index integer The logical bookmark index.
+---@field buffer integer The marked buffer number.
+---@field path string The marked buffer path.
+---@field name string The marked buffer basename for display.
+
+---@type modules.plugins.native_grapple.Bookmark[]?
+local _BOOKMARK_CACHE = nil
+
 ---@param index integer A 1-to-9 value.
 ---@return string # The global character mark. e.g. A, B, C, etc.
 function M.get_mark_from_index(index)
     return string.char(64 + index)
+end
+
+
+--- Clear the cached bookmark list after marks change.
+function _P.invalidate_bookmarks()
+    _BOOKMARK_CACHE = nil
+end
+
+--- Collect all currently-defined native grapple bookmarks.
+---
+---@return modules.plugins.native_grapple.Bookmark[] # The current bookmark entries.
+function _P.collect_bookmarks()
+    if _BOOKMARK_CACHE then
+        return _BOOKMARK_CACHE
+    end
+
+    ---@type modules.plugins.native_grapple.Bookmark[]
+    local output = {}
+
+    for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
+        local mark = M.get_mark_from_index(index)
+        local position = vim.api.nvim_get_mark(mark, {})
+
+        if position[1] ~= 0 then
+            table.insert(output, {
+                index = index,
+                buffer = position[3],
+                path = position[4],
+                name = vim.fs.basename(position[4]),
+            })
+        end
+    end
+
+    _BOOKMARK_CACHE = output
+
+    return output
 end
 
 ---@param mark string The Vim mark to query.
@@ -81,6 +126,14 @@ function _P.get_marks_path(root, branch)
     return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, M.MARKS_FILE_NAME)
 end
 
+
+--- Get all currently-defined native grapple bookmarks.
+---
+---@return modules.plugins.native_grapple.Bookmark[] # The current bookmark entries.
+function M.get_bookmarks()
+    return _P.collect_bookmarks()
+end
+
 --- Iterate over every native grapple bookmark.
 ---
 ---@return fun(): integer?, integer?, string?
@@ -88,23 +141,19 @@ end
 ---    The Vim buffer number of the bookmarked file.
 ---    The full path to the Vim buffer.
 function M.iter_bookmarks()
-    local index = M.BOOKMARK_MINIMUM - 1
+    local bookmarks = _P.collect_bookmarks()
+    local position = 0
 
     return function()
-        while true do
-            index = index + 1
+        position = position + 1
 
-            if index > M.BOOKMARK_MAXIMUM then
-                return nil
-            end
+        local bookmark = bookmarks[position]
 
-            local mark = M.get_mark_from_index(index)
-            local position = vim.api.nvim_get_mark(mark, {})
-
-            if position[1] ~= 0 then
-                return index, position[3], position[4]
-            end
+        if not bookmark then
+            return nil
         end
+
+        return bookmark.index, bookmark.buffer, bookmark.path
     end
 end
 
@@ -112,6 +161,8 @@ function M.delete_all_bookmarks()
     for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
         _P.delete_bookmark(index)
     end
+
+    _P.invalidate_bookmarks()
 end
 
 ---@param index integer 1-to-9 bookmark logical index.
@@ -123,6 +174,7 @@ end
 function M.delete_bookmark(index)
     M.sync_branch()
     _P.delete_bookmark(index)
+    _P.invalidate_bookmarks()
     M.write_current_branch_marks()
 end
 
@@ -143,6 +195,7 @@ function M.reset_bookmark(mark, buffer, line, column)
 
     vim.fn.bufload(buffer_number)
     vim.api.nvim_buf_set_mark(buffer_number, mark, line or 1, column or 0, {})
+    _P.invalidate_bookmarks()
 end
 
 ---@param mark string The Vim mark to jump to or apply.
@@ -151,6 +204,7 @@ function M.mark_current_buffer_as_bookmark(mark)
 
     if not _P.is_mark_defined(mark) then
         vim.cmd.mark(mark)
+        _P.invalidate_bookmarks()
         M.write_current_branch_marks()
 
         return
@@ -215,7 +269,7 @@ end
 ---@param bookmark {buffer: integer, path: string}
 function M.open_bookmark(bookmark)
     if bookmark.buffer ~= 0 and vim.api.nvim_buf_is_valid(bookmark.buffer) then
-        vim.cmd.buffer(bookmark.buffer)
+        vim.api.nvim_set_current_buf(bookmark.buffer)
 
         return
     end
@@ -349,6 +403,7 @@ end
 function M._reset_state_for_tests()
     _STATE.root = nil
     _STATE.branch = nil
+    _P.invalidate_bookmarks()
 end
 
 --- Set a Vim mark, falling back to the file top when a saved line is stale.
@@ -415,6 +470,7 @@ function M.load_branch_marks(root, branch)
 
     vim.cmd("noautocmd silent cd " .. vim.fn.fnameescape(previous_directory))
     vim.o.shortmess = previous_shortmess
+    _P.invalidate_bookmarks()
 
     if not ok then
         vim.notify(
@@ -426,11 +482,16 @@ end
 
 ---@param reference_path string? Explicit path to use when deciding which project root to load.
 ---@param force_refresh boolean? If true, re-check Git even when the cwd-root has not changed.
+---@return boolean # True if marks were swapped.
 function M.sync_branch(reference_path, force_refresh)
+    if not reference_path and _STATE.root and _STATE.branch and not force_refresh then
+        return false
+    end
+
     local root = _P.get_repository_root(reference_path)
 
     if _STATE.root == root and _STATE.branch and not force_refresh then
-        return
+        return false
     end
 
     local branch = _P.get_git_branch(root)
@@ -441,7 +502,7 @@ function M.sync_branch(reference_path, force_refresh)
     end
 
     if _STATE.root == root and _STATE.branch == branch then
-        return
+        return false
     end
 
     M.write_current_branch_marks()
@@ -449,6 +510,8 @@ function M.sync_branch(reference_path, force_refresh)
     _STATE.root = root
     _STATE.branch = branch
     M.load_branch_marks(root, branch)
+
+    return true
 end
 
 return M

@@ -603,7 +603,7 @@ function M.setup()
     _DID_SETUP = true
 
     vim.api.nvim_create_autocmd(
-        { "BufEnter", "BufFilePost", "BufWritePost", "DirChanged", "FileChangedShellPost", "FocusGained" },
+        { "BufFilePost", "BufWritePost", "DirChanged", "FileChangedShellPost", "FocusGained" },
         {
             callback = function()
                 M.refresh()

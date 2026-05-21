@@ -16,7 +16,7 @@ local _LAST_LOG_TITLE = "Dispatch log"
 local _DEFAULT_ERRORFORMAT = "%f:%l:%c: %m,%f:%l: %m,%m"
 
 ---@type table<string, fun()>
-M.compilers = {
+_P.extra_compilers = {
     vimgrep = function()
         vim.opt.errorformat = { "%f:%l:%c:%m", "%f:%l:%m" }
     end,
@@ -189,11 +189,19 @@ function _P.get_parse_lines(command)
     return _LAST_LOG_LINES
 end
 
+---@return string
+function _P.get_effective_errorformat()
+    if vim.bo.errorformat ~= "" then
+        return vim.bo.errorformat
+    end
+
+    return vim.o.errorformat
+end
 ---@param command string
 ---@param lines string[]
 ---@param errorformat string?
 function _P.load_quickfix(command, lines, errorformat)
-    local efm = errorformat or vim.bo.errorformat
+    local efm = errorformat or _P.get_effective_errorformat()
 
     if efm == "" then
         efm = _DEFAULT_ERRORFORMAT
@@ -211,6 +219,15 @@ function _P.load_quickfix(command, lines, errorformat)
     end
 
     vim.fn.setqflist({}, "r", {
+        items = parsed.items or {},
+        title = ":Dispatch " .. command,
+    })
+
+    if parsed.items and not vim.tbl_isempty(parsed.items) then
+        pcall(vim.cmd.cwindow)
+    end
+end
+
 ---@param compiler string
 ---@param callback fun(errorformat: string)
 function _P.with_compiler(compiler, callback)
@@ -220,13 +237,17 @@ function _P.with_compiler(compiler, callback)
     local original_global_compiler = vim.g.current_compiler
     local original_makeprg = vim.bo.makeprg
     local original_errorformat = vim.bo.errorformat
-    local ad_hoc_compiler = M.compilers[compiler]
+    local original_global_errorformat = vim.o.errorformat
+    local ad_hoc_compiler = _P.extra_compilers[compiler]
 
     if ad_hoc_compiler then
         local ok, message = pcall(ad_hoc_compiler)
 
         if not ok then
-            vim.notify(string.format('Could not load ad-hoc compiler "%s": %s', compiler, message), vim.log.levels.ERROR)
+            vim.notify(
+                string.format('Could not load ad-hoc compiler "%s": %s', compiler, message),
+                vim.log.levels.ERROR
+            )
 
             return
         end
@@ -240,9 +261,10 @@ function _P.with_compiler(compiler, callback)
         end
     end
 
-    callback(vim.bo.errorformat)
+    callback(_P.get_effective_errorformat())
 
     vim.bo.makeprg = original_makeprg
+    vim.o.errorformat = original_global_errorformat
     vim.bo.errorformat = original_errorformat
 
     if had_buffer_compiler then
@@ -254,9 +276,6 @@ function _P.with_compiler(compiler, callback)
     if had_global_compiler then
         vim.g.current_compiler = original_global_compiler
     else
-        vim.g.current_compiler = nil
-    end
-end    else
         vim.g.current_compiler = nil
     end
 end
@@ -286,10 +305,6 @@ function _P.run_silent(command, options)
                 _P.load_quickfix(command, _P.get_parse_lines(command), options.errorformat)
 
                 if code ~= 0 then
-                    if options.show_on_error then
-                        _P.show_log(_LAST_LOG_TITLE, _LAST_LOG_LINES)
-                    end
-
                     vim.notify(string.format(':Dispatch exited with code %d: %s', code, command), vim.log.levels.ERROR)
                 end
             end)
@@ -298,7 +313,8 @@ function _P.run_silent(command, options)
 end
 
 ---@param command string
-function _P.run_terminal(command)
+---@param options modules.plugins.native_dispatch.Options
+function _P.run_terminal(command, options)
     vim.cmd("botright split")
     local window = vim.api.nvim_get_current_win()
     local buffer = vim.api.nvim_get_current_buf()
@@ -311,7 +327,7 @@ function _P.run_terminal(command)
                     and vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
                     or {}
 
-                _P.remember_log(":Dispatch run " .. command, lines)
+                _P.remember_log(":Dispatch " .. command, lines)
 
                 if vim.api.nvim_win_is_valid(window) then
                     vim.api.nvim_win_close(window, true)
@@ -321,11 +337,10 @@ function _P.run_terminal(command)
                     vim.api.nvim_buf_delete(buffer, { force = true })
                 end
 
+                _P.load_quickfix(command, _P.get_parse_lines(command), options.errorformat)
+
                 if code ~= 0 then
-                    vim.notify(
-                        string.format(':Dispatch run exited with code %d: %s', code, command),
-                        vim.log.levels.ERROR
-                    )
+                    vim.notify(string.format(':Dispatch exited with code %d: %s', code, command), vim.log.levels.ERROR)
                 end
             end, 80)
         end,
@@ -333,7 +348,6 @@ function _P.run_terminal(command)
 
     vim.cmd.startinsert()
 end
-
 ---@param options modules.plugins.native_dispatch.Options
 function _P.dispatch_with_options(options)
     if options.mode == "show-last-log" then
@@ -354,14 +368,12 @@ function _P.dispatch_with_options(options)
         end
     end
 
-    if options.mode == "run" then
-        _P.run_terminal(options.command)
-
-        return
-    end
-
     local run = function()
-        _P.run_silent(options.command, options)
+        if options.show_on_error then
+            _P.run_silent(options.command, options)
+        else
+            _P.run_terminal(options.command, options)
+        end
     end
 
     if options.compiler then

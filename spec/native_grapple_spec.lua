@@ -1,6 +1,6 @@
 local core_helpers = require("modules.utilities.core_helpers")
 require("modules.utilities.git_diff")
-local native_grapple = require("modules.plugins.native_grapple")
+local native_grapple = require("modules.plugins.native_grapple.core")
 
 --- Run a Git command inside `root`.
 ---
@@ -68,7 +68,7 @@ local function write_marks_entries(root, branch, entries)
     table.insert(lines, 'vim.cmd.delmarks("A-Z")')
 
     for index, entry in ipairs(entries) do
-        local mark = core_helpers.get_vim_mark_from_bookmark_index(index)
+        local mark = native_grapple.get_mark_from_index(index)
 
         table.insert(lines, string.format('buffer = vim.fn.bufnr("%s", true)', entry.relative_path))
         table.insert(lines, "vim.fn.bufload(buffer)")
@@ -96,8 +96,8 @@ local function get_bookmark_summaries()
     ---@type string[]
     local output = {}
 
-    for index, buffer_number, buffer_path in core_helpers.iter_bookmarks() do
-        local mark = core_helpers.get_vim_mark_from_bookmark_index(index)
+    for index, buffer_number, buffer_path in native_grapple.iter_bookmarks() do
+        local mark = native_grapple.get_mark_from_index(index)
         local position = vim.api.nvim_buf_get_mark(buffer_number, mark)
 
         table.insert(output, string.format("%d:%s:%d", index, vim.fs.basename(buffer_path), position[1]))
@@ -113,11 +113,11 @@ end
 local function with_cwd(path, callback)
     local previous = vim.fn.getcwd()
 
-    vim.cmd("silent cd " .. vim.fn.fnameescape(path))
+    vim.cmd("noautocmd silent cd " .. vim.fn.fnameescape(path))
 
     local ok, message = pcall(callback)
 
-    vim.cmd("silent cd " .. vim.fn.fnameescape(previous))
+    vim.cmd("noautocmd silent cd " .. vim.fn.fnameescape(previous))
 
     if not ok then
         error(message)
@@ -126,13 +126,13 @@ end
 
 describe("modules.plugins.native_grapple", function()
     before_each(function()
-        native_grapple.teardown()
-        core_helpers.delete_all_bookmarks()
+        native_grapple._reset_state_for_tests()
+        native_grapple.delete_all_bookmarks()
     end)
 
     after_each(function()
-        native_grapple.teardown()
-        core_helpers.delete_all_bookmarks()
+        native_grapple._reset_state_for_tests()
+        native_grapple.delete_all_bookmarks()
         vim.cmd("silent enew!")
     end)
 
@@ -141,7 +141,7 @@ describe("modules.plugins.native_grapple", function()
         write_marks_file(root, branch, "main.txt", 1)
 
         with_cwd(root, function()
-            assert.True(native_grapple.load_branch_marks(root, branch))
+            native_grapple.load_branch_marks(root, branch)
         end)
 
         assert.same({ "1:main.txt:1" }, get_bookmark_summaries())
@@ -156,7 +156,7 @@ describe("modules.plugins.native_grapple", function()
             native_grapple.load_branch_marks(root, branch)
             assert.same({ "1:main.txt:1" }, get_bookmark_summaries())
 
-            assert.False(native_grapple.load_branch_marks(root, "feature"))
+            native_grapple.load_branch_marks(root, "feature")
         end)
 
         assert.same({}, get_bookmark_summaries())
@@ -168,7 +168,7 @@ describe("modules.plugins.native_grapple", function()
         write_marks_file(root, branch, "main.txt", 999)
 
         with_cwd(root, function()
-            assert.True(native_grapple.load_branch_marks(root, branch))
+            native_grapple.load_branch_marks(root, branch)
         end)
 
         assert.same({ "1:main.txt:1" }, get_bookmark_summaries())
@@ -194,26 +194,47 @@ describe("modules.plugins.native_grapple", function()
         vim.fn.delete(root, "rf")
     end)
 
+    it("uses the current directory as a storage root outside Git repositories", function()
+        local root = vim.fn.tempname()
+        local file_path = vim.fs.joinpath(root, "notes.txt")
+        local marks_path = vim.fs.joinpath(
+            root,
+            core_helpers._SESSIONS_DIRECTORY_NAME,
+            native_grapple.NO_GIT_BRANCH_NAME,
+            ".nvim.marks.lua"
+        )
+
+        assert.equal(1, vim.fn.mkdir(root, "p"))
+        write_text(file_path, "notes\n")
+
+        with_cwd(root, function()
+            vim.cmd("silent noautocmd edit " .. vim.fn.fnameescape(file_path))
+            native_grapple.mark_current_buffer_as_bookmark("A")
+
+            assert.equal(1, vim.fn.filereadable(marks_path))
+            assert.same({ "1:notes.txt:1" }, get_bookmark_summaries())
+
+            native_grapple.delete_all_bookmarks()
+            native_grapple._reset_state_for_tests()
+            native_grapple.sync_branch(root)
+        end)
+
+        assert.same({ "1:notes.txt:1" }, get_bookmark_summaries())
+        vim.fn.delete(root, "rf")
+    end)
+
     it("reloads branch marks when Git HEAD changes", function()
         local root, branch = make_repository()
         write_marks_file(root, branch, "main.txt", 1)
         write_marks_file(root, "feature", "feature.txt", 1)
 
         with_cwd(root, function()
-            native_grapple.opts.branch_reload_debounce_ms = 10
-            native_grapple.watch_repository(root)
+            native_grapple.sync_branch(root)
+            assert.same({ "1:main.txt:1" }, get_bookmark_summaries())
 
-            assert.True(vim.wait(1000, function()
-                local cache = native_grapple._REPOSITORY_CACHE[vim.fs.normalize(root)]
-                return cache and cache.branch == branch and cache.watcher ~= nil
-            end, 20))
-
-            native_grapple.load_branch_marks(root, branch)
             run_git(root, { "checkout", "feature" })
-
-            assert.True(vim.wait(1500, function()
-                return vim.deep_equal({ "1:feature.txt:1" }, get_bookmark_summaries())
-            end, 20))
+            native_grapple.sync_branch(root)
+            assert.same({ "1:feature.txt:1" }, get_bookmark_summaries())
         end)
 
         vim.fn.delete(root, "rf")

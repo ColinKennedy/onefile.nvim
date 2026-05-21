@@ -7,6 +7,9 @@ M.BOOKMARK_MINIMUM = 1
 M.BOOKMARK_MAXIMUM = 9
 M.MARKS_FILE_NAME = ".nvim.marks.lua"
 
+---@type string
+M.NO_GIT_BRANCH_NAME = "cwd"
+
 local _STATE = {
     branch = nil, ---@type string?
     root = nil, ---@type string?
@@ -40,10 +43,19 @@ function _P.get_reference_path(reference_path)
     return vim.fn.getcwd()
 end
 
----@param reference_path string?
----@return string?
+--- Get the nearest project root, or the current directory when outside a project.
+---
+---@param reference_path string? An explicit file or directory to resolve from.
+---@return string # The root used to save native grapple marks.
 function _P.get_repository_root(reference_path)
-    return require("modules.utilities.core_helpers").get_nearest_project_root(_P.get_reference_path(reference_path))
+    local path = _P.get_reference_path(reference_path)
+    local root = require("modules.utilities.core_helpers").get_nearest_project_root(path)
+
+    if root then
+        return root
+    end
+
+    return vim.fn.getcwd()
 end
 
 ---@param root string
@@ -51,9 +63,9 @@ end
 function _P.get_git_branch(root)
     local core_helpers = require("modules.utilities.core_helpers")
     local command = { core_helpers._GIT_EXECUTABLE, "-C", root, "branch", "--show-current" }
-    local output = vim.fn.systemlist(command)
+    local ok, output = pcall(vim.fn.systemlist, command)
 
-    if vim.v.shell_error ~= 0 then
+    if not ok or vim.v.shell_error ~= 0 then
         return nil
     end
 
@@ -103,7 +115,7 @@ function M.iter_bookmarks()
 end
 
 function M.delete_all_bookmarks()
-    for index, _, _ in M.iter_bookmarks() do
+    for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
         _P.delete_bookmark(index)
     end
 end
@@ -332,16 +344,76 @@ function M.write_current_branch_marks()
     M.write_branch_marks(_STATE.root, _STATE.branch)
 end
 
----@param root string
----@param branch string
+--- Reset native grapple state for focused tests.
+function M._reset_state_for_tests()
+    _STATE.root = nil
+    _STATE.branch = nil
+end
+
+--- Set a Vim mark, falling back to the file top when a saved line is stale.
+---
+---@param setter fun(buffer: integer, mark: string, line: integer, column: integer, opts: table): nil
+---    The real mark setter.
+---@param buffer integer The buffer to mark.
+---@param mark string The Vim mark to set.
+---@param line integer The saved line number.
+---@param column integer The saved column number.
+---@param opts table Extra mark options.
+function _P.set_mark_or_top(setter, buffer, mark, line, column, opts)
+    local ok, message = pcall(setter, buffer, mark, line, column, opts)
+
+    if ok then
+        return
+    end
+
+    if tostring(message):find("Invalid 'line'", 1, true) then
+        setter(buffer, mark, 1, 0, opts)
+
+        return
+    end
+
+    error(message, 0)
+end
+
+--- Source a saved native grapple marks file with a guarded mark setter.
+---
+---@param path string The Lua file to source.
+function _P.source_marks_file(path)
+    local original_set_mark = vim.api.nvim_buf_set_mark
+
+    rawset(vim.api, "nvim_buf_set_mark", function(buffer, mark, line, column, opts)
+        _P.set_mark_or_top(original_set_mark, buffer, mark, line, column, opts)
+    end)
+
+    local ok, message = pcall(dofile, path)
+    rawset(vim.api, "nvim_buf_set_mark", original_set_mark)
+
+    if not ok then
+        error(message, 0)
+    end
+end
+
+---@param root string The storage root that relative saved paths should resolve from.
+---@param branch string The Git branch, or the non-Git fallback branch name.
 function M.load_branch_marks(root, branch)
     local path = _P.get_marks_path(root, branch)
+
+    M.delete_all_bookmarks()
 
     if vim.fn.filereadable(path) ~= 1 then
         return
     end
 
-    local ok, message = pcall(dofile, path)
+    local previous_directory = vim.fn.getcwd()
+    local previous_shortmess = vim.o.shortmess
+
+    vim.opt.shortmess:append("F")
+    vim.cmd("noautocmd silent cd " .. vim.fn.fnameescape(root))
+
+    local ok, message = pcall(_P.source_marks_file, path)
+
+    vim.cmd("noautocmd silent cd " .. vim.fn.fnameescape(previous_directory))
+    vim.o.shortmess = previous_shortmess
 
     if not ok then
         vim.notify(
@@ -354,25 +426,11 @@ end
 ---@param reference_path string? Explicit path to use when deciding which project root to load.
 function M.sync_branch(reference_path)
     local root = _P.get_repository_root(reference_path)
-
-    if not root then
-        M.write_current_branch_marks()
-        M.delete_all_bookmarks()
-        _STATE.root = nil
-        _STATE.branch = nil
-
-        return
-    end
-
     local branch = _P.get_git_branch(root)
 
     if not branch then
-        M.write_current_branch_marks()
-        M.delete_all_bookmarks()
-        _STATE.root = nil
-        _STATE.branch = nil
-
-        return
+        root = vim.fn.getcwd()
+        branch = M.NO_GIT_BRANCH_NAME
     end
 
     if not _STATE.root and not _STATE.branch then

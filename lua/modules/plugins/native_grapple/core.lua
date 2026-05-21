@@ -27,17 +27,11 @@ function _P.is_mark_defined(mark)
     return vim.api.nvim_get_mark(mark, {})[1] ~= 0
 end
 
----@param reference_path string? Explicit path to resolve before falling back to the current buffer.
+---@param reference_path string? Explicit path to resolve before falling back to the current directory.
 ---@return string
 function _P.get_reference_path(reference_path)
     if reference_path and reference_path ~= "" then
         return reference_path
-    end
-
-    local buffer_path = vim.api.nvim_buf_get_name(0)
-
-    if buffer_path ~= "" then
-        return buffer_path
     end
 
     return vim.fn.getcwd()
@@ -344,6 +338,13 @@ function M.write_current_branch_marks()
     M.write_branch_marks(_STATE.root, _STATE.branch)
 end
 
+--- Get the active native grapple storage root.
+---
+---@return string? # The active mark storage root, if native grapple has synced.
+function M.get_current_root()
+    return _STATE.root
+end
+
 --- Reset native grapple state for focused tests.
 function M._reset_state_for_tests()
     _STATE.root = nil
@@ -424,22 +425,19 @@ function M.load_branch_marks(root, branch)
 end
 
 ---@param reference_path string? Explicit path to use when deciding which project root to load.
-function M.sync_branch(reference_path)
+---@param force_refresh boolean? If true, re-check Git even when the cwd-root has not changed.
+function M.sync_branch(reference_path, force_refresh)
     local root = _P.get_repository_root(reference_path)
+
+    if _STATE.root == root and _STATE.branch and not force_refresh then
+        return
+    end
+
     local branch = _P.get_git_branch(root)
 
     if not branch then
         root = vim.fn.getcwd()
         branch = M.NO_GIT_BRANCH_NAME
-    end
-
-    if not _STATE.root and not _STATE.branch then
-        _STATE.root = root
-        _STATE.branch = branch
-        M.delete_all_bookmarks()
-        M.load_branch_marks(root, branch)
-
-        return
     end
 
     if _STATE.root == root and _STATE.branch == branch then

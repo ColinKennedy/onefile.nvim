@@ -40,23 +40,22 @@ vim.api.nvim_create_autocmd({ "BufEnter", "DirChanged", "FocusGained", "ShellCmd
             reference_path = vim.v.event.cwd
         end
 
-        require("modules.plugins.native_grapple.core").sync_branch(reference_path)
+        require("modules.plugins.native_grapple.core").sync_branch(reference_path, args.event ~= "BufEnter")
         vim.cmd.redrawstatus()
     end,
 })
 
 vim.schedule(function()
-    require("modules.plugins.native_grapple.core").sync_branch()
+    require("modules.plugins.native_grapple.core").sync_branch(nil, true)
 end)
 
 require("modules.features.core_editor_setup")._SESSION_MANAGER:register_session_write_pre_callback(
     ".nvim.marks.lua",
     function()
         local core = require("modules.plugins.native_grapple.core")
-        local root = require("modules.utilities.core_helpers").get_nearest_project_root(vim.fn.getcwd())
 
         core.sync_branch()
 
-        return table.concat(core.serialize_mark_code(root), "\n")
+        return table.concat(core.serialize_mark_code(core.get_current_root()), "\n")
     end
 )

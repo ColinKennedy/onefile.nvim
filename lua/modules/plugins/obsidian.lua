@@ -15,6 +15,10 @@ local _ALIASES_START_MARKER = "aliases:"
 local _CURRENT_WORKSPACE = "politics"
 local _ROOT = os.getenv("NEOVIM_VAULTS_DIRECTORY") or vim.fs.joinpath(vim.fn.expand("~"), "vaults")
 
+---@class modules.plugins.obsidian.AliasEntry
+---@field path string The markdown file path containing the alias.
+---@field alias string The exact alias text from frontmatter.
+
 --- Find the alias from `text`, if any.
 ---
 ---@param text string The line to query. e.g. ` - some_tag/here`.
@@ -22,6 +26,68 @@ local _ROOT = os.getenv("NEOVIM_VAULTS_DIRECTORY") or vim.fs.joinpath(vim.fn.exp
 ---
 function _P.get_alias_text(text)
     return (string.match(text, "%s*-%s*(.*)"))
+end
+
+--- Check if a frontmatter line begins a top-level key.
+---
+---@param line string Some frontmatter line.
+---@return boolean # If the line starts a new top-level key, return `true`.
+function _P.is_metadata_key_line(line)
+    local character = line:sub(1, 1)
+
+    return character ~= "" and character ~= " "
+end
+
+--- Iterate aliases from a note's top YAML frontmatter.
+---
+--- Raises:
+---     If `path` cannot be read for data.
+---
+---@param path string An absolute path on-disk to some obsidian note to query from.
+---@return fun(): string? # A generator that yields one alias at a time.
+function _P.iter_aliases(path)
+    local handler = io.open(path)
+
+    if not handler then
+        error(string.format('File "%s" could not be opened.', path), 0)
+    end
+
+    local aliases_started = false
+    ---@type string[]
+    local aliases = {}
+    local line_number = 0
+
+    for line in handler:lines() do
+        line_number = line_number + 1
+
+        if line_number == 1 then
+            if line ~= _METADATA_MARKER then
+                break
+            end
+        elseif line == _METADATA_MARKER then
+            break
+        elseif line == _ALIASES_START_MARKER or line == "aliases: []" then
+            aliases_started = line == _ALIASES_START_MARKER
+        elseif aliases_started then
+            local alias = _P.get_alias_text(line)
+
+            if alias then
+                table.insert(aliases, alias)
+            elseif _P.is_metadata_key_line(line) then
+                aliases_started = false
+            end
+        end
+    end
+
+    handler:close()
+
+    local index = 0
+
+    return function()
+        index = index + 1
+
+        return aliases[index]
+    end
 end
 
 --- Find all file aliases from some obsidian.nvim note `path`.
@@ -33,49 +99,171 @@ end
 ---@return string[]  # All found aliases, if any.
 ---
 function _P.get_aliases(path)
-    --- Check if `line` defines an alias/title for us to read.
-    ---
-    ---@param line string Some line to check. e.g. `"tags:"`
-    ---@return boolean # If `line` defines the start of a non-alias metadata, return `false`.
-    ---
-    local function _is_alias_line(line)
-        local character = line[1]
-
-        return character and character ~= " "
-    end
-
-    local handler = io.open(path)
-
-    if not handler then
-        error(string.format('File "%s" could not be opened.', path), 0)
-    end
-
-    local started = false
-    local aliases_started = false
     ---@type string[]
     local output = {}
 
-    for line in handler:lines() do
-        if line == _METADATA_MARKER then
-            if not started then
-                started = true
-            else
-                break
-            end
-        elseif line == _ALIASES_START_MARKER then
-            aliases_started = true
-        elseif aliases_started then
-            local alias = _P.get_alias_text(line)
+    for alias in _P.iter_aliases(path) do
+        table.insert(output, alias)
+    end
 
-            if alias then
-                table.insert(output, alias)
-            elseif not _is_alias_line(line) then
-                break
+    return output
+end
+
+--- Normalize a path for comparisons.
+---
+---@param path string Some file or directory path.
+---@return string # The normalized path.
+function _P.normalize_path(path)
+    return vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
+end
+
+--- Check if `path` is inside `directory`.
+---
+---@param directory string The possible parent directory.
+---@param path string The possible child path.
+---@return boolean # If `path` is inside `directory`, return `true`.
+function _P.is_path_inside(directory, path)
+    local ok, relative = pcall(vim.fs.relpath, _P.normalize_path(directory), _P.normalize_path(path))
+
+    if not ok or not relative then
+        return false
+    end
+
+    return relative ~= ".." and not relative:match("^%.%.[/\\]")
+end
+
+--- Get the Obsidian workspace root for `path`, if any.
+---
+---@param path string A buffer path.
+---@return string? # The workspace root, if `path` is inside a vault workspace.
+function _P.get_workspace_root_for_path(path)
+    local vault_root = _P.get_vaults_root_path()
+    local ok, relative = pcall(vim.fs.relpath, _P.normalize_path(vault_root), _P.normalize_path(path))
+
+    if not ok or not relative or relative == ".." or relative:match("^%.%.[/\\]") then
+        return nil
+    end
+
+    local workspace_name = relative:match("^([^/\\]+)[/\\]")
+
+    if not workspace_name then
+        return nil
+    end
+
+    return vim.fs.joinpath(vault_root, workspace_name)
+end
+
+--- Get the Obsidian wikilink target under the cursor.
+---
+---@param buffer integer The buffer to inspect.
+---@param cursor_row integer The 1-based cursor row.
+---@param cursor_column integer The 0-based cursor column.
+---@return string? # The wikilink target under the cursor, if any.
+function _P.get_wikilink_target_at_cursor(buffer, cursor_row, cursor_column)
+    local line = vim.api.nvim_buf_get_lines(buffer, cursor_row - 1, cursor_row, false)[1] or ""
+    local cursor = cursor_column + 1
+    local start_index = 1
+
+    while true do
+        local match_start, match_end, target = line:find("%[%[([^%]]+)%]%]", start_index)
+
+        if not match_start then
+            return nil
+        end
+
+        if match_start <= cursor and cursor <= match_end then
+            return target
+        end
+
+        start_index = match_end + 1
+    end
+end
+
+--- Find all markdown files in `workspace_root` recursively.
+---
+---@param workspace_root string The workspace to scan.
+---@return string[] # Sorted markdown file paths.
+function _P.get_markdown_files(workspace_root)
+    local template = vim.fs.joinpath(workspace_root, "**", "*.md")
+    local paths = vim.fn.glob(template, true, true)
+
+    table.sort(paths)
+
+    return paths
+end
+
+--- Compare two alias values case-insensitively.
+---
+---@param left string Some alias text.
+---@param right string Some link target text.
+---@return boolean # If both values match after lowercasing, return `true`.
+function _P.is_alias_match(left, right)
+    return left:lower() == right:lower()
+end
+
+--- Find the first markdown file in `workspace_root` whose frontmatter aliases match `target`.
+---
+---@param workspace_root string The workspace to scan.
+---@param target string The wikilink target to match.
+---@return string? # The matching note path, if any.
+function _P.find_note_by_alias(workspace_root, target)
+    for _, path in ipairs(_P.get_markdown_files(workspace_root)) do
+        for alias in _P.iter_aliases(path) do
+            if _P.is_alias_match(alias, target) then
+                return path
             end
         end
     end
 
-    return output
+    return nil
+end
+
+--- Go to the Obsidian note whose alias matches the wikilink under the cursor.
+function _P.go_to_definition()
+    local buffer = vim.api.nvim_get_current_buf()
+    local path = vim.api.nvim_buf_get_name(buffer)
+    local workspace_root = _P.get_workspace_root_for_path(path)
+
+    if not workspace_root then
+        vim.notify("Current markdown file is not inside an Obsidian vault workspace.", vim.log.levels.WARN)
+
+        return
+    end
+
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local target = _P.get_wikilink_target_at_cursor(buffer, cursor[1], cursor[2])
+
+    if not target then
+        vim.notify("No Obsidian wikilink found under cursor.", vim.log.levels.WARN)
+
+        return
+    end
+
+    local note = _P.find_note_by_alias(workspace_root, target)
+
+    if not note then
+        vim.notify(string.format('No Obsidian note found with alias "%s".', target), vim.log.levels.WARN)
+
+        return
+    end
+
+    vim.cmd("silent edit " .. vim.fn.fnameescape(note))
+end
+
+--- Add Obsidian-only mappings to a markdown buffer.
+---
+---@param buffer integer The markdown buffer to configure.
+function _P.setup_buffer_keymaps(buffer)
+    local path = vim.api.nvim_buf_get_name(buffer)
+
+    if path == "" or not _P.get_workspace_root_for_path(path) then
+        return
+    end
+
+    vim.keymap.set("n", "gd", _P.go_to_definition, {
+        buffer = buffer,
+        desc = "Go to Obsidian note by alias.",
+    })
 end
 
 --- Use `title` to recommend a simplified ID for the Obsidian note.
@@ -103,6 +291,13 @@ end
 ---@return string # The absolute path on-disk where all workspaces should be.
 function _P.get_vaults_root_path()
     return _ROOT
+end
+
+--- Override the vault root for focused tests.
+---
+---@param root string The vault root to use.
+function _P.set_vaults_root_for_tests(root)
+    _ROOT = root
 end
 
 ---@return string # The absolute path on-disk where the workspace should be.
@@ -240,22 +435,13 @@ local _SECONDS_PER_DAY = 24 * 60 * 60
 ---@return integer # The current local date at noon, as a timestamp.
 ---
 function _P.get_today_time()
-    local today_data = os.date("*t")
+    local today = os.date("*t")
 
-    if type(today_data) == "string" then
-        error("Expected os.date('*t') to return a date table.", 0)
-    end
+    assert(type(today) == "table")
 
-    ---@type osdateparam
-    local today = {
-        year = today_data.year,
-        month = today_data.month,
-        day = today_data.day,
-        hour = 12,
-        min = 0,
-        sec = 0,
-        isdst = today_data.isdst,
-    }
+    today.hour = 12
+    today.min = 0
+    today.sec = 0
 
     return os.time(today)
 end
@@ -381,3 +567,14 @@ vim.api.nvim_create_user_command("Note", function(opts)
     local title = _strip_whitespace(table.concat(opts.fargs, " "))
     _P.create_note(title)
 end, { nargs = "?", desc = "Make a new Obsidian note." })
+
+vim.api.nvim_create_autocmd("FileType", {
+    group = vim.api.nvim_create_augroup("my.obsidian.keymaps", { clear = true }),
+    pattern = "markdown",
+    desc = "Add Obsidian markdown navigation mappings.",
+    callback = function(args)
+        _P.setup_buffer_keymaps(args.buf)
+    end,
+})
+
+return _P

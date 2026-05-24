@@ -192,6 +192,8 @@ describe("modules.plugins.aerial", function()
     end)
 
     it("opens a right sidebar and focuses the aerial buffer", function()
+        local shortmess = vim.o.shortmess
+
         make_source_buffer({
             "class Widget1:",
             "    def __init__(self):",
@@ -202,6 +204,7 @@ describe("modules.plugins.aerial", function()
         local aerial_window = vim.api.nvim_get_current_win()
         local aerial_buffer = vim.api.nvim_get_current_buf()
 
+        assert.equal(shortmess, vim.o.shortmess)
         assert.equal("aerial", vim.bo[aerial_buffer].filetype)
         assert.equal("nofile", vim.bo[aerial_buffer].buftype)
         assert.is_true(vim.wo[aerial_window].winfixbuf)

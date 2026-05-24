@@ -35,11 +35,14 @@ describe("modules.plugins.toggle_terminal", function()
     end)
 
     it("can open, close, and reopen the terminal mapping", function()
+        local shortmess = vim.o.shortmess
+
         press_toggle_terminal()
 
         assert.True(vim.wait(1000, function()
             return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
         end, 20))
+        assert.equal(shortmess, vim.o.shortmess)
 
         local terminal_buffer = vim.api.nvim_get_current_buf()
 
@@ -58,6 +61,7 @@ describe("modules.plugins.toggle_terminal", function()
         assert.True(vim.wait(1000, function()
             return is_buffer_visible(terminal_buffer)
         end, 20))
+        assert.equal(shortmess, vim.o.shortmess)
 
         assert.equal(terminal_buffer, vim.api.nvim_get_current_buf())
     end)

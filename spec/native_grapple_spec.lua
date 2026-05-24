@@ -269,6 +269,7 @@ describe("modules.plugins.native_grapple", function()
         assert.equal(1, vim.fn.mkdir(root, "p"))
         write_text(file_path, "notes\n")
 
+        ---@diagnostic disable-next-line: duplicate-set-field
         native_grapple._P.redraw_statusline = function()
             redraw_count = redraw_count + 1
         end
@@ -294,6 +295,7 @@ describe("modules.plugins.native_grapple", function()
         assert.equal(1, vim.fn.mkdir(root, "p"))
         write_text(file_path, "notes\n")
 
+        ---@diagnostic disable-next-line: duplicate-set-field
         native_grapple._P.redraw_statusline = function()
             redraw_count = redraw_count + 1
         end

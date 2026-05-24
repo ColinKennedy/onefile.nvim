@@ -133,7 +133,7 @@ function M.show_capabilities()
         })
 
         vim.notify(
-            string.format("%s Capabilities:\n%s", client.name, vim.inspect(client.server_capabilities())),
+            string.format("%s Capabilities:\n%s", client.name, vim.inspect(client.server_capabilities)),
             vim.log.levels.INFO
         )
     end

@@ -1370,6 +1370,8 @@ end
 ---@type table<string, _my.git_branch_cache>
 local _GIT_BRANCH_CACHE = {}
 local _GIT_BRANCH_REFRESH_INTERVAL = 500
+local _GIT_BRANCH_ELIDE_LENGTH = 30
+local _GIT_BRANCH_ELIDE_SUFFIX_LENGTH = 9
 local _IS_GIT_AVAILABLE = nil
 
 ---@class _my.git_branch_cache
@@ -1473,6 +1475,30 @@ local function _get_git_branch_command(path)
     }
 end
 
+--- Shorten ticket-style Git branch names for compact statusline display.
+---
+---@param branch string The raw branch name.
+---@return string # The display branch name.
+function M.elide_git_branch_name(branch)
+    if #branch <= _GIT_BRANCH_ELIDE_LENGTH then
+        return branch
+    end
+
+    local prefix, middle = branch:match("^([A-Z]+%-%d+[-_])(.+)$")
+
+    if not prefix or not middle then
+        return branch
+    end
+
+    local suffix_length = math.min(
+        _GIT_BRANCH_ELIDE_SUFFIX_LENGTH,
+        math.max(1, _GIT_BRANCH_ELIDE_LENGTH - #prefix - #"...")
+    )
+    local suffix = middle:sub(-suffix_length)
+
+    return prefix .. "..." .. suffix
+end
+
 ---@param path string?
 ---@param entry _my.git_branch_cache
 local function _refresh_git_branch(path, entry)
@@ -1572,7 +1598,7 @@ function M.get_git_branch_label_safe()
         git_prefix = " "
     end
 
-    return git_prefix .. branch
+    return git_prefix .. M.elide_git_branch_name(branch)
 end
 
 ---@return string # Get the position in the current file.

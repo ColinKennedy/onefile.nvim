@@ -33,6 +33,7 @@ require("modules.features.quickfix_winbar")
 require("modules.features.quickfix_wrap_mappings")
 require("modules.features.lsp_log_command")
 require("modules.features.lsp_commands")
+require("modules.features.fix_colon_plus_paste")
 
 require("modules.plugins.obsidian")
 require("modules.plugins.winbar")

@@ -74,35 +74,35 @@ vim.opt.shell = os.getenv("NEOVIM_SHELL_COMMAND") or vim.opt.shell
 
 ---@type _my.lsp.ServerDefinition[]
 M.servers = {
-    {
-        name = "basedpyright",
-        filetypes = "python",
-        callback = function(event)
-            local command = "basedpyright-langserver"
-
-            if vim.fn.executable(command) ~= 1 then
-                vim.notify(
-                    string.format('Cannot load LSP. There is no "%s" executable.', command),
-                    vim.log.levels.ERROR
-                )
-
-                return
-            end
-
-            vim.lsp.start({
-                name = "basedpyright",
-                cmd = { command, "--stdio" },
-                settings = {
-                    basedpyright = {
-                        disableOrganizeImports = true,
-                        analysis = {
-                            typeCheckingMode = "basic",
-                        },
-                    },
-                },
-            }, { bufnr = event.buf })
-        end,
-    },
+    -- {
+    --     name = "basedpyright",
+    --     filetypes = "python",
+    --     callback = function(event)
+    --         local command = "basedpyright-langserver"
+    --
+    --         if vim.fn.executable(command) ~= 1 then
+    --             vim.notify(
+    --                 string.format('Cannot load LSP. There is no "%s" executable.', command),
+    --                 vim.log.levels.ERROR
+    --             )
+    --
+    --             return
+    --         end
+    --
+    --         vim.lsp.start({
+    --             name = "basedpyright",
+    --             cmd = { command, "--stdio" },
+    --             settings = {
+    --                 basedpyright = {
+    --                     disableOrganizeImports = true,
+    --                     analysis = {
+    --                         typeCheckingMode = "basic",
+    --                     },
+    --                 },
+    --             },
+    --         }, { bufnr = event.buf })
+    --     end,
+    -- },
     {
         name = "ty",
         filetypes = "python",

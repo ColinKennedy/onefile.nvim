@@ -58,6 +58,8 @@ _P.cursor_column = 0
 _P.cursor_byte_column = 0
 ---@type integer
 _P.generation = 0
+---@type boolean
+_P.handling_cmdline_popupmenu = false
 
 --- Parse a percent or absolute dimension into screen cells.
 ---
@@ -212,6 +214,7 @@ function _P.close_window()
     _P.cursor_column = 0
     _P.cursor_byte_column = 0
     _P.close_popupmenu()
+    _P.handling_cmdline_popupmenu = false
 end
 
 --- Convert external cmdline chunks into display text.
@@ -505,6 +508,14 @@ function _P.select_popupmenu(selected)
     pcall(vim.api.nvim_win_set_cursor, _P.popup_window, { selected + 1, 0 })
 end
 
+--- Return true when a popupmenu event belongs to the external command line.
+---
+---@param grid integer? The popupmenu anchor grid from Neovim.
+---@return boolean # Whether this module should render the popupmenu.
+function _P.is_cmdline_popupmenu(grid)
+    return grid == -1 and _P.is_valid_window(_P.window)
+end
+
 --- Close command-line completion popupmenu.
 function _P.close_popupmenu()
     if _P.is_valid_window(_P.popup_window) then
@@ -569,6 +580,10 @@ function _P.attach_cmdline_ui()
 
             return true
         elseif event == "popupmenu_select" then
+            if not _P.handling_cmdline_popupmenu then
+                return false
+            end
+
             local selected = ...
             vim.schedule(function()
                 _P.select_popupmenu(selected)
@@ -577,8 +592,13 @@ function _P.attach_cmdline_ui()
 
             return true
         elseif event == "popupmenu_hide" then
+            if not _P.handling_cmdline_popupmenu then
+                return false
+            end
+
             vim.schedule(function()
                 _P.close_popupmenu()
+                _P.handling_cmdline_popupmenu = false
                 _P.flush_redraw()
             end)
 

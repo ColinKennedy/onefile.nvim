@@ -7,6 +7,7 @@ local M = {}
 ---@alias _my.directional_put.IndentMode "same" | "indent" | "dedent"
 
 ---@class _my.directional_put.Region
+---@field buffer integer The buffer where the put happened.
 ---@field start_line integer The first pasted line.
 ---@field end_line integer The last pasted line.
 
@@ -164,12 +165,12 @@ local function _dedent_common_indent(lines)
     return output
 end
 
---- Get linewise register contents.
+--- Get linewise register contents from `register`.
 ---
+---@param register string The register to inspect.
 ---@return string[] # Register text split into lines.
 ---
-local function _get_register_lines()
-    local register = _get_register_name()
+local function _get_register_lines_from(register)
     ---@type string[]
     local value = vim.fn.getreg(register, 1, true)
 
@@ -178,6 +179,14 @@ local function _get_register_lines()
     end
 
     return value
+end
+
+--- Get linewise register contents.
+---
+---@return string[] # Register text split into lines.
+---
+local function _get_register_lines()
+    return _get_register_lines_from(_get_register_name())
 end
 
 --- Apply a computed indentation prefix to every non-blank line.
@@ -226,9 +235,85 @@ end
 ---@param end_line integer The last pasted line.
 ---
 local function _set_last_put_region(start_line, end_line)
-    _LAST_PUT_REGION = { start_line = start_line, end_line = end_line }
+    _LAST_PUT_REGION = {
+        buffer = vim.api.nvim_get_current_buf(),
+        start_line = start_line,
+        end_line = end_line,
+    }
     vim.fn.setpos("'[", { 0, start_line, 1, 0 })
     vim.fn.setpos("']", { 0, end_line, math.max(#vim.fn.getline(end_line), 1), 0 })
+end
+
+--- Find `register_lines` near likely native put marks.
+---
+---@param candidates integer[] Possible 1-or-more start lines to inspect.
+---@param register_lines string[] The linewise register contents.
+---@return _my.directional_put.Region? region The matching buffer region, if found.
+local function _find_register_region(candidates, register_lines)
+    local line_count = vim.api.nvim_buf_line_count(0)
+
+    for _, candidate in ipairs(candidates) do
+        if candidate >= 1 and (candidate + #register_lines - 1) <= line_count then
+            local lines = vim.api.nvim_buf_get_lines(0, candidate - 1, candidate - 1 + #register_lines, false)
+
+            if vim.deep_equal(lines, register_lines) then
+                return {
+                    buffer = vim.api.nvim_get_current_buf(),
+                    start_line = candidate,
+                    end_line = candidate + #register_lines - 1,
+                }
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Get the linewise put region remembered by Vim's native put marks.
+---
+---@return _my.directional_put.Region? region The native put region, if one exists.
+local function _get_native_put_region()
+    local start_position = vim.fn.getpos("'[")
+    local end_position = vim.fn.getpos("']")
+    local start_line = start_position[2]
+    local end_line = end_position[2]
+    local is_linewise_register = vim.fn.getregtype('"'):sub(1, 1) == "V"
+    local register_lines = _get_register_lines_from('"')
+    local register_line_count = #register_lines
+    local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+
+    if start_line <= 0 or end_line <= 0 then
+        if not is_linewise_register then
+            return nil
+        end
+
+        start_line = cursor_line
+        end_line = start_line + register_line_count - 1
+    end
+
+    if start_line == end_line and is_linewise_register then
+        local matched_region = _find_register_region({
+            start_line,
+            start_line + 1,
+            cursor_line,
+            cursor_line + 1,
+        }, register_lines)
+
+        if matched_region then
+            return matched_region
+        end
+
+        if register_line_count > 1 then
+            start_line = cursor_line
+        end
+
+        end_line = start_line + register_line_count - 1
+    end
+
+    return {
+        start_line = math.min(start_line, end_line),
+        end_line = math.max(start_line, end_line),
+    }
 end
 
 --- Put register lines above or below the current line with indentation control.
@@ -251,15 +336,22 @@ end
 
 --- Select the last region inserted by a custom put mapping.
 function M.select_last_put()
-    if not _LAST_PUT_REGION then
+    local current_buffer = vim.api.nvim_get_current_buf()
+    local region = _LAST_PUT_REGION
+
+    if not region or region.buffer ~= current_buffer then
+        region = _get_native_put_region()
+    end
+
+    if not region then
         vim.notify("No custom put region found.", vim.log.levels.WARN)
 
         return
     end
 
     local line_count = vim.api.nvim_buf_line_count(0)
-    local start_line = math.min(_LAST_PUT_REGION.start_line, line_count)
-    local end_line = math.min(_LAST_PUT_REGION.end_line, line_count)
+    local start_line = math.min(region.start_line, line_count)
+    local end_line = math.min(region.end_line, line_count)
 
     vim.api.nvim_win_set_cursor(0, { start_line, 0 })
     vim.cmd("normal! V")

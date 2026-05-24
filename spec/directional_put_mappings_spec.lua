@@ -142,4 +142,20 @@ describe("directional put mappings", function()
         assert.equal(2, math.min(visual_start, cursor[1]))
         assert.equal(3, math.max(visual_start, cursor[1]))
     end)
+
+    it("selects text inserted with an Ex put using Vim's native put marks", function()
+        make_buffer({ "current", "done" })
+        set_register({ "alpha", "beta" })
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+        vim.cmd(":+put")
+        assert.same({ "current", "done", "alpha", "beta" }, get_lines())
+        directional_put.select_last_put()
+
+        local visual_start = vim.fn.getpos("v")[2]
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        assert.equal("V", vim.fn.mode())
+        assert.equal(3, math.min(visual_start, cursor[1]))
+        assert.equal(4, math.max(visual_start, cursor[1]))
+    end)
 end)

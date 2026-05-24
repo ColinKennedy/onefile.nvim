@@ -147,6 +147,14 @@ function _P.get_window_config(height)
     }
 end
 
+--- Check whether `window` is a usable Neovim window id.
+---
+--- window integer? The window id to inspect.
+--- boolean # Whether the id points to a valid window.
+function _P.is_valid_window(window)
+    return window ~= nil and window > 0 and vim.api.nvim_win_is_valid(window)
+end
+
 --- Open or resize the centered cmdline float.
 ---
 ---@param height integer The desired window height.
@@ -154,7 +162,7 @@ function _P.open_window(height)
     local buffer = _P.get_buffer()
     local config = _P.get_window_config(height)
 
-    if _P.window and vim.api.nvim_win_is_valid(_P.window) then
+    if _P.is_valid_window(_P.window) then
         vim.api.nvim_win_set_config(_P.window, config)
 
         if vim.api.nvim_win_get_buf(_P.window) ~= buffer then
@@ -170,7 +178,7 @@ end
 
 --- Close the centered cmdline float.
 function _P.close_window()
-    if _P.window and vim.api.nvim_win_is_valid(_P.window) then
+    if _P.is_valid_window(_P.window) then
         pcall(vim.api.nvim_win_close, _P.window, true)
     end
 
@@ -254,7 +262,7 @@ end
 ---
 ---@param position integer Current cursor position inside the command text.
 function _P.set_cursor_position(position)
-    if not _P.window or not vim.api.nvim_win_is_valid(_P.window) then
+    if not _P.is_valid_window(_P.window) then
         return
     end
 

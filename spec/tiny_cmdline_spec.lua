@@ -67,7 +67,7 @@ describe("modules.plugins.tiny_cmdline", function()
         cmdline._P.schedule_show_cmdline({ { 0, "write" } }, 5, ":", "", 0)
 
         assert.is_true(vim.wait(1000, function()
-            return cmdline._P.window ~= nil and vim.api.nvim_win_is_valid(cmdline._P.window)
+            return cmdline._P.is_valid_window(cmdline._P.window)
         end, 20))
         assert.equal(":write", vim.api.nvim_buf_get_lines(cmdline._P.get_buffer(), 0, 1, false)[1])
 

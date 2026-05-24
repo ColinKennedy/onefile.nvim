@@ -38,6 +38,10 @@ describe("better escape", function()
         assert.is_true(vim.fn.maparg("k", "i") ~= "")
     end)
 
+    it("keeps terminal keycode timeout long enough for bracketed paste", function()
+        assert.is_true(vim.o.ttimeoutlen >= 50)
+    end)
+
     it("escapes insert mode when jk is typed quickly", function()
         prepare_buffer()
         press("ijk")

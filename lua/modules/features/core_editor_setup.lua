@@ -1836,8 +1836,11 @@ vim.opt.foldcolumn = "1"
 
 -- Only let Vim wait for user input (characters) for 0.3 seconds. Gotta go fast!
 vim.opt.timeoutlen = 300
--- Wait very little for key sequences
-vim.opt.ttimeoutlen = 10
+-- Wait for terminal keycode sequences. Neovim's default is too fast so things
+-- like <C-S-v> has a chance to not include terminal codes and it exits early,
+-- on WSL and in native terminals.
+--
+vim.opt.ttimeoutlen = 50
 
 -- Return to last edit position when opening files (You want this!)
 vim.api.nvim_create_autocmd("BufReadPost", {

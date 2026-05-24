@@ -1,12 +1,9 @@
---- Center Neovim's native ui2 command line in a small floating window.
+--- Center Neovim's externalized command line without taking over messages.
 
 local M = {}
 local _P = {}
 
 M._initialized = false
-
----@class _my.cmdline.Adapters
----@field blink fun(): nil Reposition blink.cmp's menu, if it is currently visible.
 
 ---@class _my.cmdline.WidthConfiguration
 ---@field value string|integer Width: "60%" is a fraction of editor columns, integer is absolute columns.
@@ -21,28 +18,9 @@ M._initialized = false
 ---@field width _my.cmdline.WidthConfiguration Cmdline window width.
 ---@field position _my.cmdline.PositionConfiguration Cmdline window position.
 ---@field border string? nil inherits `vim.o.winborder` at setup time.
----@field menu_col_offset integer Completion-menu offset from the window's left inner edge.
----@field native_types string[] Cmdline types shown at the bottom instead of centered.
----@field on_reposition (fun(): nil)? Optional callback invoked after every reposition.
+---@field native_types string[] Cmdline types shown by Neovim's native cmdline instead of the centered float.
 
----@class _my.cmdline.WindowConfiguration
----@field relative string
----@field anchor string?
----@field col integer|number
----@field row integer|number
----@field width integer
----@field border string|string[]?
-
----@type _my.cmdline.Adapters
-M.adapters = {
-    blink = function()
-        local ok, menu = pcall(require, "blink.cmp.completion.windows.menu")
-
-        if ok and menu.win and menu.win:is_open() then
-            pcall(menu.update_position)
-        end
-    end,
-}
+---@alias _my.cmdline.ContentChunk [integer, string]
 
 ---@type _my.cmdline.Configuration
 M.config = {
@@ -56,20 +34,22 @@ M.config = {
         y = "50%",
     },
     border = nil,
-    menu_col_offset = 3,
     native_types = { "/", "?" },
-    on_reposition = nil,
 }
 
+_P.namespace = vim.api.nvim_create_namespace("my.tiny_cmdline")
+---@type integer?
+_P.buffer = nil
+---@type integer?
+_P.window = nil
 ---@type string?
 _P.cmdline_type = nil
----@type table?
-_P.original_ui_cmdline_pos = nil
----@type _my.cmdline.WindowConfiguration?
-_P.cmd_window_saved = nil
----@type table?
-_P.ui2 = nil
-_P.has_wrapped_cmdline_show = false
+---@type string
+_P.current_line = ""
+---@type integer
+_P.prompt_width = 0
+---@type integer
+_P.generation = 0
 
 --- Parse a percent or absolute dimension into screen cells.
 ---
@@ -114,7 +94,7 @@ function _P.get_geometry(content_height)
     return width, row, column, border_width
 end
 
---- Keep a real message row so normal output does not spill into ui2's pager.
+--- Keep a real message row so :messages and hit-enter prompts stay native.
 function _P.ensure_message_row()
     if vim.o.cmdheight == 1 then
         return
@@ -131,194 +111,212 @@ function _P.ensure_message_row()
     end
 end
 
---- Enable Neovim's ui2 command-line implementation, if this build supports it.
+--- Get or create the scratch buffer used by the centered cmdline.
 ---
----@return boolean # If `true`, ui2 could be required and enabled.
-function _P.enable_ui2()
-    local ok, ui2 = pcall(require, "vim._core.ui2")
-
-    if not ok then
-        return false
+---@return integer # The centered cmdline buffer.
+function _P.get_buffer()
+    if _P.buffer and vim.api.nvim_buf_is_valid(_P.buffer) then
+        return _P.buffer
     end
 
-    if type(ui2.enable) == "function" then
-        pcall(ui2.enable, {
-            msg = {
-                target = "msg",
-                msg = {
-                    height = 0.25,
-                    timeout = 2500,
-                },
-            },
-        })
-    end
+    _P.buffer = vim.api.nvim_create_buf(false, true)
+    vim.bo[_P.buffer].bufhidden = "wipe"
+    vim.bo[_P.buffer].buftype = "nofile"
+    vim.bo[_P.buffer].filetype = "cmd"
 
-    _P.ui2 = ui2
-
-    return true
+    return _P.buffer
 end
 
---- Get the current ui2 command-line window.
+--- Build a floating-window configuration for `height` lines.
 ---
----@return integer? # The command-line window, if it exists.
-function _P.get_cmd_window()
-    if not _P.ui2 and not _P.enable_ui2() then
-        return nil
-    end
+---@param height integer The window height.
+---@return vim.api.keyset.win_config # The target floating-window config.
+function _P.get_window_config(height)
+    local width, row, column = _P.get_geometry(height)
 
-    local win = _P.ui2.wins and _P.ui2.wins.cmd
-
-    if win and vim.api.nvim_win_is_valid(win) then
-        return win
-    end
-
-    return nil
+    return {
+        relative = "editor",
+        row = row,
+        col = column,
+        width = width,
+        height = height,
+        style = "minimal",
+        focusable = false,
+        noautocmd = true,
+        border = M.config.border,
+    }
 end
 
---- Reposition the ui2 command-line window for the current command type.
-function _P.reposition()
-    if not _P.cmdline_type then
-        return
-    end
+--- Open or resize the centered cmdline float.
+---
+---@param height integer The desired window height.
+function _P.open_window(height)
+    local buffer = _P.get_buffer()
+    local config = _P.get_window_config(height)
 
-    local window = _P.get_cmd_window()
+    if _P.window and vim.api.nvim_win_is_valid(_P.window) then
+        vim.api.nvim_win_set_config(_P.window, config)
 
-    if not window then
-        return
-    end
-
-    local current = vim.api.nvim_win_get_config(window)
-
-    if not _P.cmd_window_saved then
-        _P.cmd_window_saved = {
-            relative = current.relative,
-            anchor = current.anchor,
-            col = current.col,
-            row = current.row,
-            width = current.width,
-            border = current.border,
-        }
-        vim.wo[window].winhighlight = "Normal:TinyCmdlineNormal,FloatBorder:TinyCmdlineBorder"
-    end
-
-    local content_height = math.max(1, vim.api.nvim_win_get_height(window))
-
-    if vim.tbl_contains(M.config.native_types, _P.cmdline_type) then
-        local target_row = math.max(0, vim.o.lines - content_height)
-
-        if current.relative ~= "editor" or current.row ~= target_row or current.col ~= 0 or current.width ~= vim.o.columns then
-            pcall(vim.api.nvim_win_set_config, window, {
-                relative = "editor",
-                row = target_row,
-                col = 0,
-                width = vim.o.columns,
-                border = "none",
-            })
+        if vim.api.nvim_win_get_buf(_P.window) ~= buffer then
+            vim.api.nvim_win_set_buf(_P.window, buffer)
         end
 
-        vim.g.ui_cmdline_pos = _P.original_ui_cmdline_pos
-
         return
     end
 
-    local width, row, column, border_width = _P.get_geometry(content_height)
-
-    if current.relative ~= "editor" or current.row ~= row or current.col ~= column or current.width ~= width then
-        pcall(vim.api.nvim_win_set_config, window, {
-            relative = "editor",
-            row = row,
-            col = column,
-            width = width,
-            border = M.config.border,
-        })
-    end
-
-    vim.g.ui_cmdline_pos = { row + content_height + (border_width * 2), column + border_width + M.config.menu_col_offset }
+    _P.window = vim.api.nvim_open_win(buffer, false, config)
+    vim.wo[_P.window].winhighlight = "Normal:TinyCmdlineNormal,FloatBorder:TinyCmdlineBorder"
 end
 
---- Patch ui2's cmdline_show so resize timing follows the native cmdline.
-function _P.wrap_cmdline_show()
-    if _P.has_wrapped_cmdline_show then
-        return
+--- Close the centered cmdline float.
+function _P.close_window()
+    if _P.window and vim.api.nvim_win_is_valid(_P.window) then
+        pcall(vim.api.nvim_win_close, _P.window, true)
     end
 
-    local ok, cmdline = pcall(require, "vim._core.ui2.cmdline")
+    _P.window = nil
+    _P.cmdline_type = nil
+    _P.current_line = ""
+    _P.prompt_width = 0
+end
 
-    if not ok then
-        return
+--- Convert external cmdline chunks into display text.
+---
+---@param content _my.cmdline.ContentChunk[] Command-line content chunks.
+---@param firstc string The command-line type prefix.
+---@param prompt string Prompt text for input()-style command lines.
+---@param indent integer Prompt indentation.
+---@return string # The rendered cmdline text.
+function _P.render_line(content, firstc, prompt, indent)
+    local parts = { firstc, prompt, string.rep(" ", indent) }
+
+    for _, chunk in ipairs(content) do
+        table.insert(parts, chunk[2])
     end
 
-    local original = cmdline.cmdline_show
+    return table.concat(parts)
+end
 
-    cmdline.cmdline_show = function(...)
-        local result = original(...)
+--- Draw the command line in the centered float.
+---
+---@param content _my.cmdline.ContentChunk[] Command-line content chunks.
+---@param position integer Current cursor position inside the command text.
+---@param firstc string The command-line type prefix.
+---@param prompt string Prompt text for input()-style command lines.
+---@param indent integer Prompt indentation.
+function _P.show_cmdline(content, position, firstc, prompt, indent)
+    _P.cmdline_type = firstc
+    _P.current_line = _P.render_line(content, firstc, prompt, indent)
+    _P.prompt_width = vim.fn.strdisplaywidth(firstc .. prompt .. string.rep(" ", indent))
 
-        if not _P.cmdline_type then
-            return result
+    _P.open_window(1)
+
+    local buffer = _P.get_buffer()
+    vim.api.nvim_buf_set_lines(buffer, 0, -1, false, { _P.current_line })
+    _P.set_cursor_position(position)
+end
+
+--- Flush screen updates after external cmdline float changes.
+function _P.flush_redraw()
+    pcall(vim.api.nvim__redraw, { flush = true })
+end
+
+--- Schedule a command-line draw outside the UI callback.
+---
+---@param content _my.cmdline.ContentChunk[] Command-line content chunks.
+---@param position integer Current cursor position inside the command text.
+---@param firstc string The command-line type prefix.
+---@param prompt string Prompt text for input()-style command lines.
+---@param indent integer Prompt indentation.
+function _P.schedule_show_cmdline(content, position, firstc, prompt, indent)
+    _P.generation = _P.generation + 1
+    local generation = _P.generation
+
+    vim.schedule(function()
+        if generation ~= _P.generation then
+            return
         end
 
-        _P.reposition()
+        local ok, message = pcall(_P.show_cmdline, content, position, firstc, prompt, indent)
 
-        return result
+        if ok then
+            _P.flush_redraw()
+
+            return
+        end
+
+        _P.close_window()
+        vim.notify(string.format("tiny_cmdline failed to draw: %s", message), vim.log.levels.ERROR)
+    end)
+end
+
+--- Move the floating-window cursor to match the command-line cursor.
+---
+---@param position integer Current cursor position inside the command text.
+function _P.set_cursor_position(position)
+    if not _P.window or not vim.api.nvim_win_is_valid(_P.window) then
+        return
     end
 
-    _P.has_wrapped_cmdline_show = true
+    local column = _P.prompt_width + vim.fn.strdisplaywidth(_P.current_line:sub(_P.prompt_width + 1, _P.prompt_width + position))
+    pcall(vim.api.nvim_win_set_cursor, _P.window, { 1, math.max(0, column) })
 end
 
---- Wrap ui2 and reposition the command-line window.
-function _P.wrap_and_reposition()
-    _P.wrap_cmdline_show()
-    _P.reposition()
-end
+--- Attach only to external command-line UI events, leaving messages native.
+function _P.attach_cmdline_ui()
+    pcall(vim.ui_detach, _P.namespace)
 
---- Register autocmds needed to track and restore the cmdline window.
-function _P.setup_autocommands()
-    local group = vim.api.nvim_create_augroup("my.tiny_cmdline", { clear = true })
+    local ok = pcall(vim.ui_attach, _P.namespace, { ext_cmdline = true }, function(event, ...)
+        if event == "cmdline_show" then
+            local content, position, firstc, prompt, indent = ...
 
-    vim.api.nvim_create_autocmd("CmdlineEnter", {
-        group = group,
-        callback = function()
-            _P.cmdline_type = vim.fn.getcmdtype()
-        end,
-    })
+            if vim.tbl_contains(M.config.native_types, firstc) then
+                _P.close_window()
 
-    vim.api.nvim_create_autocmd("CmdlineLeave", {
-        group = group,
-        callback = function()
-            _P.cmdline_type = nil
-            vim.g.ui_cmdline_pos = _P.original_ui_cmdline_pos
-
-            local window = _P.get_cmd_window()
-
-            if window and _P.cmd_window_saved then
-                pcall(vim.api.nvim_win_set_config, window, _P.cmd_window_saved)
-                _P.cmd_window_saved = nil
+                return false
             end
 
-            vim.schedule(_P.ensure_message_row)
-        end,
-    })
+            _P.schedule_show_cmdline(content, position, firstc, prompt, indent)
 
-    vim.api.nvim_create_autocmd("FileType", {
-        group = group,
-        pattern = "cmd",
-        callback = function()
-            vim.schedule(_P.wrap_and_reposition)
-        end,
-    })
+            return true
+        elseif event == "cmdline_pos" then
+            local position = ...
+            local generation = _P.generation
 
-    vim.api.nvim_create_autocmd({ "VimResized", "TabEnter" }, {
-        group = group,
-        callback = function()
             vim.schedule(function()
-                _P.reposition()
-
-                if M.config.on_reposition then
-                    M.config.on_reposition()
+                if generation == _P.generation then
+                    _P.set_cursor_position(position)
+                    _P.flush_redraw()
                 end
             end)
-        end,
-    })
+
+            return true
+        elseif event == "cmdline_hide" then
+            _P.generation = _P.generation + 1
+            vim.schedule(function()
+                _P.close_window()
+                _P.flush_redraw()
+            end)
+
+            return true
+        elseif event == "cmdline_special_char" then
+            return true
+        elseif event == "cmdline_block_show" or event == "cmdline_block_append" or event == "cmdline_block_hide" then
+            _P.generation = _P.generation + 1
+            vim.schedule(function()
+                _P.close_window()
+                _P.flush_redraw()
+            end)
+
+            return false
+        end
+
+        return false
+    end)
+
+    if not ok then
+        vim.notify("tiny_cmdline could not attach ext_cmdline UI", vim.log.levels.WARN)
+    end
 end
 
 --- Set up centered command-line UI.
@@ -330,24 +328,6 @@ function M.setup(opts)
     end
 
     M._initialized = true
-
-    if vim.fn.has("nvim-0.12") == 0 then
-        vim.notify("tiny_cmdline requires Neovim >= 0.12", vim.log.levels.WARN)
-
-        return
-    end
-
-    if not _P.enable_ui2() then
-        vim.notify("tiny_cmdline requires vim._core.ui2", vim.log.levels.WARN)
-
-        return
-    end
-
-    vim.api.nvim_set_hl(0, "TinyCmdlineNormal", { link = "MsgArea", default = true })
-    vim.api.nvim_set_hl(0, "TinyCmdlineBorder", { link = "FloatBorder", default = true })
-
-    _P.original_ui_cmdline_pos = vim.g.ui_cmdline_pos
-    _P.cmd_window_saved = nil
     M.config = vim.tbl_deep_extend("force", M.config, opts or {})
 
     if M.config.border == nil then
@@ -355,9 +335,11 @@ function M.setup(opts)
         M.config.border = border ~= "" and border or "rounded"
     end
 
+    vim.api.nvim_set_hl(0, "TinyCmdlineNormal", { link = "MsgArea", default = true })
+    vim.api.nvim_set_hl(0, "TinyCmdlineBorder", { link = "FloatBorder", default = true })
+
     _P.ensure_message_row()
-    _P.setup_autocommands()
-    vim.schedule(_P.wrap_and_reposition)
+    _P.attach_cmdline_ui()
 end
 
 M._P = _P

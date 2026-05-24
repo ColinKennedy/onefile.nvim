@@ -218,6 +218,42 @@ function _P.find_note_by_alias(workspace_root, target)
     return nil
 end
 
+--- Create a note in `workspace_root` using the standard Obsidian note template.
+---
+---@param workspace_root string The workspace where the note should be created.
+---@param title string The note title / alias.
+---@return string # The note path.
+function _P.create_note_in_workspace(workspace_root, title)
+    local identifier = _P.get_note_identifier(title)
+    local path = vim.fs.joinpath(workspace_root, identifier .. ".md")
+
+    if vim.fn.filereadable(path) == 1 then
+        return path
+    end
+
+    local date = os.date("%Y-%m-%d")
+    local time = os.date("%H:%M")
+
+    local lines = {
+        "---",
+        "id: " .. identifier,
+        "date: " .. date,
+        "time: " .. time,
+        "aliases:",
+        "  - " .. title,
+        "tags: []",
+        "---",
+        "",
+        "# " .. title,
+        "",
+    }
+
+    vim.fn.mkdir(vim.fs.dirname(path), "p")
+    vim.fn.writefile(lines, path)
+
+    return path
+end
+
 --- Go to the Obsidian note whose alias matches the wikilink under the cursor.
 function _P.go_to_definition()
     local buffer = vim.api.nvim_get_current_buf()
@@ -242,9 +278,15 @@ function _P.go_to_definition()
     local note = _P.find_note_by_alias(workspace_root, target)
 
     if not note then
-        vim.notify(string.format('No Obsidian note found with alias "%s".', target), vim.log.levels.WARN)
+        local answer = vim.fn.confirm(string.format('Create Obsidian note "%s"?', target), "&Yes\n&No", 2)
 
-        return
+        if answer ~= 1 then
+            vim.notify("Cancelled Obsidian note creation.", vim.log.levels.INFO)
+
+            return
+        end
+
+        note = _P.create_note_in_workspace(workspace_root, target)
     end
 
     vim.cmd("silent edit " .. vim.fn.fnameescape(note))
@@ -321,25 +363,7 @@ function _P.create_note(title)
         return
     end
 
-    local date = os.date("%Y-%m-%d")
-    local time = os.date("%H:%M")
-
-    local lines = {
-        "---",
-        "id: " .. identifier,
-        "date: " .. date,
-        "time: " .. time,
-        "aliases:",
-        "  - " .. title,
-        "tags: []",
-        "---",
-        "",
-        "# " .. title,
-        "",
-    }
-
-    vim.fn.mkdir(vim.fs.dirname(path), "p")
-    vim.fn.writefile(lines, path)
+    path = _P.create_note_in_workspace(vault, title)
     vim.cmd.edit(path)
 end
 

@@ -43,6 +43,11 @@ local _HEAD_WATCHERS_BY_ROOT = {}
 local _BRANCH_RELOAD_TIMER = assert(vim.uv.new_timer())
 local _BRANCH_RELOAD_DEBOUNCE_MS = 80
 
+--- Recompute statuslines after native grapple mark text changes.
+function _P.redraw_statusline()
+    vim.cmd.redrawstatus()
+end
+
 --- Normalize a filesystem path for stable comparisons.
 ---
 ---@param path string A filesystem path.
@@ -251,6 +256,7 @@ function M.delete_bookmark(index)
     M.sync_branch()
     _P.delete_bookmark(index)
     M.write_current_branch_marks()
+    _P.redraw_statusline()
 end
 
 ---@param mark string A Vim mark to set. e.g. `"A"`.
@@ -353,6 +359,7 @@ function M.mark_current_buffer_as_bookmark(mark)
     if not _P.is_mark_defined(mark) then
         vim.cmd.mark(mark)
         M.write_current_branch_marks()
+        _P.redraw_statusline()
 
         return
     end
@@ -422,6 +429,7 @@ function M.toggle_current_buffer()
     end
 
     M.write_current_branch_marks()
+    _P.redraw_statusline()
 end
 
 ---@param root string?

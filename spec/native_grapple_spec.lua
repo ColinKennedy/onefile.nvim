@@ -260,6 +260,56 @@ describe("modules.plugins.native_grapple", function()
         vim.fn.delete(root, "rf")
     end)
 
+    it("redraws the statusline after adding and deleting a bookmark", function()
+        local root = vim.fn.tempname()
+        local file_path = vim.fs.joinpath(root, "notes.txt")
+        local redraw_count = 0
+        local original_redraw_statusline = native_grapple._P.redraw_statusline
+
+        assert.equal(1, vim.fn.mkdir(root, "p"))
+        write_text(file_path, "notes\n")
+
+        native_grapple._P.redraw_statusline = function()
+            redraw_count = redraw_count + 1
+        end
+
+        with_cwd(root, function()
+            vim.cmd("silent noautocmd edit " .. vim.fn.fnameescape(file_path))
+            native_grapple.mark_current_buffer_as_bookmark("A")
+            native_grapple.delete_bookmark(1)
+        end)
+
+        native_grapple._P.redraw_statusline = original_redraw_statusline
+
+        assert.equal(2, redraw_count)
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("redraws the statusline after toggling the current buffer bookmark", function()
+        local root = vim.fn.tempname()
+        local file_path = vim.fs.joinpath(root, "notes.txt")
+        local redraw_count = 0
+        local original_redraw_statusline = native_grapple._P.redraw_statusline
+
+        assert.equal(1, vim.fn.mkdir(root, "p"))
+        write_text(file_path, "notes\n")
+
+        native_grapple._P.redraw_statusline = function()
+            redraw_count = redraw_count + 1
+        end
+
+        with_cwd(root, function()
+            vim.cmd("silent noautocmd edit " .. vim.fn.fnameescape(file_path))
+            native_grapple.toggle_current_buffer()
+            native_grapple.toggle_current_buffer()
+        end)
+
+        native_grapple._P.redraw_statusline = original_redraw_statusline
+
+        assert.equal(2, redraw_count)
+        vim.fn.delete(root, "rf")
+    end)
+
     it("uses the cwd root even when the current buffer is elsewhere", function()
         local root, branch = make_repository()
         local other_root = vim.fn.tempname()

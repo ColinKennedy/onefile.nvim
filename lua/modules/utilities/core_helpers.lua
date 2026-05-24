@@ -585,7 +585,9 @@ function M.close_terminal_afterwards(buffer)
     vim.api.nvim_create_autocmd("TermClose", {
         buffer = buffer,
         callback = vim.schedule_wrap(function()
-            vim.api.nvim_buf_delete(buffer, { force = true })
+            if vim.api.nvim_buf_is_valid(buffer) then
+                vim.api.nvim_buf_delete(buffer, { force = true })
+            end
         end),
         once = true,
     })

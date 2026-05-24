@@ -42,12 +42,18 @@ _P.namespace = vim.api.nvim_create_namespace("my.tiny_cmdline")
 _P.buffer = nil
 ---@type integer?
 _P.window = nil
+---@type integer?
+_P.popup_buffer = nil
+---@type integer?
+_P.popup_window = nil
 ---@type string?
 _P.cmdline_type = nil
 ---@type string
 _P.current_line = ""
 ---@type integer
 _P.prompt_width = 0
+---@type integer
+_P.cursor_column = 0
 ---@type integer
 _P.generation = 0
 
@@ -149,10 +155,25 @@ end
 
 --- Check whether `window` is a usable Neovim window id.
 ---
---- window integer? The window id to inspect.
---- boolean # Whether the id points to a valid window.
+---@param window integer? The window id to inspect.
+---@return boolean # Whether the id points to a valid window.
 function _P.is_valid_window(window)
     return window ~= nil and window > 0 and vim.api.nvim_win_is_valid(window)
+end
+
+--- Get or create the scratch buffer used by the command-line completion menu.
+---
+---@return integer # The popupmenu buffer.
+function _P.get_popup_buffer()
+    if _P.popup_buffer and vim.api.nvim_buf_is_valid(_P.popup_buffer) then
+        return _P.popup_buffer
+    end
+
+    _P.popup_buffer = vim.api.nvim_create_buf(false, true)
+    vim.bo[_P.popup_buffer].bufhidden = "wipe"
+    vim.bo[_P.popup_buffer].buftype = "nofile"
+
+    return _P.popup_buffer
 end
 
 --- Open or resize the centered cmdline float.
@@ -186,6 +207,8 @@ function _P.close_window()
     _P.cmdline_type = nil
     _P.current_line = ""
     _P.prompt_width = 0
+    _P.cursor_column = 0
+    _P.close_popupmenu()
 end
 
 --- Convert external cmdline chunks into display text.
@@ -267,14 +290,153 @@ function _P.set_cursor_position(position)
     end
 
     local column = _P.prompt_width + vim.fn.strdisplaywidth(_P.current_line:sub(_P.prompt_width + 1, _P.prompt_width + position))
-    pcall(vim.api.nvim_win_set_cursor, _P.window, { 1, math.max(0, column) })
+    _P.cursor_column = math.max(0, column)
+    pcall(vim.api.nvim_win_set_cursor, _P.window, { 1, _P.cursor_column })
 end
 
---- Attach only to external command-line UI events, leaving messages native.
+--- Convert a popupmenu item into one display row.
+---
+---@param item table The external popupmenu item.
+---@return string # The rendered popupmenu row.
+function _P.render_popup_item(item)
+    local word = tostring(item[1] or "")
+    local kind = tostring(item[2] or "")
+    local menu = tostring(item[3] or "")
+    local suffix = table.concat(vim.tbl_filter(function(value)
+        return value ~= ""
+    end, { kind, menu }), " ")
+
+    if suffix == "" then
+        return word
+    end
+
+    return string.format("%s  %s", word, suffix)
+end
+
+--- Get the editor-relative popupmenu position beside the centered cmdline cursor.
+---
+---@param width integer The popupmenu width.
+---@param height integer The popupmenu height.
+---@return integer row The popupmenu row.
+---@return integer column The popupmenu column.
+function _P.get_popupmenu_position(width, height)
+    local _cmdline_width, row, column, border_width = _P.get_geometry(1)
+    local content_row = row + border_width
+    local content_column = column + border_width
+    local popup_column = math.min(content_column + _P.cursor_column, math.max(0, vim.o.columns - width - 1))
+    local below_row = content_row + 1
+
+    if below_row + height <= vim.o.lines - vim.o.cmdheight then
+        return below_row, popup_column
+    end
+
+    return math.max(0, content_row - height), popup_column
+end
+
+--- Get a popupmenu height that respects 'pumheight' without treating 0 as one row.
+---
+---@param item_count integer Number of popupmenu entries.
+---@return integer # The desired popupmenu height.
+function _P.get_popupmenu_height(item_count)
+    local available = math.max(1, vim.o.lines - vim.o.cmdheight - 2)
+    local configured = vim.o.pumheight
+
+    if configured > 0 then
+        available = math.min(available, configured)
+    end
+
+    return math.min(item_count, available)
+end
+
+--- Show command-line completion next to the centered cmdline cursor.
+---
+---@param items table[] Popupmenu entries from Neovim's external UI event.
+---@param selected integer Selected item index, or -1 when no item is selected.
+function _P.show_popupmenu(items, selected)
+    if vim.tbl_isempty(items) or not _P.is_valid_window(_P.window) then
+        _P.close_popupmenu()
+
+        return
+    end
+
+    local lines = {}
+    local width = 1
+
+    for _, item in ipairs(items) do
+        local line = _P.render_popup_item(item)
+        table.insert(lines, line)
+        width = math.max(width, vim.fn.strdisplaywidth(line))
+    end
+
+    local height = _P.get_popupmenu_height(#lines)
+    width = math.min(math.max(width, 12), math.max(12, vim.o.columns - 4))
+
+    local buffer = _P.get_popup_buffer()
+    vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+
+    local row, popup_column = _P.get_popupmenu_position(width, height)
+    local config = {
+        relative = "editor",
+        row = row,
+        col = popup_column,
+        width = width,
+        height = height,
+        style = "minimal",
+        focusable = false,
+        noautocmd = true,
+        border = M.config.border,
+    }
+
+    if _P.is_valid_window(_P.popup_window) then
+        vim.api.nvim_win_set_config(_P.popup_window, config)
+    else
+        _P.popup_window = vim.api.nvim_open_win(buffer, false, config)
+        vim.wo[_P.popup_window].winhighlight = "Normal:Pmenu,FloatBorder:FloatBorder,CursorLine:PmenuSel"
+        vim.wo[_P.popup_window].cursorline = true
+    end
+
+    _P.select_popupmenu(selected)
+end
+
+--- Move popupmenu selection highlight.
+---
+---@param selected integer Selected item index, or -1 when no item is selected.
+function _P.select_popupmenu(selected)
+    if not _P.is_valid_window(_P.popup_window) then
+        return
+    end
+
+    if selected < 0 then
+        vim.wo[_P.popup_window].cursorline = false
+
+        return
+    end
+
+    vim.wo[_P.popup_window].cursorline = true
+    pcall(vim.api.nvim_win_set_cursor, _P.popup_window, { selected + 1, 0 })
+end
+
+--- Close command-line completion popupmenu.
+function _P.close_popupmenu()
+    if _P.is_valid_window(_P.popup_window) then
+        pcall(vim.api.nvim_win_close, _P.popup_window, true)
+    end
+
+    _P.popup_window = nil
+end
+
+--- Ensure command-line completion is exposed as a popupmenu instead of one-row wildmenu.
+function _P.ensure_popupmenu_completion()
+    if not vim.tbl_contains(vim.opt.wildoptions:get(), "pum") then
+        vim.opt.wildoptions:append("pum")
+    end
+end
+
+--- Attach only to external command-line and popupmenu UI events, leaving messages native.
 function _P.attach_cmdline_ui()
     pcall(vim.ui_detach, _P.namespace)
 
-    local ok = pcall(vim.ui_attach, _P.namespace, { ext_cmdline = true }, function(event, ...)
+    local ok = pcall(vim.ui_attach, _P.namespace, { ext_cmdline = true, ext_popupmenu = true }, function(event, ...)
         if event == "cmdline_show" then
             local content, position, firstc, prompt, indent = ...
 
@@ -303,6 +465,29 @@ function _P.attach_cmdline_ui()
             _P.generation = _P.generation + 1
             vim.schedule(function()
                 _P.close_window()
+                _P.flush_redraw()
+            end)
+
+            return true
+        elseif event == "popupmenu_show" then
+            local items, selected = ...
+            vim.schedule(function()
+                _P.show_popupmenu(items, selected)
+                _P.flush_redraw()
+            end)
+
+            return true
+        elseif event == "popupmenu_select" then
+            local selected = ...
+            vim.schedule(function()
+                _P.select_popupmenu(selected)
+                _P.flush_redraw()
+            end)
+
+            return true
+        elseif event == "popupmenu_hide" then
+            vim.schedule(function()
+                _P.close_popupmenu()
                 _P.flush_redraw()
             end)
 
@@ -347,6 +532,7 @@ function M.setup(opts)
     vim.api.nvim_set_hl(0, "TinyCmdlineBorder", { link = "FloatBorder", default = true })
 
     _P.ensure_message_row()
+    _P.ensure_popupmenu_completion()
     _P.attach_cmdline_ui()
 end
 

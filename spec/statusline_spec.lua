@@ -52,6 +52,21 @@ describe("modules.features.statusline", function()
         assert.is_true(contains(text, "StatusGitModified"))
         assert.is_true(contains(text, "%#StatusLightArrow#"))
     end)
+    it("does not refresh git statusline state on hot window events", function()
+        local autocmds = vim.api.nvim_get_autocmds({ group = "my.statusline" })
+
+        for _, autocmd in ipairs(autocmds) do
+            assert.is_false(autocmd.event == "BufEnter")
+            assert.is_false(autocmd.event == "WinEnter")
+            assert.is_false(autocmd.event == "FocusGained")
+        end
+    end)
+
+    it("keeps the directory-change statusline hook for grapple sync", function()
+        local autocmds = vim.api.nvim_get_autocmds({ group = "my.statusline", event = "DirChanged" })
+
+        assert.equal(1, #autocmds)
+    end)
 
     it("elides long hyphenated ticket branch names", function()
         local branch = core_editor_setup.elide_git_branch_name("ASC-1234-some_really_long_description_here_003")

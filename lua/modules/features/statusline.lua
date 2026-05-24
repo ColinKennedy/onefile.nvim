@@ -107,22 +107,19 @@ _G.get_git_branch_label_safe = function()
     return core_editor_setup.get_git_branch_label_safe()
 end
 
----@param args vim.api.keyset.create_autocmd.callback_args
-local function _refresh_git_branch_statusline(args)
-    local core_editor_setup = require("modules.features.core_editor_setup")
+local _STATUSLINE_GROUP = vim.api.nvim_create_augroup("my.statusline", { clear = true })
 
-    core_editor_setup.refresh_git_branch_safe()
-    git_status.refresh()
+vim.api.nvim_create_autocmd("DirChanged", {
+    group = _STATUSLINE_GROUP,
+    desc = "Sync statusline-only directory state after :cd / :tcd.",
+    callback = function()
+        local cwd = vim.v.event.cwd
 
-    if args and args.event == "DirChanged" then
-        require("modules.plugins.native_grapple.core").sync_branch(vim.v.event.cwd)
-    end
-
-    vim.cmd.redrawstatus()
-end
-
-vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "DirChanged", "FocusGained" }, {
-    callback = _refresh_git_branch_statusline,
+        vim.schedule(function()
+            require("modules.plugins.native_grapple.core").sync_branch(cwd)
+            vim.cmd.redrawstatus()
+        end)
+    end,
 })
 
 local dark_lefthand_background = "#2c323c" -- NOTE: Blueish-dark gray

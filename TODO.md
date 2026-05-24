@@ -1,11 +1,5 @@
 - Add :Dispatch support
-
-- In COMMAND mode, <C-n> and <C-p> should pop-up auto-complete if it isn't open already. Otherwise, scroll up / down
- - And I guess <C-x><C-o> should do it too
-
-- tree-sitter highlight funciton-local variables with bold + white text
-
-- Remove reflow, it doesn't actually work
+- The selector GUI filter isn't that great, still
 
 - If I load a session with a terminal, it starts the wrong buffer in INSERT
   mode (it tries to add insert mode for the terminal but touches the current

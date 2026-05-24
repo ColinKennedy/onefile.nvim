@@ -1,7 +1,33 @@
+- Add :Dispatch support
+
+- In COMMAND mode, <C-n> and <C-p> should pop-up auto-complete if it isn't open already. Otherwise, scroll up / down
+ - And I guess <C-x><C-o> should do it too
+
+- tree-sitter highlight funciton-local variables with bold + white text
+
+- Remove reflow, it doesn't actually work
+
+- If I load a session with a terminal, it starts the wrong buffer in INSERT
+  mode (it tries to add insert mode for the terminal but touches the current
+  buffer instead)
+
+- The aerial window when no tree-sitter parser is found is kind of useless
+  (e.g. in Python). Is there a way to fix that?
+```python
+# Some comments
+@another.line(
+    args = 10
+)
+def function(
+    some: str,
+    text: str
+) -> blah:
+    """Something."""
+```
+
+- Once that neovim remote PR is merged, add that to my git commit / git rebase
+  editor command so that I don't get nested Neovims anymore.
 - A <M-S-{1,2,3,4}> for grapple
-- Make session support work
- - for aerial
- - for toggleterminal (I think should be working)
 `<space>`W
 `<space>`q
 - Add :Gcd
@@ -15,15 +41,15 @@
 
 - The AI should do a pass to make sure all functions are documented with type
   annotations, it's missing them in several places
-- Can I add a "stay centered" plugin for writing text?
-Git statusline should elide a long branch name. Show the jira ticket prefix and the last characters
+ - and also for any {} table definitions
 
 - Make an AI write my commit messages for me, somehow. SLM?
 
 - There's probably greater opportunity for defer-evalling in the codebase. For
   example, each module's private functions don't need to be defined in the same
   modules as the public functions. They could be moved and defer-eval required
-  into the relevant spots. This could make startup time faster, but by how much I don't know
+  into the relevant spots. This could make startup time faster, but by how much
+  I don't know
 
 - Update my LSp setup to use config + start
  - add ty LSP support

@@ -161,15 +161,54 @@ describe("modules.plugins.native_grapple", function()
         vim.fn.delete(root, "rf")
     end)
 
-    it("loads stale out-of-range marks at the top of the file", function()
+    it("loads saved marks without loading their buffers", function()
         local root, branch = make_repository()
-        write_marks_file(root, branch, "main.txt", 999)
+        local path = vim.fs.joinpath(root, "main.txt")
+
+        write_marks_file(root, branch, "main.txt", 1)
 
         with_cwd(root, function()
             assert.True(native_grapple.load_branch_marks(root, branch))
         end)
 
+        local _, buffer = native_grapple.iter_bookmarks()()
+
+        assert.is_not_nil(buffer)
+        ---@cast buffer integer
+        assert.is_true(buffer > 0)
+        assert.is_false(vim.api.nvim_buf_is_loaded(buffer))
+        assert.equal(path, vim.api.nvim_buf_get_name(buffer))
         assert.same({ "1:main.txt:1" }, get_bookmark_summaries())
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("serializes lazy marks without buffer loads", function()
+        local root, branch = make_repository()
+
+        write_marks_file(root, branch, "main.txt", 1)
+
+        with_cwd(root, function()
+            assert.True(native_grapple.load_branch_marks(root, branch))
+        end)
+
+        local code = table.concat(native_grapple.serialize_mark_code(root), "\n")
+
+        assert.is_nil(code:find("bufload", 1, true))
+        assert.is_not_nil(code:find("setpos", 1, true))
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("jumps stale out-of-range marks at the top of the file", function()
+        local root, branch = make_repository()
+        write_marks_file(root, branch, "main.txt", 999)
+
+        with_cwd(root, function()
+            assert.True(native_grapple.load_branch_marks(root, branch))
+            native_grapple.mark_current_buffer_as_bookmark("A")
+        end)
+
+        assert.equal("main.txt", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
+        assert.same({ 1, 0 }, vim.api.nvim_win_get_cursor(0))
         vim.fn.delete(root, "rf")
     end)
 

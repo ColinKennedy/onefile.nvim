@@ -22,6 +22,12 @@ M.NO_GIT_BRANCH_NAME = "cwd"
 ---@field git_dir string?
 ---@field head_path string?
 
+---@class _my.native_grapple.Bookmark
+---@field buffer integer The buffer that owns the mark.
+---@field path string The marked file path.
+---@field line integer? The marked line, when known.
+---@field column integer? The marked column, when known.
+
 ---@type _my.native_grapple.State
 local _STATE = {
     branch = nil,
@@ -266,23 +272,6 @@ function M.reset_bookmark(mark, buffer, line, column)
     vim.api.nvim_buf_set_mark(buffer_number, mark, line or 1, column or 0, {})
 end
 
----@param mark string The Vim mark to jump to or apply.
-function M.mark_current_buffer_as_bookmark(mark)
-    M.sync_branch()
-
-    if not _P.is_mark_defined(mark) then
-        vim.cmd.mark(mark)
-        M.write_current_branch_marks()
-
-        return
-    end
-
-    vim.cmd("normal! `" .. mark)
-    pcall(function()
-        vim.cmd('normal! `"')
-    end)
-end
-
 --- Mark the current buffer as the next available bookmark.
 function M.mark_current_buffer_as_next_bookmark()
     local maximum
@@ -306,7 +295,7 @@ end
 function M.go_to_relative_bookmark(offset)
     M.sync_branch()
 
-    ---@type {buffer: integer, path: string}[]
+    ---@type _my.native_grapple.Bookmark[]
     local bookmarks = {}
 
     for _, buffer_number, buffer_path in M.iter_bookmarks() do
@@ -334,15 +323,42 @@ function M.go_to_relative_bookmark(offset)
     M.open_bookmark(bookmarks[fallback_index])
 end
 
----@param bookmark {buffer: integer, path: string}
+---@param bookmark _my.native_grapple.Bookmark The bookmark to open.
 function M.open_bookmark(bookmark)
     if bookmark.buffer ~= 0 and vim.api.nvim_buf_is_valid(bookmark.buffer) then
         vim.cmd.buffer(bookmark.buffer)
+    else
+        vim.cmd.edit(vim.fn.fnameescape(bookmark.path))
+        bookmark.buffer = vim.api.nvim_get_current_buf()
+    end
+
+    if bookmark.line then
+        local line_count = vim.api.nvim_buf_line_count(bookmark.buffer)
+        local line = bookmark.line
+        local column = bookmark.column or 0
+
+        if line > line_count then
+            line = 1
+            column = 0
+        end
+
+        vim.api.nvim_win_set_cursor(0, { line, column })
+    end
+end
+
+---@param mark string The Vim mark to jump to or apply.
+function M.mark_current_buffer_as_bookmark(mark)
+    M.sync_branch()
+
+    if not _P.is_mark_defined(mark) then
+        vim.cmd.mark(mark)
+        M.write_current_branch_marks()
 
         return
     end
 
-    vim.cmd.edit(vim.fn.fnameescape(bookmark.path))
+    local position = vim.api.nvim_get_mark(mark, {})
+    M.open_bookmark({ buffer = position[3], path = position[4], line = position[1], column = position[2] })
 end
 
 --- Load current bookmarks into the quickfix list.
@@ -412,16 +428,9 @@ end
 ---@return string[] # The Lua code that restores the current marks.
 function M.serialize_mark_code(root)
     local output = {
-        "local original_buffer = vim.api.nvim_get_current_buf()",
         "local function set_mark(path, mark, line, column)",
         "    local buffer = vim.fn.bufnr(path, true)",
-        "    vim.fn.bufload(buffer)",
-        "    local line_count = vim.api.nvim_buf_line_count(buffer)",
-        "    if line > line_count then",
-        "        line = 1",
-        "        column = 0",
-        "    end",
-        "    vim.api.nvim_buf_set_mark(buffer, mark, line, column, {})",
+        "    vim.fn.setpos(\"'\" .. mark, { buffer, line, column + 1, 0 })",
         "end",
     }
 
@@ -440,8 +449,6 @@ function M.serialize_mark_code(root)
 
         table.insert(output, string.format("set_mark(%q, %q, %d, %d)", path, mark, position[1], position[2]))
     end
-
-    table.insert(output, "pcall(vim.cmd.buffer, original_buffer)")
 
     return output
 end
@@ -496,14 +503,38 @@ end
 --- Source a saved native grapple marks file with guarded mark setting.
 ---
 ---@param path string The Lua file to source.
-function _P.source_marks_file(path)
+---@param root string The root used to resolve relative saved paths.
+function _P.source_marks_file(path, root)
     local original_set_mark = vim.api.nvim_buf_set_mark
+    local original_bufnr = vim.fn.bufnr
+    local original_bufload = vim.fn.bufload
+
+    rawset(vim.fn, "bufnr", function(name, create)
+        if type(name) == "string" and not name:match("^%a:[/\\]") and not name:match("^/") then
+            name = vim.fs.joinpath(root, name)
+        end
+
+        return original_bufnr(name, create)
+    end)
+
+    rawset(vim.fn, "bufload", function()
+        return
+    end)
 
     rawset(vim.api, "nvim_buf_set_mark", function(buffer, mark, line, column, opts)
+        if not vim.api.nvim_buf_is_loaded(buffer) then
+            vim.fn.setpos("'" .. mark, { buffer, line, column + 1, 0 })
+
+            return
+        end
+
         _P.set_mark_or_top(original_set_mark, buffer, mark, line, column, opts)
     end)
 
     local ok, message = pcall(dofile, path)
+
+    rawset(vim.fn, "bufnr", original_bufnr)
+    rawset(vim.fn, "bufload", original_bufload)
     rawset(vim.api, "nvim_buf_set_mark", original_set_mark)
 
     if not ok then
@@ -529,7 +560,7 @@ function M.load_branch_marks(root, branch)
     vim.opt.shortmess:append("F")
     vim.cmd("noautocmd silent cd " .. vim.fn.fnameescape(root))
 
-    local ok, message = pcall(_P.source_marks_file, path)
+    local ok, message = pcall(_P.source_marks_file, path, root)
 
     vim.cmd("noautocmd silent cd " .. vim.fn.fnameescape(previous_directory))
     vim.o.shortmess = previous_shortmess

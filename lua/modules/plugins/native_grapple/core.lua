@@ -6,11 +6,188 @@ local _P = {}
 M.BOOKMARK_MINIMUM = 1
 M.BOOKMARK_MAXIMUM = 9
 M.MARKS_FILE_NAME = ".nvim.marks.lua"
+M.NO_GIT_BRANCH_NAME = "cwd"
 
+---@class _my.native_grapple.Context
+---@field cwd string The directory that Neovim's current working directory resolved to.
+---@field root string The storage root for marks.
+---@field branch string The Git branch, or the non-Git fallback namespace.
+---@field git_dir string? The absolute Git directory, if `root` is a Git repository.
+---@field head_path string? The Git HEAD file watched for branch changes.
+
+---@class _my.native_grapple.State
+---@field cwd string?
+---@field root string?
+---@field branch string?
+---@field git_dir string?
+---@field head_path string?
+
+---@type _my.native_grapple.State
 local _STATE = {
-    branch = nil, ---@type string?
-    root = nil, ---@type string?
+    branch = nil,
+    cwd = nil,
+    git_dir = nil,
+    head_path = nil,
+    root = nil,
 }
+
+---@type table<string, uv.uv_fs_event_t>
+local _HEAD_WATCHERS_BY_ROOT = {}
+
+local _BRANCH_RELOAD_TIMER = assert(vim.uv.new_timer())
+local _BRANCH_RELOAD_DEBOUNCE_MS = 80
+
+--- Normalize a filesystem path for stable comparisons.
+---
+---@param path string A filesystem path.
+---@return string # The normalized path.
+function _P.normalize_path(path)
+    return vim.fs.normalize(path)
+end
+
+--- Convert a possible file path into a directory that Git can inspect.
+---
+---@param reference_path string? A file or directory path.
+---@return string # The directory to use as the current context.
+function _P.get_reference_directory(reference_path)
+    if reference_path and reference_path ~= "" then
+        if vim.fn.isdirectory(reference_path) == 1 then
+            return _P.normalize_path(reference_path)
+        end
+
+        return _P.normalize_path(vim.fs.dirname(reference_path))
+    end
+
+    return _P.normalize_path(vim.fn.getcwd())
+end
+
+--- Resolve the current native grapple storage context from a directory.
+---
+--- Git repositories use their top-level directory plus the current branch.
+--- Directories outside Git use the current working directory plus a fixed
+--- fallback namespace so marks still work without a session or repository.
+---
+---@param reference_path string? A file or directory path to resolve from.
+---@return _my.native_grapple.Context # The resolved storage context.
+function _P.resolve_context(reference_path)
+    local cwd = _P.get_reference_directory(reference_path)
+    local core_helpers = require("modules.utilities.core_helpers")
+    local command = {
+        core_helpers._GIT_EXECUTABLE,
+        "-C",
+        cwd,
+        "rev-parse",
+        "--show-toplevel",
+        "--absolute-git-dir",
+        "--abbrev-ref",
+        "HEAD",
+    }
+    local result = vim.system(command, { text = true }):wait()
+
+    if result.code ~= 0 then
+        return {
+            branch = M.NO_GIT_BRANCH_NAME,
+            cwd = cwd,
+            root = cwd,
+        }
+    end
+
+    local lines = vim.split(result.stdout or "", "\n", { plain = true, trimempty = true })
+    local root = lines[1]
+    local git_dir = lines[2]
+    local branch = lines[3]
+
+    if not root or root == "" then
+        root = cwd
+    end
+
+    if not branch or branch == "" or branch == "HEAD" then
+        branch = M.NO_GIT_BRANCH_NAME
+    end
+
+    ---@type _my.native_grapple.Context
+    return {
+        branch = branch,
+        cwd = cwd,
+        git_dir = git_dir,
+        head_path = git_dir and vim.fs.joinpath(git_dir, "HEAD") or nil,
+        root = _P.normalize_path(root),
+    }
+end
+
+--- Get the storage path for a root and branch namespace.
+---
+---@param root string The root that owns the marks.
+---@param branch string The branch or fallback namespace.
+---@return string # The mark file path.
+function _P.get_marks_path(root, branch)
+    local core_helpers = require("modules.utilities.core_helpers")
+
+    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, M.MARKS_FILE_NAME)
+end
+
+--- Close one watched Git HEAD file.
+---
+---@param root string The root whose watcher should close.
+function _P.close_head_watcher(root)
+    local watcher = _HEAD_WATCHERS_BY_ROOT[root]
+
+    if not watcher then
+        return
+    end
+
+    if not watcher:is_closing() then
+        watcher:stop()
+        watcher:close()
+    end
+
+    _HEAD_WATCHERS_BY_ROOT[root] = nil
+end
+
+--- Debounce a branch reload caused by a watched Git HEAD update.
+---
+---@param cwd string The working directory whose marks should refresh.
+function _P.schedule_branch_reload(cwd)
+    if _BRANCH_RELOAD_TIMER:is_active() then
+        _BRANCH_RELOAD_TIMER:stop()
+    end
+
+    _BRANCH_RELOAD_TIMER:start(_BRANCH_RELOAD_DEBOUNCE_MS, 0, function()
+        vim.schedule(function()
+            M.sync_branch(cwd, { force = true })
+            vim.cmd.redrawstatus()
+        end)
+    end)
+end
+
+--- Watch a Git HEAD file for branch changes without polling on hot paths.
+---
+---@param context _my.native_grapple.Context The context whose HEAD should be watched.
+function _P.watch_head(context)
+    if not context.head_path or vim.fn.filereadable(context.head_path) ~= 1 then
+        return
+    end
+
+    if _HEAD_WATCHERS_BY_ROOT[context.root] then
+        return
+    end
+
+    local watcher = vim.uv.new_fs_event()
+
+    if not watcher then
+        return
+    end
+
+    local ok = watcher:start(context.head_path, {}, function()
+        _P.schedule_branch_reload(context.cwd)
+    end)
+
+    if ok then
+        _HEAD_WATCHERS_BY_ROOT[context.root] = watcher
+    else
+        watcher:close()
+    end
+end
 
 ---@param index integer A 1-to-9 value.
 ---@return string # The global character mark. e.g. A, B, C, etc.
@@ -19,60 +196,9 @@ function M.get_mark_from_index(index)
 end
 
 ---@param mark string The Vim mark to query.
----@return boolean
+---@return boolean # If the mark exists, return true.
 function _P.is_mark_defined(mark)
     return vim.api.nvim_get_mark(mark, {})[1] ~= 0
-end
-
----@param reference_path string? Explicit path to resolve before falling back to the current buffer.
----@return string
-function _P.get_reference_path(reference_path)
-    if reference_path and reference_path ~= "" then
-        return reference_path
-    end
-
-    local buffer_path = vim.api.nvim_buf_get_name(0)
-
-    if buffer_path ~= "" then
-        return buffer_path
-    end
-
-    return vim.fn.getcwd()
-end
-
----@param reference_path string?
----@return string?
-function _P.get_repository_root(reference_path)
-    return require("modules.utilities.core_helpers").get_nearest_project_root(_P.get_reference_path(reference_path))
-end
-
----@param root string
----@return string?
-function _P.get_git_branch(root)
-    local core_helpers = require("modules.utilities.core_helpers")
-    local command = { core_helpers._GIT_EXECUTABLE, "-C", root, "branch", "--show-current" }
-    local output = vim.fn.systemlist(command)
-
-    if vim.v.shell_error ~= 0 then
-        return nil
-    end
-
-    local branch = vim.trim(output[1] or "")
-
-    if branch == "" then
-        return nil
-    end
-
-    return branch
-end
-
----@param root string
----@param branch string
----@return string
-function _P.get_marks_path(root, branch)
-    local core_helpers = require("modules.utilities.core_helpers")
-
-    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, M.MARKS_FILE_NAME)
 end
 
 --- Iterate over every native grapple bookmark.
@@ -102,8 +228,9 @@ function M.iter_bookmarks()
     end
 end
 
+--- Delete every native grapple bookmark mark.
 function M.delete_all_bookmarks()
-    for index, _, _ in M.iter_bookmarks() do
+    for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
         _P.delete_bookmark(index)
     end
 end
@@ -156,6 +283,7 @@ function M.mark_current_buffer_as_bookmark(mark)
     end)
 end
 
+--- Mark the current buffer as the next available bookmark.
 function M.mark_current_buffer_as_next_bookmark()
     local maximum
 
@@ -178,7 +306,7 @@ end
 function M.go_to_relative_bookmark(offset)
     M.sync_branch()
 
-    ---@type {index: integer, buffer: integer, path: string}[]
+    ---@type {buffer: integer, path: string}[]
     local bookmarks = {}
 
     for _, buffer_number, buffer_path in M.iter_bookmarks() do
@@ -217,6 +345,7 @@ function M.open_bookmark(bookmark)
     vim.cmd.edit(vim.fn.fnameescape(bookmark.path))
 end
 
+--- Load current bookmarks into the quickfix list.
 function M.show_bookmarks()
     M.sync_branch()
 
@@ -245,6 +374,7 @@ function M.show_bookmarks()
     end
 end
 
+--- Toggle the current buffer into or out of native grapple marks.
 function M.toggle_current_buffer()
     M.sync_branch()
 
@@ -279,13 +409,18 @@ function M.toggle_current_buffer()
 end
 
 ---@param root string?
----@return string[]
+---@return string[] # The Lua code that restores the current marks.
 function M.serialize_mark_code(root)
     local output = {
         "local original_buffer = vim.api.nvim_get_current_buf()",
         "local function set_mark(path, mark, line, column)",
         "    local buffer = vim.fn.bufnr(path, true)",
         "    vim.fn.bufload(buffer)",
+        "    local line_count = vim.api.nvim_buf_line_count(buffer)",
+        "    if line > line_count then",
+        "        line = 1",
+        "        column = 0",
+        "    end",
         "    vim.api.nvim_buf_set_mark(buffer, mark, line, column, {})",
         "end",
     }
@@ -299,7 +434,7 @@ function M.serialize_mark_code(root)
             local success, relative = pcall(vim.fs.relpath, root, path)
 
             if success and relative then
-                path = vim.fs.joinpath(root, relative)
+                path = relative
             end
         end
 
@@ -328,71 +463,158 @@ function M.write_branch_marks(root, branch)
     handle:close()
 end
 
+--- Write marks for the currently loaded root and branch.
 function M.write_current_branch_marks()
     M.write_branch_marks(_STATE.root, _STATE.branch)
 end
 
----@param root string
----@param branch string
-function M.load_branch_marks(root, branch)
-    local path = _P.get_marks_path(root, branch)
+--- Set a Vim mark, falling back to the file top when a saved line is stale.
+---
+---@param setter fun(buffer: integer, mark: string, line: integer, column: integer, opts: table): nil
+---    The real mark setter.
+---@param buffer integer The buffer to mark.
+---@param mark string The Vim mark to set.
+---@param line integer The saved line number.
+---@param column integer The saved column number.
+---@param opts table Extra mark options.
+function _P.set_mark_or_top(setter, buffer, mark, line, column, opts)
+    local ok, message = pcall(setter, buffer, mark, line, column, opts)
 
-    if vim.fn.filereadable(path) ~= 1 then
+    if ok then
         return
     end
 
+    if tostring(message):find("Invalid 'line'", 1, true) then
+        setter(buffer, mark, 1, 0, opts)
+
+        return
+    end
+
+    error(message, 0)
+end
+
+--- Source a saved native grapple marks file with guarded mark setting.
+---
+---@param path string The Lua file to source.
+function _P.source_marks_file(path)
+    local original_set_mark = vim.api.nvim_buf_set_mark
+
+    rawset(vim.api, "nvim_buf_set_mark", function(buffer, mark, line, column, opts)
+        _P.set_mark_or_top(original_set_mark, buffer, mark, line, column, opts)
+    end)
+
     local ok, message = pcall(dofile, path)
+    rawset(vim.api, "nvim_buf_set_mark", original_set_mark)
+
+    if not ok then
+        error(message, 0)
+    end
+end
+
+---@param root string The storage root that relative saved paths should resolve from.
+---@param branch string The Git branch, or the non-Git fallback namespace.
+---@return boolean # If a marks file was loaded, return true.
+function M.load_branch_marks(root, branch)
+    local path = _P.get_marks_path(root, branch)
+
+    M.delete_all_bookmarks()
+
+    if vim.fn.filereadable(path) ~= 1 then
+        return false
+    end
+
+    local previous_directory = vim.fn.getcwd()
+    local previous_shortmess = vim.o.shortmess
+
+    vim.opt.shortmess:append("F")
+    vim.cmd("noautocmd silent cd " .. vim.fn.fnameescape(root))
+
+    local ok, message = pcall(_P.source_marks_file, path)
+
+    vim.cmd("noautocmd silent cd " .. vim.fn.fnameescape(previous_directory))
+    vim.o.shortmess = previous_shortmess
 
     if not ok then
         vim.notify(
             string.format('Could not load native grapple marks from "%s": %s', path, message),
             vim.log.levels.ERROR
         )
+
+        return false
     end
+
+    return true
 end
 
----@param reference_path string? Explicit path to use when deciding which project root to load.
-function M.sync_branch(reference_path)
-    local root = _P.get_repository_root(reference_path)
+--- Update loaded marks for the current cwd/root/branch when needed.
+---
+---@param reference_path string? Explicit path to use when resolving context.
+---@param options {force: boolean}? Sync options.
+function M.sync_branch(reference_path, options)
+    options = options or {}
 
-    if not root then
-        M.write_current_branch_marks()
-        M.delete_all_bookmarks()
-        _STATE.root = nil
-        _STATE.branch = nil
+    local cwd = _P.get_reference_directory(reference_path)
 
+    if not options.force and _STATE.cwd == cwd and _STATE.root and _STATE.branch then
         return
     end
 
-    local branch = _P.get_git_branch(root)
+    local context = _P.resolve_context(reference_path or cwd)
 
-    if not branch then
-        M.write_current_branch_marks()
-        M.delete_all_bookmarks()
-        _STATE.root = nil
-        _STATE.branch = nil
+    if not options.force and _STATE.root == context.root and _STATE.branch == context.branch then
+        _STATE.cwd = context.cwd
+        _P.watch_head(context)
 
-        return
-    end
-
-    if not _STATE.root and not _STATE.branch then
-        _STATE.root = root
-        _STATE.branch = branch
-        M.delete_all_bookmarks()
-        M.load_branch_marks(root, branch)
-
-        return
-    end
-
-    if _STATE.root == root and _STATE.branch == branch then
         return
     end
 
     M.write_current_branch_marks()
     M.delete_all_bookmarks()
-    _STATE.root = root
-    _STATE.branch = branch
-    M.load_branch_marks(root, branch)
+
+    _STATE.cwd = context.cwd
+    _STATE.root = context.root
+    _STATE.branch = context.branch
+    _STATE.git_dir = context.git_dir
+    _STATE.head_path = context.head_path
+
+    M.load_branch_marks(context.root, context.branch)
+    _P.watch_head(context)
 end
+
+---@return string? # The current storage root.
+function M.get_current_root()
+    return _STATE.root
+end
+
+---@return string? # The current branch or non-Git namespace.
+function M.get_current_branch()
+    return _STATE.branch
+end
+
+--- Reset native grapple state for focused tests.
+function M._reset_state_for_tests()
+    _STATE.branch = nil
+    _STATE.cwd = nil
+    _STATE.git_dir = nil
+    _STATE.head_path = nil
+    _STATE.root = nil
+end
+
+--- Close watchers and reset state for tests or shutdown.
+function M.teardown()
+    if _BRANCH_RELOAD_TIMER:is_active() then
+        _BRANCH_RELOAD_TIMER:stop()
+    end
+
+    for root, _ in pairs(_HEAD_WATCHERS_BY_ROOT) do
+        _P.close_head_watcher(root)
+    end
+
+    M._reset_state_for_tests()
+end
+
+M._P = _P
+M._STATE = _STATE
+M._HEAD_WATCHERS_BY_ROOT = _HEAD_WATCHERS_BY_ROOT
 
 return M

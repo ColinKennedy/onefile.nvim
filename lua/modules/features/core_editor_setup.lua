@@ -106,6 +106,81 @@ function M.get_selector_target_window()
     return source_window
 end
 
+--- Score a file selector entry against `input`.
+---
+---@param entry _my.selector_gui.entry.Selection The entry to rank.
+---@param input string The selector prompt text.
+---@return number? # A larger score ranks earlier.
+function M.get_file_selector_sort_score(entry, input)
+    local query = input:lower():gsub("[^%w]", "")
+
+    if query == "" then
+        return nil
+    end
+
+    local display = tostring(entry.display or entry.value):lower()
+    local basename = vim.fs.basename(display):gsub("%.[^%.]*$", "")
+    local compact_basename = basename:gsub("[^%w]", "")
+    local compact_display = display:gsub("[^%w]", "")
+
+    ---@param candidate string The text to match.
+    ---@param base_score number The base value to add.
+    ---@return number?
+    local function score_subsequence(candidate, base_score)
+        local query_index = 1
+        local score = base_score
+        local streak = 0
+        local last_match = 0
+        local first_match = nil
+
+        for candidate_index = 1, #candidate do
+            if query_index > #query then
+                break
+            end
+
+            if candidate:sub(candidate_index, candidate_index) == query:sub(query_index, query_index) then
+                first_match = first_match or candidate_index
+
+                if candidate_index == last_match + 1 then
+                    streak = streak + 1
+                else
+                    streak = 1
+                end
+
+                score = score + 100 + (streak * 35)
+                last_match = candidate_index
+                query_index = query_index + 1
+            end
+        end
+
+        if query_index <= #query then
+            return nil
+        end
+
+        return score - ((first_match or 1) * 4) - (#candidate / 10)
+    end
+
+    local direct_basename_start = compact_basename:find(query, 1, true)
+
+    if direct_basename_start then
+        return 100000 - (direct_basename_start * 10) - #compact_basename
+    end
+
+    local basename_score = score_subsequence(compact_basename, 50000)
+
+    if basename_score then
+        return basename_score
+    end
+
+    local direct_display_start = compact_display:find(query, 1, true)
+
+    if direct_display_start then
+        return 25000 - direct_display_start - (#compact_display / 10)
+    end
+
+    return score_subsequence(compact_display, 1000)
+end
+
 --- Find, select, and replace the current window with a new file.
 ---
 --- Important:
@@ -163,6 +238,8 @@ function M.select_file_in_directory(root)
             { text = M.shorten_selector_directory_path(root), highlight = "Directory" },
         },
         multiple_selection = true,
+        sort_maximum = 200,
+        sort_score = M.get_file_selector_sort_score,
         confirm = function(entries)
             vim.api.nvim_set_current_win(window)
 
@@ -521,9 +598,18 @@ function M.select_from_options(values, options)
             end
         end
 
-        table.sort(matches, function(left, right)
-            return left.score > right.score
-        end)
+        if options.sort_score and #matches <= (options.sort_maximum or math.huge) then
+            table.sort(matches, function(left, right)
+                local left_sort_score = options.sort_score(left, state.input) or left.score
+                local right_sort_score = options.sort_score(right, state.input) or right.score
+
+                if left_sort_score == right_sort_score then
+                    return left.score > right.score
+                end
+
+                return left_sort_score > right_sort_score
+            end)
+        end
 
         for _, entry in ipairs(matches) do
             table.insert(state.filtered, entry)

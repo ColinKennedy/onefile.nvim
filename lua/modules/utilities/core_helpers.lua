@@ -89,6 +89,10 @@ local _P = {}
 ---@field deserialize (fun(value: any): _my.selector_gui.entry.Deserialized)?
 ---    Format the incoming data, if needed. This is needed when
 ---    `_my.selector_gui.entry.Selection.value` and `_my.selector_gui.entry.Selection.display` are differing values.
+---@field sort_score (fun(entry: _my.selector_gui.entry.Selection, input: string): number?)?
+---    Optional post-filter ranking. Return a larger number to rank earlier.
+---@field sort_maximum integer?
+---    Only run `sort_score` when the filtered match count is at-or-below this value.
 
 ---@class _my.SnippetCondition.parameters Info to pass to `_my.SnippetCondition`.
 ---@field start_column integer The cursor column that began the trigger snippet.

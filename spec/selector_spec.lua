@@ -230,6 +230,89 @@ describe("selector UI", function()
 
         assert.are.same("%#Directory#/tmp/100%%/project%*", vim.wo[list_window].winbar)
     end)
+    it("preserves filtered source order unless sorting is explicitly enabled", function()
+        local refresh = core_editor_setup.select_from_options({
+            "lua/modules/plugins/todo_comment_highlighting.lua",
+            "lua/modules/features/autocommands.lua",
+        }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+        })
+
+        local prompt_window = get_selector_prompt_window()
+        local prompt_buffer = vim.api.nvim_win_get_buf(prompt_window)
+        vim.api.nvim_buf_set_lines(prompt_buffer, 0, -1, false, { "autcom" })
+        refresh()
+
+        local list_window = get_selector_list_window()
+        local list_buffer = vim.api.nvim_win_get_buf(list_window)
+        local lines = vim.api.nvim_buf_get_lines(list_buffer, 0, 2, false)
+
+        assert.are.same({
+            "> lua/modules/plugins/todo_comment_highlighting.lua",
+            "  lua/modules/features/autocommands.lua",
+        }, lines)
+    end)
+
+    it("can opt into file-path sorting after filtering", function()
+        local refresh = core_editor_setup.select_from_options({
+            "lua/modules/plugins/todo_comment_highlighting.lua",
+            "lua/modules/features/autocommands.lua",
+        }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            sort_maximum = 200,
+            sort_score = core_editor_setup.get_file_selector_sort_score,
+        })
+
+        local prompt_window = get_selector_prompt_window()
+        local prompt_buffer = vim.api.nvim_win_get_buf(prompt_window)
+        vim.api.nvim_buf_set_lines(prompt_buffer, 0, -1, false, { "autcom" })
+        refresh()
+
+        local list_window = get_selector_list_window()
+        local list_buffer = vim.api.nvim_win_get_buf(list_window)
+        local lines = vim.api.nvim_buf_get_lines(list_buffer, 0, 2, false)
+
+        assert.are.same({
+            "> lua/modules/features/autocommands.lua",
+            "  lua/modules/plugins/todo_comment_highlighting.lua",
+        }, lines)
+    end)
+
+    it("skips opt-in sorting when filtered results exceed the configured maximum", function()
+        local values = {}
+
+        for index = 1, 201 do
+            table.insert(values, string.format("path/to/file_%03d.lua", index))
+        end
+
+        local refresh = core_editor_setup.select_from_options(values, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            sort_maximum = 200,
+            sort_score = function(entry)
+                return entry.display == "path/to/file_201.lua" and 1000 or 0
+            end,
+        })
+
+        local prompt_window = get_selector_prompt_window()
+        local prompt_buffer = vim.api.nvim_win_get_buf(prompt_window)
+        vim.api.nvim_buf_set_lines(prompt_buffer, 0, -1, false, { "file" })
+        refresh()
+
+        local list_window = get_selector_list_window()
+        local list_buffer = vim.api.nvim_win_get_buf(list_window)
+        local lines = vim.api.nvim_buf_get_lines(list_buffer, 0, 1, false)
+
+        assert.are.same({ "> path/to/file_001.lua" }, lines)
+    end)
 
     it("highlights the selected row like a visual selection with brighter selected text", function()
         local refresh = core_editor_setup.select_from_options({ "alpha", "beta" }, {
@@ -493,6 +576,8 @@ describe("selector UI", function()
         assert.is_not_nil(captured_options)
         ---@cast captured_options _my.selection_gui.GuiOptions
         assert.is_true(captured_options.multiple_selection)
+        assert.equal(200, captured_options.sort_maximum)
+        assert.equal(core_editor_setup.get_file_selector_sort_score, captured_options.sort_score)
     end)
 
     it("<leader>gsa refreshes when deferred stash results arrive", function()

@@ -41,7 +41,7 @@ describe("reflow visual selection", function()
     local function assert_reflowed_selection_is_reselected(keys)
         make_buffer({
             "untouched text above the selected region",
-            "  example, each module's private functions don't need to be defined in the same modules as the public functions. They could be moved and defer-eval required into the relevant spots. This could make startup time faster, but by how much I don't know",
+            "  example, each module's private functions don't need to be defined in the same modules as the public functions. They could be moved and defer-eval required into the relevant spots. This could make startup time faster, but by how much I don't know", -- luacheck: ignore
             "untouched text below the selected region",
         })
         vim.api.nvim_win_set_cursor(0, { 2, 2 })

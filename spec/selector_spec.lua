@@ -495,6 +495,54 @@ describe("selector UI", function()
         assert.is_true(captured_options.multiple_selection)
     end)
 
+    it("<leader>gsa refreshes when deferred stash results arrive", function()
+        local core_helpers = require("modules.utilities.core_helpers")
+        local original_exists_command = core_helpers.exists_command
+        local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
+        local stashes = {}
+        local on_update
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        core_helpers.exists_command = function()
+            return true
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        core_helpers.get_deferred_shell_command_results = function(_, _, callback)
+            on_update = callback
+
+            return stashes
+        end
+
+        require("modules.features.git_keymaps")
+        local mapping = vim.fn.maparg("<leader>gsa", "n", false, true)
+        assert.is_function(mapping.callback)
+        mapping.callback()
+
+        table.insert(stashes, "stash@{0}: On main: important stash")
+        assert.is_function(on_update)
+        on_update()
+
+        local found_stash_text = false
+
+        for _, window in ipairs(vim.api.nvim_list_wins()) do
+            if vim.api.nvim_win_get_config(window).relative == "editor" then
+                local buffer = vim.api.nvim_win_get_buf(window)
+                local lines = table.concat(vim.api.nvim_buf_get_lines(buffer, 0, -1, false), "\n")
+
+                if lines:find("important stash", 1, true) then
+                    found_stash_text = true
+
+                    break
+                end
+            end
+        end
+
+        core_helpers.exists_command = original_exists_command
+        core_helpers.get_deferred_shell_command_results = original_get_deferred_results
+
+        assert.is_true(found_stash_text)
+    end)
+
     it("<Space>B uses multi-select buffer selection", function()
         local core_helpers = require("modules.utilities.core_helpers")
         local original_select_from_options = core_editor_setup.select_from_options

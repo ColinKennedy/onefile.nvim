@@ -836,9 +836,20 @@ function M.show_git_stashes()
         return
     end
 
-    local options = core_helpers.get_deferred_shell_command_results(command)
+    local refresh_selector
+    local should_refresh_selector = false
 
-    M.select_from_options(options, {
+    local options = core_helpers.get_deferred_shell_command_results(command, nil, function()
+        if refresh_selector then
+            refresh_selector()
+
+            return
+        end
+
+        should_refresh_selector = true
+    end)
+
+    refresh_selector = M.select_from_options(options, {
         deserialize = function(value)
             local separator = ":"
             local parts = vim.fn.split(value, separator)
@@ -879,6 +890,10 @@ function M.show_git_stashes()
             vim.notify(string.format("Git stash apply failed. See below:\n\n%s", error_message), vim.log.levels.ERROR)
         end,
     })
+
+    if should_refresh_selector then
+        refresh_selector()
+    end
 end
 
 --- Load snippets and show them, if possible.

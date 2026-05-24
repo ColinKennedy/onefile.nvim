@@ -1,4 +1,5 @@
---- This module fixes a common issue when pasting with `:+p` - on Windows, when pasting to WSL, these annoying ^M line-ending characters get inserted.
+--- This module fixes a common issue when pasting with `:+p` - on Windows, when
+--- pasting to WSL, these annoying ^M line-ending characters get inserted.
 ---
 --- But with this module, there's no issue anymore, the characters get
 --- auto-stripped-out

@@ -354,7 +354,7 @@ end
 ---@param height integer The popupmenu height.
 ---@return integer row The popupmenu row.
 ---@return integer column The popupmenu column.
-function _P.get_popupmenu_position(width, height)
+function _P.get_cmdline_popupmenu_position(width, height)
     local _cmdline_width, row, column, border_width = _P.get_geometry(1)
     local content_row = row + border_width
     local content_column = column + border_width
@@ -366,6 +366,25 @@ function _P.get_popupmenu_position(width, height)
     end
 
     return math.max(0, content_row - height), popup_column
+end
+
+--- Get the editor-relative popupmenu position for insert-mode completion.
+---
+---@param anchor_row integer The screen row sent by the popupmenu UI event.
+---@param anchor_column integer The screen column sent by the popupmenu UI event.
+---@param width integer The popupmenu width.
+---@param height integer The popupmenu height.
+---@return integer row The popupmenu row.
+---@return integer column The popupmenu column.
+function _P.get_screen_popupmenu_position(anchor_row, anchor_column, width, height)
+    local column = math.min(math.max(0, anchor_column), math.max(0, vim.o.columns - width - 1))
+    local below_row = math.max(0, anchor_row + 1)
+
+    if below_row + height <= vim.o.lines - vim.o.cmdheight then
+        return below_row, column
+    end
+
+    return math.max(0, anchor_row - height), column
 end
 
 --- Get a popupmenu height that respects 'pumheight' without treating 0 as one row.
@@ -383,12 +402,41 @@ function _P.get_popupmenu_height(item_count)
     return math.min(item_count, available)
 end
 
---- Show command-line completion next to the centered cmdline cursor.
+--- Resolve a popupmenu event into either a screen anchor or cmdline-relative anchor.
+---
+---@param row integer? The popupmenu row from Neovim's UI event.
+---@param column integer? The popupmenu column from Neovim's UI event.
+---@param grid integer? The popupmenu grid from Neovim's UI event.
+---@return {row: integer, column: integer}? anchor nil means anchor to the external cmdline.
+function _P.get_popupmenu_anchor(row, column, grid)
+    if grid == -1 then
+        return nil
+    end
+
+    if row ~= nil and column ~= nil then
+        return { row = row, column = column }
+    end
+
+    if _P.is_valid_window(_P.window) then
+        return nil
+    end
+
+    return { row = row or 0, column = column or 0 }
+end
+
+--- Show completion popupmenu for either cmdline or insert-mode completion.
 ---
 ---@param items table[] Popupmenu entries from Neovim's external UI event.
 ---@param selected integer Selected item index, or -1 when no item is selected.
-function _P.show_popupmenu(items, selected)
-    if vim.tbl_isempty(items) or not _P.is_valid_window(_P.window) then
+---@param anchor {row: integer, column: integer}? Insert-mode screen anchor. nil means external cmdline.
+function _P.show_popupmenu(items, selected, anchor)
+    if vim.tbl_isempty(items) then
+        _P.close_popupmenu()
+
+        return
+    end
+
+    if not anchor and not _P.is_valid_window(_P.window) then
         _P.close_popupmenu()
 
         return
@@ -409,7 +457,13 @@ function _P.show_popupmenu(items, selected)
     local buffer = _P.get_popup_buffer()
     vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
 
-    local row, popup_column = _P.get_popupmenu_position(width, height)
+    local row, popup_column
+
+    if anchor then
+        row, popup_column = _P.get_screen_popupmenu_position(anchor.row, anchor.column, width, height)
+    else
+        row, popup_column = _P.get_cmdline_popupmenu_position(width, height)
+    end
     local config = {
         relative = "editor",
         row = row,
@@ -505,9 +559,11 @@ function _P.attach_cmdline_ui()
 
             return true
         elseif event == "popupmenu_show" then
-            local items, selected = ...
+            local items, selected, row, column, grid = ...
+            local anchor = _P.get_popupmenu_anchor(row, column, grid)
+
             vim.schedule(function()
-                _P.show_popupmenu(items, selected)
+                _P.show_popupmenu(items, selected, anchor)
                 _P.flush_redraw()
             end)
 

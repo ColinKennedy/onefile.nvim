@@ -122,10 +122,54 @@ describe("modules.plugins.tiny_cmdline", function()
         cmdline.config.border = "rounded"
         cmdline._P.cursor_column = 7
 
-        local row, column = cmdline._P.get_popupmenu_position(20, 3)
+        local row, column = cmdline._P.get_cmdline_popupmenu_position(20, 3)
 
         assert.equal(20, row)
         assert.equal(31, column)
+    end)
+
+    it("positions insert-mode popupmenu from Neovim's screen anchor", function()
+        local cmdline = require("modules.plugins.tiny_cmdline")
+        vim.o.columns = 120
+        vim.o.lines = 40
+        vim.o.cmdheight = 1
+
+        local row, column = cmdline._P.get_screen_popupmenu_position(10, 15, 20, 3)
+
+        assert.equal(11, row)
+        assert.equal(15, column)
+    end)
+
+    it("anchors ambiguous popupmenu events to an active centered cmdline", function()
+        local cmdline = require("modules.plugins.tiny_cmdline")
+        cmdline._P.show_cmdline({ { 0, "e" } }, 1, ":", "", 0)
+
+        assert.is_nil(cmdline._P.get_popupmenu_anchor(nil, nil, nil))
+
+        cmdline._P.close_window()
+    end)
+
+    it("does not send active cmdline completion to the screen origin", function()
+        local cmdline = require("modules.plugins.tiny_cmdline")
+        vim.o.columns = 120
+        vim.o.lines = 40
+        vim.o.cmdheight = 1
+        vim.o.pumheight = 0
+        cmdline.config.width = { value = "60%", min = 40, max = 80 }
+        cmdline.config.position = { x = "50%", y = "50%" }
+        cmdline.config.border = "rounded"
+        cmdline._P.show_cmdline({ { 0, "e" } }, 1, ":", "", 0)
+
+        cmdline._P.show_popupmenu({
+            { "edit", "", "", "" },
+            { "Explore", "", "", "" },
+        }, 0, cmdline._P.get_popupmenu_anchor(nil, nil, nil))
+
+        local config = vim.api.nvim_win_get_config(cmdline._P.popup_window)
+        assert.equal(20, config.row)
+        assert.equal(26, config.col)
+
+        cmdline._P.close_window()
     end)
 
     it("renders multiple popupmenu entries", function()
@@ -164,6 +208,28 @@ describe("modules.plugins.tiny_cmdline", function()
         assert.equal(2, marks[1][4].virt_text_win_col)
 
         cmdline._P.close_window()
+    end)
+
+    it("renders insert-mode popupmenu entries without a cmdline window", function()
+        local cmdline = require("modules.plugins.tiny_cmdline")
+        vim.o.columns = 120
+        vim.o.lines = 40
+        vim.o.cmdheight = 1
+        vim.o.pumheight = 0
+
+        cmdline._P.show_popupmenu({
+            { "alpha", "", "", "" },
+            { "alphabet", "", "", "" },
+            { "alpine", "", "", "" },
+        }, 1, { row = 4, column = 8 })
+
+        local config = vim.api.nvim_win_get_config(cmdline._P.popup_window)
+        assert.equal(5, config.row)
+        assert.equal(8, config.col)
+        assert.equal(3, vim.api.nvim_win_get_height(cmdline._P.popup_window))
+        assert.same({ "alpha", "alphabet", "alpine" }, vim.api.nvim_buf_get_lines(cmdline._P.get_popup_buffer(), 0, -1, false))
+
+        cmdline._P.close_popupmenu()
     end)
 
     it("renders command chunks with prefixes and prompt indentation", function()

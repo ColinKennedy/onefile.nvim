@@ -206,25 +206,35 @@ end
 ---
 local function _create_terminal(buffer)
     if not buffer then
-        local command = _get_default_shell_command()
-        local terminal_name = _suggest_name("term://" .. command)
+        local terminal = require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+            local command = _get_default_shell_command()
+            local terminal_name = _suggest_name("term://" .. command)
 
-        buffer = vim.api.nvim_create_buf(false, true)
-        local window = vim.api.nvim_get_current_win()
+            buffer = vim.api.nvim_create_buf(false, true)
+            local window = vim.api.nvim_get_current_win()
 
-        _set_window_buffer(window, buffer)
-        vim.api.nvim_buf_set_name(buffer, terminal_name)
-        _initialize_terminal_buffer(buffer)
+            _set_window_buffer(window, buffer)
+            vim.api.nvim_buf_set_name(buffer, terminal_name)
+            _initialize_terminal_buffer(buffer)
 
-        local job = vim.fn.jobstart(command, { term = true })
+            local job = vim.fn.jobstart(command, { term = true })
 
-        if job <= 0 then
-            vim.api.nvim_buf_delete(buffer, { force = true })
-            error(string.format('Failed to start terminal shell "%s".', command), 0)
-        end
+            if job <= 0 then
+                vim.api.nvim_buf_delete(buffer, { force = true })
+                error(string.format('Failed to start terminal shell "%s".', command), 0)
+            end
 
-        vim.api.nvim_buf_set_name(buffer, terminal_name)
-        _configure_terminal_window(window)
+            vim.api.nvim_buf_set_name(buffer, terminal_name)
+            _configure_terminal_window(window)
+            _initialize_terminal_buffer(buffer)
+            require("modules.utilities.core_helpers").close_terminal_afterwards(buffer)
+
+            return { buffer = buffer, mode = _STARTING_MODE }
+        end)
+
+        assert(terminal)
+
+        return terminal
     end
 
     _initialize_terminal_buffer(buffer)
@@ -323,7 +333,9 @@ local function _toggle_terminal()
         end
     else
         _prepare_terminal_window()
-        _set_window_buffer(vim.api.nvim_get_current_win(), terminal.buffer)
+        require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+            _set_window_buffer(vim.api.nvim_get_current_win(), terminal.buffer)
+        end)
     end
 end
 

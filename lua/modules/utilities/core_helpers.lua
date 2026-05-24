@@ -121,6 +121,29 @@ M._LUA_ROOT_PATHS = {
     "stylua.toml",
 }
 
+--- Run `callback` without showing file-info messages.
+---
+--- This is useful for temporary/special buffers whose internal names should
+--- not be echoed as if the user opened a regular file.
+---
+---@generic T
+---@param callback fun(): T? The work to run while file messages are suppressed.
+---@return T? # The callback result.
+function M.with_file_messages_suppressed(callback)
+    local shortmess = vim.o.shortmess
+
+    vim.opt.shortmess:append("F")
+
+    local ok, result = pcall(callback)
+    vim.o.shortmess = shortmess
+
+    if not ok then
+        error(result, 0)
+    end
+
+    return result
+end
+
 local _ALL_SINGLE_PROJECT_ROOTS = vim.tbl_deep_extend("force", {}, M._LUA_ROOT_PATHS)
 _ALL_SINGLE_PROJECT_ROOTS = vim.list_extend(_ALL_SINGLE_PROJECT_ROOTS, {
     -- Language-Agnostic

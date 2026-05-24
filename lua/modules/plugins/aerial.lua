@@ -898,7 +898,9 @@ local function _create_aerial_buffer(source_buffer)
     local buffer = vim.api.nvim_create_buf(false, true)
     local source_name = vim.api.nvim_buf_get_name(source_buffer)
 
-    vim.api.nvim_buf_set_name(buffer, _AERIAL_BUFFER_PREFIX .. (source_name ~= "" and source_name or "[No Name]"))
+    require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+        vim.api.nvim_buf_set_name(buffer, _AERIAL_BUFFER_PREFIX .. (source_name ~= "" and source_name or "[No Name]"))
+    end)
     vim.bo[buffer].buftype = "nofile"
     vim.bo[buffer].bufhidden = "wipe"
     vim.bo[buffer].filetype = _AERIAL_FILETYPE
@@ -916,7 +918,9 @@ local function _rename_aerial_buffer(aerial_buffer, source_buffer)
     local source_name = vim.api.nvim_buf_get_name(source_buffer)
     local name = _AERIAL_BUFFER_PREFIX .. (source_name ~= "" and source_name or "[No Name]")
 
-    pcall(vim.api.nvim_buf_set_name, aerial_buffer, name)
+    require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+        pcall(vim.api.nvim_buf_set_name, aerial_buffer, name)
+    end)
 end
 
 --- Open the right-side aerial split.
@@ -926,8 +930,10 @@ local function _open_aerial_window(state)
     local source_window = state.source_window
 
     vim.api.nvim_set_current_win(source_window)
-    vim.cmd("botright " .. tostring(_SIDEBAR_WIDTH) .. "vsplit")
-    vim.api.nvim_win_set_buf(0, state.aerial_buffer)
+    require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+        vim.cmd("botright " .. tostring(_SIDEBAR_WIDTH) .. "vsplit")
+        vim.api.nvim_win_set_buf(0, state.aerial_buffer)
+    end)
     state.aerial_window = vim.api.nvim_get_current_win()
     vim.wo[state.aerial_window].winfixbuf = true
     vim.wo[state.aerial_window].number = false

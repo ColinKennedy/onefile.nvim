@@ -6,6 +6,53 @@ local _P = {}
 _P.operatorfunc_caller = nil
 _P.operatorfunc_original = nil
 
+--- Get the lines from the register that should replace a text object.
+---
+---@param register string The register name to read.
+---@return string[] # The register contents as replacement lines.
+function _P.get_register_lines(register)
+    local lines = vim.fn.getreg(register, 1, true)
+
+    if vim.tbl_isempty(lines) then
+        return { "" }
+    end
+
+    return lines
+end
+
+--- Remember the region replaced by a characterwise paste operation.
+---
+---@param start_row integer The 1-or-more start row.
+---@param start_column integer The 0-or-more start column.
+---@param replacement string[] The replacement text.
+function _P.set_last_put_marks(start_row, start_column, replacement)
+    local end_row = start_row + #replacement - 1
+    local end_column = #replacement[#replacement]
+
+    if #replacement == 1 then
+        end_column = start_column + end_column
+    end
+
+    vim.fn.setpos("'[", { 0, start_row, start_column + 1, 0 })
+    vim.fn.setpos("']", { 0, end_row, math.max(end_column, 1), 0 })
+end
+
+--- Replace a characterwise operator range with register text.
+---
+---@param register string The register name to paste from.
+function _P.replace_characterwise_range(register)
+    local start_position = vim.fn.getpos("'[")
+    local end_position = vim.fn.getpos("']")
+    local start_row = start_position[2]
+    local start_column = start_position[3] - 1
+    local end_row = end_position[2]
+    local end_column = end_position[3]
+    local replacement = _P.get_register_lines(register)
+
+    vim.api.nvim_buf_set_text(0, start_row - 1, start_column, end_row - 1, end_column, replacement)
+    _P.set_last_put_marks(start_row, start_column, replacement)
+end
+
 --- Change `p` into a text-object-aware operator.
 ---
 ---@param type_ "char" | "line" The type of operator to consider.
@@ -15,16 +62,15 @@ function _P.operator_paste(type_)
 
     -- Delete the target text to the black hole register
     if type_ == "char" then
-        vim.cmd('normal! `[v`]"_d')
+        _P.replace_characterwise_range(register)
     elseif type_ == "line" then
         vim.cmd('normal! `[V`]"_d')
+        vim.cmd(string.format('normal! `["%sP', register))
     else
         vim.notify(string.format('Unknown mode "%s" is not supported for paste operator.', type_), vim.log.levels.WARN)
 
         return
     end
-
-    vim.cmd(string.format('normal! `["%sP', register))
 end
 
 --- Change `p` into a text-object-aware operator and revert later.

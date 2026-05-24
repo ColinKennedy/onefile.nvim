@@ -151,6 +151,21 @@ describe("modules.plugins.tiny_cmdline", function()
         cmdline._P.close_window()
     end)
 
+    it("draws a visible cursor block in the non-focusable cmdline float", function()
+        local cmdline = require("modules.plugins.tiny_cmdline")
+        cmdline._P.show_cmdline({ { 0, "e" } }, 1, ":", "", 0)
+
+        local marks = vim.api.nvim_buf_get_extmarks(cmdline._P.get_buffer(), cmdline._P.namespace, 0, -1, { details = true })
+
+        assert.equal(" ", cmdline._P.get_cursor_text())
+        assert.equal(1, #marks)
+        assert.same({ { " ", "TinyCmdlineCursor" } }, marks[1][4].virt_text)
+        assert.equal("win_col", marks[1][4].virt_text_pos)
+        assert.equal(2, marks[1][4].virt_text_win_col)
+
+        cmdline._P.close_window()
+    end)
+
     it("renders command chunks with prefixes and prompt indentation", function()
         local cmdline = require("modules.plugins.tiny_cmdline")
 

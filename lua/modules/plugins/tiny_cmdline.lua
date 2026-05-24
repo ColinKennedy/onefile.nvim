@@ -55,6 +55,8 @@ _P.prompt_width = 0
 ---@type integer
 _P.cursor_column = 0
 ---@type integer
+_P.cursor_byte_column = 0
+---@type integer
 _P.generation = 0
 
 --- Parse a percent or absolute dimension into screen cells.
@@ -208,6 +210,7 @@ function _P.close_window()
     _P.current_line = ""
     _P.prompt_width = 0
     _P.cursor_column = 0
+    _P.cursor_byte_column = 0
     _P.close_popupmenu()
 end
 
@@ -281,6 +284,34 @@ function _P.schedule_show_cmdline(content, position, firstc, prompt, indent)
     end)
 end
 
+--- Get the single character that should be drawn as the cursor block.
+---
+---@return string # Character under the cursor, or a space at end-of-line.
+function _P.get_cursor_text()
+    if _P.cursor_byte_column >= #_P.current_line then
+        return " "
+    end
+
+    local prefix = _P.current_line:sub(1, _P.cursor_byte_column)
+    local char_index = vim.fn.strchars(prefix)
+    local text = vim.fn.strcharpart(_P.current_line, char_index, 1)
+
+    return text ~= "" and text or " "
+end
+
+--- Draw a visible block cursor in the non-focusable cmdline float.
+function _P.draw_cursor_block()
+    local buffer = _P.get_buffer()
+
+    vim.api.nvim_buf_clear_namespace(buffer, _P.namespace, 0, 1)
+    vim.api.nvim_buf_set_extmark(buffer, _P.namespace, 0, 0, {
+        virt_text = { { _P.get_cursor_text(), "TinyCmdlineCursor" } },
+        virt_text_pos = "overlay",
+        virt_text_win_col = _P.cursor_column,
+        priority = 1000,
+    })
+end
+
 --- Move the floating-window cursor to match the command-line cursor.
 ---
 ---@param position integer Current cursor position inside the command text.
@@ -289,9 +320,13 @@ function _P.set_cursor_position(position)
         return
     end
 
-    local column = _P.prompt_width + vim.fn.strdisplaywidth(_P.current_line:sub(_P.prompt_width + 1, _P.prompt_width + position))
+    local prompt_text = _P.current_line:sub(1, _P.prompt_width)
+    local command_text = _P.current_line:sub(#prompt_text + 1)
+    local column = _P.prompt_width + vim.fn.strdisplaywidth(command_text:sub(1, position))
     _P.cursor_column = math.max(0, column)
+    _P.cursor_byte_column = math.min(#_P.current_line, #prompt_text + position)
     pcall(vim.api.nvim_win_set_cursor, _P.window, { 1, _P.cursor_column })
+    _P.draw_cursor_block()
 end
 
 --- Convert a popupmenu item into one display row.
@@ -530,6 +565,7 @@ function M.setup(opts)
 
     vim.api.nvim_set_hl(0, "TinyCmdlineNormal", { link = "MsgArea", default = true })
     vim.api.nvim_set_hl(0, "TinyCmdlineBorder", { link = "FloatBorder", default = true })
+    vim.api.nvim_set_hl(0, "TinyCmdlineCursor", { link = "Cursor", default = true })
 
     _P.ensure_message_row()
     _P.ensure_popupmenu_completion()

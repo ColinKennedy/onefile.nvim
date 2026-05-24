@@ -304,9 +304,12 @@ vim.api.nvim_set_hl(0, "@lsp.typemod.function.defaultLibrary", { link = "@functi
 -- NOTE: This looks good in Lua. Maybe it'd look good in other languages?
 vim.api.nvim_set_hl(0, "@lsp.typemod.keyword.documentation.lua", { link = "@string.documentation" })
 
+-- This highlights function-local variables in Python, it's really pretty!
+vim.api.nvim_set_hl(0, "@variable.parameter", { fg = _ACCENT_BRIGHT_WHITE_10, bold = true })
+vim.api.nvim_set_hl(0, "@parameter", { link = "@variable.parameter" })
+
 -- Neovim 0.10+ ships Python queries that break backwards compatibility
 vim.api.nvim_set_hl(0, "@variable", { link = "Identifier" })
-vim.api.nvim_set_hl(0, "@variable.parameter", { fg = _ACCENT_BRIGHT_WHITE_10, bold = true })
 
 -- Miscellaneous: Highlight non-auto-completed text (make it look like virtual text)
 --

@@ -58,14 +58,29 @@ local function get_buffer_mapping(buffer, lhs)
 end
 
 describe("modules.plugins.obsidian", function()
+    local original_confirm
+    local original_notify
     local original_root
 
     before_each(function()
+        original_confirm = nil
+        original_notify = nil
         original_root = obsidian.get_vaults_root_path()
     end)
 
     after_each(function()
         obsidian.set_vaults_root_for_tests(original_root)
+
+        if original_confirm ~= nil then
+            rawset(vim.fn, "confirm", original_confirm)
+            original_confirm = nil
+        end
+
+        if original_notify ~= nil then
+            rawset(vim, "notify", original_notify)
+            original_notify = nil
+        end
+
         vim.cmd("silent! bwipeout!")
     end)
 
@@ -180,6 +195,66 @@ describe("modules.plugins.obsidian", function()
         obsidian.go_to_definition()
 
         assert.equal(first, vim.api.nvim_buf_get_name(0))
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("asks to create a missing wikilink note and opens it when confirmed", function()
+        local root = vim.fn.tempname()
+        local current = vim.fs.joinpath(root, "foo", "current.md")
+        local prompt
+
+        write_note(current, {}, { "[[Missing Note]]" })
+        obsidian.set_vaults_root_for_tests(root)
+        original_confirm = vim.fn.confirm
+        rawset(vim.fn, "confirm", function(message, choices, default)
+            prompt = { message = message, choices = choices, default = default }
+
+            return 1
+        end)
+
+        vim.cmd("silent edit " .. vim.fn.fnameescape(current))
+        vim.api.nvim_win_set_cursor(0, { 6, 3 })
+        obsidian.go_to_definition()
+
+        local opened = vim.api.nvim_buf_get_name(0)
+        assert.same({
+            choices = "&Yes\n&No",
+            default = 2,
+            message = 'Create Obsidian note "Missing Note"?',
+        }, prompt)
+        assert.True(opened:match("/foo/%d+%-missing%-note%.md$") ~= nil)
+        assert.same({ "Missing Note" }, obsidian.get_aliases(opened))
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("prints an info message when missing wikilink note creation is cancelled", function()
+        local root = vim.fn.tempname()
+        local current = vim.fs.joinpath(root, "foo", "current.md")
+        local notifications = {}
+
+        write_note(current, {}, { "[[Missing Note]]" })
+        obsidian.set_vaults_root_for_tests(root)
+        original_confirm = vim.fn.confirm
+        rawset(vim.fn, "confirm", function()
+            return 2
+        end)
+        original_notify = vim.notify
+        rawset(vim, "notify", function(message, level)
+            table.insert(notifications, { message = message, level = level })
+        end)
+
+        vim.cmd("silent edit " .. vim.fn.fnameescape(current))
+        vim.api.nvim_win_set_cursor(0, { 6, 3 })
+        obsidian.go_to_definition()
+
+        assert.equal(current, vim.api.nvim_buf_get_name(0))
+        assert.same({
+            {
+                level = vim.log.levels.INFO,
+                message = "Cancelled Obsidian note creation.",
+            },
+        }, notifications)
+        assert.same({ current }, vim.fn.glob(vim.fs.joinpath(root, "foo", "*.md"), true, true))
         vim.fn.delete(root, "rf")
     end)
 end)

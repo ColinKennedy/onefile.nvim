@@ -4,11 +4,15 @@ describe("modules.plugins.tiny_cmdline", function()
     local columns
     local lines
     local cmdheight
+    local wildoptions
+    local ui_cmdline_pos
 
     before_each(function()
         columns = vim.o.columns
         lines = vim.o.lines
         cmdheight = vim.o.cmdheight
+        wildoptions = vim.o.wildoptions
+        ui_cmdline_pos = vim.g.ui_cmdline_pos
         package.loaded["modules.plugins.tiny_cmdline"] = nil
     end)
 
@@ -16,6 +20,8 @@ describe("modules.plugins.tiny_cmdline", function()
         vim.o.columns = columns
         vim.o.lines = lines
         vim.o.cmdheight = cmdheight
+        vim.o.wildoptions = wildoptions
+        vim.g.ui_cmdline_pos = ui_cmdline_pos
     end)
 
     it("uses local _my.cmdline LuaCATS annotations", function()
@@ -29,23 +35,45 @@ describe("modules.plugins.tiny_cmdline", function()
         assert.is_nil(source:find("TinyCmdlineConfig", 1, true))
     end)
 
-    it("attaches only to the cmdline UI and leaves messages native", function()
+    it("uses ui2 instead of a hand-rolled ext_cmdline renderer", function()
         local source = table.concat(vim.fn.readfile("lua/modules/plugins/tiny_cmdline.lua"), "\n")
 
-        assert.is_not_nil(source:find("ext_cmdline = true", 1, true))
-        assert.is_not_nil(source:find("ext_popupmenu = true", 1, true))
-        assert.is_not_nil(source:find("ensure_popupmenu_completion", 1, true))
-        assert.is_nil(source:find("ext_messages", 1, true))
-        assert.is_nil(source:find("vim._core.ui2", 1, true))
+        assert.is_not_nil(source:find("vim._core.ui2", 1, true))
+        assert.is_not_nil(source:find("ui2.enable", 1, true))
+        assert.is_not_nil(source:find("enable_ui2", 1, true))
+        assert.is_nil(source:find("vim.ui_attach(_P.namespace", 1, true))
     end)
 
-    it("keeps a message row for native printouts and :messages", function()
+    it("keeps command-line completion in popupmenu mode", function()
+        local cmdline = require("modules.plugins.tiny_cmdline")
+        vim.o.wildoptions = ""
+
+        cmdline._P.ensure_popupmenu_completion()
+
+        assert.is_true(vim.tbl_contains(vim.opt.wildoptions:get(), "pum"))
+    end)
+
+    it("routes noisy long print-style messages to the ui2 pager", function()
+        local cmdline = require("modules.plugins.tiny_cmdline")
+
+        assert.equal("cmd", cmdline.config.msg.target)
+        assert.equal("pager", cmdline.config.msg.targets.typed_cmd)
+        assert.equal("pager", cmdline.config.msg.targets.list_cmd)
+        assert.equal("pager", cmdline.config.msg.targets.lua_print)
+    end)
+
+    it("does not force cmdheight to zero", function()
+        local source = table.concat(vim.fn.readfile("lua/modules/plugins/tiny_cmdline.lua"), "\n")
+        local cmdline = require("modules.plugins.tiny_cmdline")
+        local ui2 = {}
+        cmdline._P.ui2 = ui2
         vim.o.cmdheight = 2
 
-        local cmdline = require("modules.plugins.tiny_cmdline")
-        cmdline._P.ensure_message_row()
+        cmdline._P.keep_configured_cmdheight()
 
-        assert.equal(1, vim.o.cmdheight)
+        assert.equal(2, vim.o.cmdheight)
+        assert.equal(2, ui2.cmdheight)
+        assert.is_nil(source:find("vim.o.cmdheight = 0", 1, true))
     end)
 
     it("resolves percent dimensions and clamps configured width", function()
@@ -64,100 +92,64 @@ describe("modules.plugins.tiny_cmdline", function()
         assert.equal(1, border_width)
     end)
 
-    it("schedules cmdline drawing outside the ui callback", function()
+    it("centers the ui2 cmdline window and exposes the completion anchor", function()
         local cmdline = require("modules.plugins.tiny_cmdline")
-        local original_show_cmdline = cmdline._P.show_cmdline
-        local original_flush_redraw = cmdline._P.flush_redraw
-        local drew = false
-        local flushed = false
-
-        rawset(cmdline._P, "show_cmdline", function(content, position, firstc, prompt, indent)
-            drew = true
-            assert.same({ { 0, "write" } }, content)
-            assert.equal(5, position)
-            assert.equal(":", firstc)
-            assert.equal("", prompt)
-            assert.equal(0, indent)
-        end)
-        rawset(cmdline._P, "flush_redraw", function()
-            flushed = true
-        end)
-
-        cmdline._P.schedule_show_cmdline({ { 0, "write" } }, 5, ":", "", 0)
-
-        assert.is_true(vim.wait(1000, function()
-            return drew and flushed
-        end, 20))
-
-        rawset(cmdline._P, "show_cmdline", original_show_cmdline)
-        rawset(cmdline._P, "flush_redraw", original_flush_redraw)
-    end)
-
-    it("does not collapse popupmenu height when pumheight is unlimited", function()
-        local cmdline = require("modules.plugins.tiny_cmdline")
-        vim.o.lines = 40
-        vim.o.cmdheight = 1
-        vim.o.pumheight = 0
-
-        assert.equal(5, cmdline._P.get_popupmenu_height(5))
-    end)
-
-    it("respects positive pumheight for popupmenu height", function()
-        local cmdline = require("modules.plugins.tiny_cmdline")
-        vim.o.lines = 40
-        vim.o.cmdheight = 1
-        vim.o.pumheight = 3
-
-        assert.equal(3, cmdline._P.get_popupmenu_height(5))
-    end)
-
-    it("anchors completion popupmenu to the centered cmdline cursor", function()
-        local cmdline = require("modules.plugins.tiny_cmdline")
+        local buffer = vim.api.nvim_create_buf(false, true)
+        local window = vim.api.nvim_open_win(buffer, false, {
+            relative = "editor",
+            row = 39,
+            col = 0,
+            width = 120,
+            height = 1,
+            style = "minimal",
+        })
+        local ui2 = {
+            wins = { cmd = window },
+        }
+        cmdline._P.ui2 = ui2
+        cmdline._P.cmdline_type = ":"
         vim.o.columns = 120
         vim.o.lines = 40
-        vim.o.cmdheight = 1
-        vim.o.pumheight = 5
         cmdline.config.width = { value = "60%", min = 40, max = 80 }
         cmdline.config.position = { x = "50%", y = "50%" }
         cmdline.config.border = "rounded"
-        cmdline._P.cursor_column = 7
+        cmdline.config.menu_col_offset = 3
 
-        local row, column = cmdline._P.get_popupmenu_position(20, 3)
+        cmdline._P.reposition()
 
-        assert.equal(20, row)
-        assert.equal(31, column)
+        local config = vim.api.nvim_win_get_config(window)
+        assert.equal("editor", config.relative)
+        assert.equal(18, config.row)
+        assert.equal(23, config.col)
+        assert.equal(72, config.width)
+        assert.same({ 21, 27 }, vim.g.ui_cmdline_pos)
+
+        vim.api.nvim_win_close(window, true)
     end)
 
-    it("renders multiple popupmenu entries", function()
+    it("restores native/search cmdline types to a bottom position", function()
         local cmdline = require("modules.plugins.tiny_cmdline")
+        local buffer = vim.api.nvim_create_buf(false, true)
+        local window = vim.api.nvim_open_win(buffer, false, {
+            relative = "editor",
+            row = 10,
+            col = 10,
+            width = 20,
+            height = 1,
+            style = "minimal",
+        })
+        cmdline._P.ui2 = { wins = { cmd = window } }
+        cmdline._P.cmdline_type = "/"
         vim.o.columns = 120
         vim.o.lines = 40
-        vim.o.cmdheight = 1
-        vim.o.pumheight = 0
-        cmdline.config.width = { value = "60%", min = 40, max = 80 }
-        cmdline.config.position = { x = "50%", y = "50%" }
-        cmdline.config.border = "rounded"
-        cmdline._P.show_cmdline({ { 0, "e Session" } }, 9, ":", "", 0)
 
-        cmdline._P.show_popupmenu({
-            { "Session.vim", "", "", "" },
-            { "Sessionx.vim", "", "", "" },
-            { "Sessionz.vim", "", "", "" },
-        }, 1)
+        cmdline._P.reposition()
 
-        assert.equal(3, vim.api.nvim_win_get_height(cmdline._P.popup_window))
-        assert.same({ "Session.vim", "Sessionx.vim", "Sessionz.vim" }, vim.api.nvim_buf_get_lines(cmdline._P.get_popup_buffer(), 0, -1, false))
+        local config = vim.api.nvim_win_get_config(window)
+        assert.equal(39, config.row)
+        assert.equal(0, config.col)
+        assert.equal(120, config.width)
 
-        cmdline._P.close_window()
-    end)
-
-    it("renders command chunks with prefixes and prompt indentation", function()
-        local cmdline = require("modules.plugins.tiny_cmdline")
-
-        local line = cmdline._P.render_line({ { 0, "write" } }, ":", "", 0)
-        local prompted = cmdline._P.render_line({ { 0, "value" } }, "=", "Input: ", 2)
-
-        assert.equal(":write", line)
-        assert.equal("=Input:   value", prompted)
+        vim.api.nvim_win_close(window, true)
     end)
 end)

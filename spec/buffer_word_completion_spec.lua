@@ -42,9 +42,12 @@ describe("modules.features.buffer_word_completion", function()
 
         local matches = buffer_word_completion._P.collect_matches(buffer, "al", 4)
 
-        assert.are.same({ "alphabet", "albatross", "alpha_alpine" }, vim.tbl_map(function(match)
-            return match.word
-        end, matches))
+        assert.are.same(
+            { "alphabet", "albatross", "alpha_alpine" },
+            vim.tbl_map(function(match)
+                return match.word
+            end, matches)
+        )
     end)
 
     it("completes from buffer words when no LSP completion client is attached", function()

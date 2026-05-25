@@ -153,6 +153,81 @@ describe("modules.plugins.aerial", function()
         assert.equal(1, #symbols)
     end)
 
+    it("builds useful Python fallback symbols from definitions instead of decorators or continuations", function()
+        local buffer = make_source_buffer({
+            "# Some comments",
+            "@another.line(",
+            "    args = 10",
+            ")",
+            "def function(",
+            "    some: str,",
+            "    text: str",
+            ") -> blah:",
+            '    """Something."""',
+        })
+
+        vim.bo[buffer].filetype = "python"
+        vim.bo[buffer].commentstring = "# %s"
+
+        local symbols = aerial.get_indentation_symbols(buffer)
+
+        assert.equal(1, #symbols)
+        assert.equal("function", symbols[1].kind)
+        assert.equal("def function", symbols[1].name)
+        assert.equal(5, symbols[1].line)
+    end)
+
+    it("builds useful Lua fallback symbols from function definitions", function()
+        local buffer = make_source_buffer({
+            "local value = call(",
+            "    thing",
+            ")",
+            "local function alpha()",
+            "end",
+            "function M.beta(value)",
+            "end",
+        })
+
+        vim.bo[buffer].filetype = "lua"
+        vim.bo[buffer].commentstring = "-- %s"
+
+        local symbols = aerial.get_indentation_symbols(buffer)
+
+        assert.equal(2, #symbols)
+        assert.equal("function", symbols[1].kind)
+        assert.equal("local function alpha", symbols[1].name)
+        assert.equal(4, symbols[1].line)
+        assert.equal("function M.beta", symbols[2].name)
+    end)
+
+    it("builds useful C++ fallback symbols from class and function definitions", function()
+        local buffer = make_source_buffer({
+            "if (ready) {",
+            "    call();",
+            "}",
+            "class Widget final {",
+            "public:",
+            "    void draw(",
+            "        int width",
+            "    );",
+            "};",
+            "std::string make_name(const Widget& widget) {",
+            "    return widget.name();",
+            "}",
+        })
+
+        vim.bo[buffer].filetype = "cpp"
+        vim.bo[buffer].commentstring = "// %s"
+
+        local symbols = aerial.get_indentation_symbols(buffer)
+
+        assert.equal(2, #symbols)
+        assert.equal("class", symbols[1].kind)
+        assert.equal("class Widget", symbols[1].name)
+        assert.equal("function", symbols[2].kind)
+        assert.equal("make_name", symbols[2].name)
+    end)
+
     it("renders class and function rows with CC and FF prefixes", function()
         local symbols = aerial.nest_symbols({
             {

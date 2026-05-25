@@ -210,6 +210,134 @@ local function _is_comment_line(line, prefixes)
     return false
 end
 
+--- Get a generic class definition outline name from `line`.
+---
+---@param line string The source line to inspect.
+---@return _my.aerial.SymbolKind? kind The detected symbol kind.
+---@return string? name The compact display name.
+local function _get_class_fallback_definition(line)
+    local text = _clean_text(line)
+    local class_name = text:match("^class%s+([%w_]+)")
+
+    if class_name then
+        return "class", "class " .. class_name
+    end
+
+    return nil, nil
+end
+
+--- Get a useful Python fallback outline name from `line`.
+---
+---@param line string The source line to inspect.
+---@return _my.aerial.SymbolKind? kind The detected symbol kind.
+---@return string? name The compact display name.
+local function _get_python_fallback_definition(line)
+    local class_kind, class_name = _get_class_fallback_definition(line)
+
+    if class_kind then
+        return class_kind, class_name
+    end
+
+    local text = _clean_text(line)
+    local async_function_name = text:match("^async%s+def%s+([%w_]+)")
+
+    if async_function_name then
+        return "function", "async def " .. async_function_name
+    end
+
+    local function_name = text:match("^def%s+([%w_]+)")
+
+    if function_name then
+        return "function", "def " .. function_name
+    end
+
+    return nil, nil
+end
+
+--- Get a useful Lua fallback outline name from `line`.
+---
+---@param line string The source line to inspect.
+---@return _my.aerial.SymbolKind? kind The detected symbol kind.
+---@return string? name The compact display name.
+local function _get_lua_fallback_definition(line)
+    local class_kind, class_name = _get_class_fallback_definition(line)
+
+    if class_kind then
+        return class_kind, class_name
+    end
+
+    local text = _clean_text(line)
+    local local_function_name = text:match("^local%s+function%s+([%w_%.:]+)")
+
+    if local_function_name then
+        return "function", "local function " .. local_function_name
+    end
+
+    local function_name = text:match("^function%s+([%w_%.:]+)")
+
+    if function_name then
+        return "function", "function " .. function_name
+    end
+
+    return nil, nil
+end
+
+--- Get a useful C++ fallback outline name from `line`.
+---
+---@param line string The source line to inspect.
+---@return _my.aerial.SymbolKind? kind The detected symbol kind.
+---@return string? name The compact display name.
+local function _get_cpp_fallback_definition(line)
+    local class_kind, class_name = _get_class_fallback_definition(line)
+
+    if class_kind then
+        return class_kind, class_name
+    end
+
+    local text = _clean_text(line)
+    local first_word = text:match("^([%a_][%w_]*)")
+
+    if first_word and vim.tbl_contains({ "if", "for", "while", "switch", "catch", "return" }, first_word) then
+        return nil, nil
+    end
+
+    local function_name = text:match("^[%w_:<>~%*&%s]+%s+([~%w_:]+)%s*%(")
+
+    if function_name then
+        return "function", function_name
+    end
+
+    return nil, nil
+end
+
+--- Get a language-aware fallback definition from `line`.
+---
+---@param filetype string The source buffer filetype.
+---@param line string The source line to inspect.
+---@return _my.aerial.SymbolKind? kind The detected symbol kind.
+---@return string? name The compact display name.
+local function _get_language_fallback_definition(filetype, line)
+    if filetype == "python" then
+        return _get_python_fallback_definition(line)
+    elseif filetype == "lua" then
+        return _get_lua_fallback_definition(line)
+    elseif vim.tbl_contains({ "c", "cpp", "cc", "cxx", "h", "hpp", "hxx" }, filetype) then
+        return _get_cpp_fallback_definition(line)
+    end
+
+    return nil, nil
+end
+
+--- Check if fallback outlines should only include definition-like rows.
+---
+---@param filetype string The source buffer filetype.
+---@return boolean # Whether fallback symbols should be language-aware definitions.
+local function _should_use_language_fallback_definitions(filetype)
+    return filetype == "python"
+        or filetype == "lua"
+        or vim.tbl_contains({ "c", "cpp", "cc", "cxx", "h", "hpp", "hxx" }, filetype)
+end
+
 --- Get source highlight segments only when the buffer is small enough.
 ---
 ---@param buffer integer The source buffer.
@@ -567,6 +695,8 @@ function M.get_indentation_symbols(buffer)
     local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
     local line_count = #lines
     local tabstop = vim.bo[buffer].tabstop
+    local filetype = vim.bo[buffer].filetype
+    local use_language_definitions = _should_use_language_fallback_definitions(filetype)
     local comment_prefixes = _get_comment_prefixes(buffer)
     local previous_indent = nil
     local blank_since_previous = true
@@ -582,22 +712,45 @@ function M.get_indentation_symbols(buffer)
             blank_since_previous = true
         elseif not _is_comment_line(line, comment_prefixes) then
             local indent = _get_indent(line, tabstop)
-            local should_create = previous_indent == nil or indent ~= previous_indent or blank_since_previous
+            ---@type _my.aerial.SymbolKind?
+            local kind = "fallback"
+            ---@type string?
+            local name = _clean_text(line)
+
+            if use_language_definitions then
+                kind, name = _get_language_fallback_definition(filetype, line)
+
+                if kind == nil or name == nil then
+                    goto continue
+                end
+            end
+
+            local should_create = use_language_definitions
+                or previous_indent == nil
+                or indent ~= previous_indent
+                or blank_since_previous
 
             if should_create then
                 while #stack > 0 and stack[#stack].indent >= indent do
                     table.remove(stack)
                 end
 
-                local name = _clean_text(line)
+                local symbol_kind = assert(kind)
+                local symbol_name = assert(name)
                 local symbol = _make_symbol(
-                    "fallback",
-                    name,
+                    symbol_kind,
+                    symbol_name,
                     index,
                     0,
                     line_count,
                     #stack,
-                    _get_fallback_highlight_segments(buffer, line_count, index, start_column, start_column + #name)
+                    _get_fallback_highlight_segments(
+                        buffer,
+                        line_count,
+                        index,
+                        start_column,
+                        start_column + #symbol_name
+                    )
                 )
 
                 if #stack == 0 then
@@ -612,6 +765,8 @@ function M.get_indentation_symbols(buffer)
             previous_indent = indent
             blank_since_previous = false
         end
+
+        ::continue::
     end
 
     return roots

@@ -114,8 +114,31 @@ vim.keymap.set(
     _P.wrap_operatorfunc(_P.operator_paste),
     { silent = true, desc = "[p]ut text and replace the [i]nner [w]ord with that text.", expr = true }
 )
-vim.keymap.set("n", "PP", "P", { noremap = true, silent = true, desc = "Paste the text." })
-vim.keymap.set("n", "pp", "p", { noremap = true, silent = true, desc = "Paste the text." })
+
+--- Put text with Vim's native command and remember the exact region for `gp`.
+---
+---@param command "p" | "P" The native put command to execute.
+local function _native_put(command)
+    local register = vim.v.register ~= "" and vim.v.register or '"'
+    local keys = register == '"' and command or string.format('"%s%s', register, command)
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local context = {
+        command = command,
+        cursor_line = cursor[1],
+        cursor_column = cursor[2],
+        line_count = vim.api.nvim_buf_line_count(0),
+    }
+
+    vim.cmd.normal({ args = { keys }, bang = true })
+    require("modules.features.directional_put_mappings").remember_native_put(register, context)
+end
+
+vim.keymap.set("n", "PP", function()
+    _native_put("P")
+end, { silent = true, desc = "Paste the text above." })
+vim.keymap.set("n", "pp", function()
+    _native_put("p")
+end, { silent = true, desc = "Paste the text below." })
 vim.keymap.set("n", "P", "<Nop>", { noremap = true, silent = true, desc = "Disable pasting with P." })
 
 return M

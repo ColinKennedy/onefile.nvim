@@ -32,6 +32,13 @@ local function get_lines()
     return vim.api.nvim_buf_get_lines(0, 0, -1, false)
 end
 
+--- Press normal-mode keys and let mapped behavior complete.
+---
+---@param keys string The normal-mode keys to press.
+local function press_keys(keys)
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "xt", false)
+end
+
 describe("directional put mappings", function()
     after_each(function()
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
@@ -157,5 +164,123 @@ describe("directional put mappings", function()
         assert.equal("V", vim.fn.mode())
         assert.equal(3, math.min(visual_start, cursor[1]))
         assert.equal(4, math.max(visual_start, cursor[1]))
+    end)
+
+    it("selects text inserted with a plain linewise put using Vim's native put marks", function()
+        make_buffer({ "current", "done" })
+        set_register({ "alpha", "beta" })
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+        vim.cmd("normal! p")
+        assert.same({ "current", "alpha", "beta", "done" }, get_lines())
+        directional_put.select_last_put()
+
+        local visual_start = vim.fn.getpos("v")[2]
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        assert.equal("V", vim.fn.mode())
+        assert.equal(2, math.min(visual_start, cursor[1]))
+        assert.equal(3, math.max(visual_start, cursor[1]))
+    end)
+
+    it("selects text inserted with the pp mapping using gp", function()
+        make_buffer({ "current", "done" })
+        set_register({ "alpha", "beta" })
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+        press_keys("pp")
+        assert.same({ "current", "alpha", "beta", "done" }, get_lines())
+        press_keys("gp")
+
+        local visual_start = vim.fn.getpos("v")[2]
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        assert.equal("V", vim.fn.mode())
+        assert.equal(2, math.min(visual_start, cursor[1]))
+        assert.equal(3, math.max(visual_start, cursor[1]))
+    end)
+
+    it("selects a newer pp mapping put instead of a stale custom put region", function()
+        make_buffer({ "current", "done" })
+        set_register({ "alpha", "beta" })
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+        directional_put.put_linewise("below", "same")
+        set_register({ "fresh" })
+        vim.api.nvim_win_set_cursor(0, { 4, 0 })
+
+        press_keys("pp")
+        assert.same({ "current", "alpha", "beta", "done", "fresh" }, get_lines())
+        press_keys("gp")
+
+        local visual_start = vim.fn.getpos("v")[2]
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        assert.equal("V", vim.fn.mode())
+        assert.equal(5, math.min(visual_start, cursor[1]))
+        assert.equal(5, math.max(visual_start, cursor[1]))
+    end)
+
+    it("selects multiline characterwise text inserted with the clipboard pp mapping", function()
+        make_buffer({ "", "", "" })
+        vim.fn.setreg(
+            "+",
+            table.concat({
+                "Sens. James Lankford and Jacky Rosen will introduce a sweeping, bipartisan bill Tuesday aimed "
+                    .. "at combating antisemitism.",
+                "",
+                "The bill, which was first shared with POLITICO, would target antisemitism in education and online, "
+                    .. "as well as provide security grant funding.",
+            }, "\n"),
+            "c"
+        )
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+        press_keys([["+pp]])
+        press_keys("gp")
+
+        local visual_start = vim.fn.getpos("v")[2]
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        assert.equal("v", vim.fn.mode())
+        assert.equal(2, math.min(visual_start, cursor[1]))
+        assert.equal(4, math.max(visual_start, cursor[1]))
+    end)
+
+    it("does not select the whole buffer after clipboard pp in blank space", function()
+        make_buffer({
+            "# title",
+            "",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "",
+            "",
+            "",
+            "",
+            "after",
+            "",
+            "tail",
+        })
+        vim.fn.setreg(
+            "+",
+            table.concat({
+                "Sens. James Lankford and Jacky Rosen will introduce a sweeping, bipartisan bill Tuesday aimed "
+                    .. "at combating antisemitism.",
+                "",
+                "The bill, which was first shared with POLITICO, would target antisemitism in education and online, "
+                    .. "as well as provide security grant funding.",
+            }, "\n"),
+            "c"
+        )
+        vim.api.nvim_win_set_cursor(0, { 12, 0 })
+
+        press_keys([["+pp]])
+        press_keys("gp")
+
+        local visual_start = vim.fn.getpos("v")[2]
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        assert.equal("v", vim.fn.mode())
+        assert.equal(12, math.min(visual_start, cursor[1]))
+        assert.equal(14, math.max(visual_start, cursor[1]))
     end)
 end)

@@ -9,10 +9,19 @@ local M = {}
 ---@class _my.directional_put.Region
 ---@field buffer integer The buffer where the put happened.
 ---@field start_line integer The first pasted line.
+---@field start_column integer The first pasted column.
 ---@field end_line integer The last pasted line.
+---@field end_column integer The last pasted column.
+---@field mode "char" | "line" The visual mode needed to select the pasted text.
 
 ---@type _my.directional_put.Region?
 local _LAST_PUT_REGION
+
+---@class _my.directional_put.NativePutContext
+---@field command "p" | "P" The native put command that was used.
+---@field cursor_line integer The one-based cursor line before the put.
+---@field cursor_column integer The zero-based cursor column before the put.
+---@field line_count integer The buffer line count before the put.
 
 --- Get the register to paste from.
 ---
@@ -237,8 +246,11 @@ end
 local function _set_last_put_region(start_line, end_line)
     _LAST_PUT_REGION = {
         buffer = vim.api.nvim_get_current_buf(),
+        mode = "line",
         start_line = start_line,
+        start_column = 1,
         end_line = end_line,
+        end_column = math.max(#vim.fn.getline(end_line), 1),
     }
     vim.fn.setpos("'[", { 0, start_line, 1, 0 })
     vim.fn.setpos("']", { 0, end_line, math.max(#vim.fn.getline(end_line), 1), 0 })
@@ -259,8 +271,11 @@ local function _find_register_region(candidates, register_lines)
             if vim.deep_equal(lines, register_lines) then
                 return {
                     buffer = vim.api.nvim_get_current_buf(),
+                    mode = "line",
                     start_line = candidate,
+                    start_column = 1,
                     end_line = candidate + #register_lines - 1,
+                    end_column = math.max(#vim.fn.getline(candidate + #register_lines - 1), 1),
                 }
             end
         end
@@ -271,16 +286,33 @@ end
 
 --- Get the linewise put region remembered by Vim's native put marks.
 ---
+---@param register string? The register used by the native put.
 ---@return _my.directional_put.Region? region The native put region, if one exists.
-local function _get_native_put_region()
+local function _get_native_put_region(register)
+    register = register or '"'
+
     local start_position = vim.fn.getpos("'[")
     local end_position = vim.fn.getpos("']")
     local start_line = start_position[2]
+    local start_column = start_position[3]
     local end_line = end_position[2]
-    local is_linewise_register = vim.fn.getregtype('"'):sub(1, 1) == "V"
-    local register_lines = _get_register_lines_from('"')
+    local end_column = end_position[3]
+    local register_type = vim.fn.getregtype(register):sub(1, 1)
+    local is_linewise_register = register_type == "V"
+    local register_lines = _get_register_lines_from(register)
     local register_line_count = #register_lines
     local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+
+    if start_line > 0 and end_line > 0 and not is_linewise_register then
+        return {
+            buffer = vim.api.nvim_get_current_buf(),
+            mode = "char",
+            start_line = math.min(start_line, end_line),
+            start_column = start_column,
+            end_line = math.max(start_line, end_line),
+            end_column = end_column,
+        }
+    end
 
     if start_line <= 0 or end_line <= 0 then
         if not is_linewise_register then
@@ -311,8 +343,64 @@ local function _get_native_put_region()
     end
 
     return {
+        buffer = vim.api.nvim_get_current_buf(),
+        mode = "line",
         start_line = math.min(start_line, end_line),
+        start_column = 1,
         end_line = math.max(start_line, end_line),
+        end_column = math.max(#vim.fn.getline(math.max(start_line, end_line)), 1),
+    }
+end
+
+--- Remember the region created by a native put mapping.
+---
+---@param register string The register used by the native put.
+---@param context _my.directional_put.NativePutContext Details from before the put.
+function M.remember_native_put(register, context)
+    local register_type = vim.fn.getregtype(register):sub(1, 1)
+    local register_lines = _get_register_lines_from(register)
+
+    if register_type == "V" then
+        local start_line = context.command == "p" and (context.cursor_line + 1) or context.cursor_line
+        local end_line = start_line + #register_lines - 1
+
+        _LAST_PUT_REGION = {
+            buffer = vim.api.nvim_get_current_buf(),
+            mode = "line",
+            start_line = start_line,
+            start_column = 1,
+            end_line = end_line,
+            end_column = math.max(#vim.fn.getline(end_line), 1),
+        }
+
+        return
+    end
+
+    local current_line_count = vim.api.nvim_buf_line_count(0)
+    local added_lines = math.max(current_line_count - context.line_count, 0)
+    local start_line = context.cursor_line
+    local start_column = context.cursor_column + 1
+
+    if context.command == "p" then
+        start_column = start_column + 1
+    end
+
+    local end_line = start_line + added_lines
+    local end_column
+
+    if #register_lines == 1 then
+        end_column = start_column + #register_lines[1] - 1
+    else
+        end_column = #register_lines[#register_lines]
+    end
+
+    _LAST_PUT_REGION = {
+        buffer = vim.api.nvim_get_current_buf(),
+        mode = "char",
+        start_line = start_line,
+        start_column = math.max(start_column, 1),
+        end_line = end_line,
+        end_column = math.max(end_column, 1),
     }
 end
 
@@ -343,6 +431,10 @@ function M.select_last_put()
         region = _get_native_put_region()
     end
 
+    if region and region.buffer ~= current_buffer then
+        region = _LAST_PUT_REGION
+    end
+
     if not region then
         vim.notify("No custom put region found.", vim.log.levels.WARN)
 
@@ -353,9 +445,15 @@ function M.select_last_put()
     local start_line = math.min(region.start_line, line_count)
     local end_line = math.min(region.end_line, line_count)
 
-    vim.api.nvim_win_set_cursor(0, { start_line, 0 })
-    vim.cmd("normal! V")
-    vim.api.nvim_win_set_cursor(0, { end_line, 0 })
+    if region.mode == "char" then
+        vim.api.nvim_win_set_cursor(0, { start_line, math.max(region.start_column - 1, 0) })
+        vim.cmd("normal! v")
+        vim.api.nvim_win_set_cursor(0, { end_line, math.max(region.end_column - 1, 0) })
+    else
+        vim.api.nvim_win_set_cursor(0, { start_line, 0 })
+        vim.cmd("normal! V")
+        vim.api.nvim_win_set_cursor(0, { end_line, 0 })
+    end
 end
 
 vim.keymap.set("n", "[p", function()

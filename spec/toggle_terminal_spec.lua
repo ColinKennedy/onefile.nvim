@@ -31,6 +31,7 @@ describe("modules.plugins.toggle_terminal", function()
     end)
 
     after_each(function()
+        pcall(vim.cmd.stopinsert)
         vim.o.showmode = showmode
     end)
 

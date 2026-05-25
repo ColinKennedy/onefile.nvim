@@ -15,8 +15,12 @@ end
 ---
 ---@param keys string The keys to press.
 local function press(keys)
+    local report = vim.o.report
+
+    vim.o.report = 9999
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "mx", false)
     vim.wait(50)
+    vim.o.report = report
 end
 
 describe("reflow visual selection", function()

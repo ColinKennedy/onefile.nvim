@@ -204,7 +204,9 @@ describe("modules.plugins.native_grapple", function()
 
         with_cwd(root, function()
             assert.True(native_grapple.load_branch_marks(root, branch))
-            native_grapple.mark_current_buffer_as_bookmark("A")
+            core_helpers.with_file_messages_suppressed(function()
+                native_grapple.mark_current_buffer_as_bookmark("A")
+            end)
         end)
 
         assert.equal("main.txt", vim.fs.basename(vim.api.nvim_buf_get_name(0)))

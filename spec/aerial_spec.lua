@@ -177,6 +177,49 @@ describe("modules.plugins.aerial", function()
         assert.equal(5, symbols[1].line)
     end)
 
+    it("uses Python fallback symbols for py files even when filetype is empty", function()
+        local buffer = make_source_buffer({
+            "@decorator(",
+            "    value",
+            ")",
+            "def from_extension():",
+            "    pass",
+        })
+
+        vim.api.nvim_buf_set_name(buffer, vim.fn.tempname() .. ".py")
+        vim.bo[buffer].filetype = ""
+        vim.bo[buffer].commentstring = "# %s"
+
+        local symbols = aerial.get_indentation_symbols(buffer)
+
+        assert.equal(1, #symbols)
+        assert.equal("def from_extension", symbols[1].name)
+        assert.equal(4, symbols[1].line)
+    end)
+
+    it("prefers obvious function definitions in unknown files before raw indentation", function()
+        local buffer = make_source_buffer({
+            "# Some comments",
+            "@another.line(",
+            "    args = 10",
+            ")",
+            "def get_something(",
+            "    some: str,",
+            "    text: str",
+            ") -> blah:",
+            '    """Something."""',
+        })
+
+        vim.api.nvim_buf_set_name(buffer, "/tmp/foo")
+        vim.bo[buffer].filetype = ""
+        vim.bo[buffer].commentstring = "# %s"
+
+        local symbols = aerial.get_indentation_symbols(buffer)
+
+        assert.equal("def get_something", symbols[1].name)
+        assert.equal(5, symbols[1].line)
+    end)
+
     it("builds useful Lua fallback symbols from function definitions", function()
         local buffer = make_source_buffer({
             "local value = call(",

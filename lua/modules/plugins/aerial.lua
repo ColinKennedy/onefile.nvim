@@ -310,32 +310,103 @@ local function _get_cpp_fallback_definition(line)
     return nil, nil
 end
 
---- Get a language-aware fallback definition from `line`.
+--- Get a permissive fallback outline name when the source language is unknown.
 ---
----@param filetype string The source buffer filetype.
 ---@param line string The source line to inspect.
 ---@return _my.aerial.SymbolKind? kind The detected symbol kind.
 ---@return string? name The compact display name.
-local function _get_language_fallback_definition(filetype, line)
-    if filetype == "python" then
-        return _get_python_fallback_definition(line)
-    elseif filetype == "lua" then
-        return _get_lua_fallback_definition(line)
-    elseif vim.tbl_contains({ "c", "cpp", "cc", "cxx", "h", "hpp", "hxx" }, filetype) then
-        return _get_cpp_fallback_definition(line)
+local function _get_unknown_language_fallback_definition(line)
+    local class_kind, class_name = _get_class_fallback_definition(line)
+
+    if class_kind then
+        return class_kind, class_name
+    end
+
+    local text = _clean_text(line)
+    local python_function_name = text:match("^def%s+([%w_]+)")
+
+    if python_function_name then
+        return "function", "def " .. python_function_name
+    end
+
+    local async_python_function_name = text:match("^async%s+def%s+([%w_]+)")
+
+    if async_python_function_name then
+        return "function", "async def " .. async_python_function_name
+    end
+
+    local lua_function_name = text:match("^function%s+([%w_%.:]+)")
+
+    if lua_function_name then
+        return "function", "function " .. lua_function_name
     end
 
     return nil, nil
 end
 
---- Check if fallback outlines should only include definition-like rows.
+--- Check if an unknown-language buffer has any obvious definition rows.
 ---
----@param filetype string The source buffer filetype.
----@return boolean # Whether fallback symbols should be language-aware definitions.
-local function _should_use_language_fallback_definitions(filetype)
-    return filetype == "python"
-        or filetype == "lua"
-        or vim.tbl_contains({ "c", "cpp", "cc", "cxx", "h", "hpp", "hxx" }, filetype)
+---@param lines string[] The source lines to inspect.
+---@param comment_prefixes string[] Comment prefixes to ignore.
+---@return boolean # Whether at least one obvious definition was found.
+local function _has_unknown_language_definitions(lines, comment_prefixes)
+    for _, line in ipairs(lines) do
+        if _get_first_nonspace_column(line) ~= nil and not _is_comment_line(line, comment_prefixes) then
+            local kind = _get_unknown_language_fallback_definition(line)
+
+            if kind ~= nil then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+--- Resolve the fallback language from buffer filetype or filename extension.
+---
+---@param buffer integer The source buffer.
+---@return string? # The language to use for definition fallback, if known.
+local function _get_fallback_language(buffer)
+    local filetype = vim.bo[buffer].filetype
+
+    if filetype ~= "" then
+        if filetype == "python" or filetype == "lua" then
+            return filetype
+        elseif vim.tbl_contains({ "c", "cpp", "cc", "cxx", "h", "hpp", "hxx" }, filetype) then
+            return "cpp"
+        end
+    end
+
+    local extension = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buffer), ":e"):lower()
+
+    if extension == "py" then
+        return "python"
+    elseif extension == "lua" then
+        return "lua"
+    elseif vim.tbl_contains({ "c", "cc", "cpp", "cxx", "h", "hh", "hpp", "hxx" }, extension) then
+        return "cpp"
+    end
+
+    return nil
+end
+
+--- Get a language-aware fallback definition from `line`.
+---
+---@param language string The source buffer fallback language.
+---@param line string The source line to inspect.
+---@return _my.aerial.SymbolKind? kind The detected symbol kind.
+---@return string? name The compact display name.
+local function _get_language_fallback_definition(language, line)
+    if language == "python" then
+        return _get_python_fallback_definition(line)
+    elseif language == "lua" then
+        return _get_lua_fallback_definition(line)
+    elseif language == "cpp" then
+        return _get_cpp_fallback_definition(line)
+    end
+
+    return nil, nil
 end
 
 --- Get source highlight segments only when the buffer is small enough.
@@ -695,9 +766,11 @@ function M.get_indentation_symbols(buffer)
     local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
     local line_count = #lines
     local tabstop = vim.bo[buffer].tabstop
-    local filetype = vim.bo[buffer].filetype
-    local use_language_definitions = _should_use_language_fallback_definitions(filetype)
+    local fallback_language = _get_fallback_language(buffer)
     local comment_prefixes = _get_comment_prefixes(buffer)
+    local use_unknown_language_definitions = fallback_language == nil
+        and _has_unknown_language_definitions(lines, comment_prefixes)
+    local use_language_definitions = fallback_language ~= nil or use_unknown_language_definitions
     local previous_indent = nil
     local blank_since_previous = true
     ---@type {indent: integer, symbol: _my.aerial.Symbol}[]
@@ -717,8 +790,14 @@ function M.get_indentation_symbols(buffer)
             ---@type string?
             local name = _clean_text(line)
 
-            if use_language_definitions then
-                kind, name = _get_language_fallback_definition(filetype, line)
+            if fallback_language ~= nil then
+                kind, name = _get_language_fallback_definition(assert(fallback_language), line)
+
+                if kind == nil or name == nil then
+                    goto continue
+                end
+            elseif use_unknown_language_definitions then
+                kind, name = _get_unknown_language_fallback_definition(line)
 
                 if kind == nil or name == nil then
                     goto continue

@@ -1674,7 +1674,7 @@ function M.setup()
             vim.keymap.set("n", "<CR>", function()
                 M.jump_to_selected(false)
             end, vim.tbl_extend("force", options, { desc = "Jump to the selected outline item." }))
-            vim.keymap.set("n", "<C-l>", function()
+            vim.keymap.set("n", "<Space>", function()
                 M.jump_to_selected(true)
             end, vim.tbl_extend("force", options, { desc = "Preview the selected outline item." }))
             vim.keymap.set(

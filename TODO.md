@@ -1,23 +1,12 @@
 - Add :Dispatch support
-- The selector GUI filter isn't that great, still
+
+- `:Git diff` isn't showing anything. Fix
 
 - If I load a session with a terminal, it starts the wrong buffer in INSERT
   mode (it tries to add insert mode for the terminal but touches the current
   buffer instead)
 
-- The aerial window when no tree-sitter parser is found is kind of useless
-  (e.g. in Python). Is there a way to fix that?
-```python
-# Some comments
-@another.line(
-    args = 10
-)
-def function(
-    some: str,
-    text: str
-) -> blah:
-    """Something."""
-```
+- Fix CI/CD later - https://github.com/ColinKennedy/onefile.nvim/actions/runs/26374509626/job/77632334991
 
 - Once that neovim remote PR is merged, add that to my git commit / git rebase
   editor command so that I don't get nested Neovims anymore.
@@ -25,7 +14,6 @@ def function(
 `<space>`W
 `<space>`q
 - Add :Gcd
-| n | `<C-w>`o      | Toggle full-screen or minimize a window.                  |
 
 - Add Cli-based mark support
  - Async-update whenever the file is changed
@@ -104,9 +92,3 @@ write_current_session fails on windows due to path mismatch issues
 - e.g. one file has ~, another doesn't
 
 Change my company GIT_EDITOR to be neovim
-
-One windows, I don't see the name of the current file anyway. Not even in the buffer line. Fix that
-
-Add any "only these lines" command that is available only during `git add -p`'s `e` mode
-- <leader>gph / <leader>gpl needs to update the buffer
- - I think I already added this

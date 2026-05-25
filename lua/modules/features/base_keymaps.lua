@@ -85,7 +85,7 @@ vim.keymap.set(
 
 vim.keymap.set("n", "<space>C", "<cmd>close<CR>", { desc = "[C]lose the current window." })
 
-vim.keymap.set("n", "J", "mzJ`z", {
+vim.keymap.set("n", "J", "mzJ`z:delmarks z<cr>", {
     desc = "Keep the cursor in the same position while pressing ``J``.",
 })
 

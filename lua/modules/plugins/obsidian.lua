@@ -373,6 +373,68 @@ function _P.print_current_workspace()
 end
 
 --- Search all Obsidian notes across all vaults by-alias (basically by-title).
+---
+---@param query string The selector prompt text.
+---@param candidate string The alias text to rank.
+---@return number # A bonus for matching longer query chunks inside fewer words.
+function _P.get_alias_chunk_match_bonus(query, candidate)
+    local normalized_query = query:lower():gsub("[^%w]", "")
+    local normalized_candidate = candidate:lower()
+
+    if normalized_query == "" then
+        return 0
+    end
+
+    local query_index = 1
+    local bonus = 0
+
+    for token in normalized_candidate:gmatch("[%w]+") do
+        if query_index > #normalized_query then
+            break
+        end
+
+        local best_length = 0
+
+        for length = #normalized_query - query_index + 1, 1, -1 do
+            local chunk = normalized_query:sub(query_index, query_index + length - 1)
+
+            if token:find(chunk, 1, true) then
+                best_length = length
+
+                break
+            end
+        end
+
+        if best_length > 0 then
+            bonus = bonus + (best_length * best_length * 250)
+            query_index = query_index + best_length
+        end
+    end
+
+    if query_index <= #normalized_query then
+        return 0
+    end
+
+    return bonus
+end
+
+--- Search all Obsidian notes across all vaults by-alias (basically by-title).
+---
+---@param entry _my.selector_gui.entry.Selection The alias selector entry to rank.
+---@param input string The selector prompt text.
+---@return number? # A larger score ranks earlier.
+function _P.get_alias_selector_sort_score(entry, input)
+    local display = tostring(entry.display or entry.value)
+    local score = require("modules.utilities.core_helpers").get_fuzzy_match_score(input, display)
+
+    if not score then
+        return nil
+    end
+
+    return score + _P.get_alias_chunk_match_bonus(input, display)
+end
+
+--- Search all Obsidian notes across all vaults by-alias (basically by-title).
 function _P.search_notes_by_aliases()
     local template = vim.fs.joinpath(_ROOT, "**", "*.md")
     ---@type _my.selector_gui.entry.Deserialized[]
@@ -387,6 +449,8 @@ function _P.search_notes_by_aliases()
     local window = vim.api.nvim_get_current_win()
 
     require("modules.features.core_editor_setup").select_from_options(found, {
+        sort_maximum = 1000,
+        sort_score = _P.get_alias_selector_sort_score,
         confirm = function(entry)
             vim.api.nvim_set_current_win(window)
             vim.cmd.edit(entry.value)

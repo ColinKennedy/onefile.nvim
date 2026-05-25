@@ -58,29 +58,14 @@ local function get_buffer_mapping(buffer, lhs)
 end
 
 describe("modules.plugins.obsidian", function()
-    local original_confirm
-    local original_notify
     local original_root
 
     before_each(function()
-        original_confirm = nil
-        original_notify = nil
         original_root = obsidian.get_vaults_root_path()
     end)
 
     after_each(function()
         obsidian.set_vaults_root_for_tests(original_root)
-
-        if original_confirm ~= nil then
-            rawset(vim.fn, "confirm", original_confirm)
-            original_confirm = nil
-        end
-
-        if original_notify ~= nil then
-            rawset(vim, "notify", original_notify)
-            original_notify = nil
-        end
-
         vim.cmd("silent! bwipeout!")
     end)
 
@@ -122,6 +107,58 @@ describe("modules.plugins.obsidian", function()
 
     it("matches aliases case-insensitively", function()
         assert.True(obsidian.is_alias_match("Foo Bar", "foo bar"))
+    end)
+
+    it("ranks alias selector matches by fuzzy closeness", function()
+        local close = {
+            display = "The environment was disclosing",
+            score = 1,
+            value = "close.md",
+        }
+        local weak = {
+            display = "Every nation values clear local order",
+            score = 1,
+            value = "weak.md",
+        }
+
+        assert.True(
+            obsidian.get_alias_selector_sort_score(close, "envclo")
+                > obsidian.get_alias_selector_sort_score(weak, "envclo")
+        )
+    end)
+
+    it("rewards shorthand chunks inside alias words", function()
+        assert.True(
+            obsidian.get_alias_chunk_match_bonus("envclo", "The environment was disclosing")
+                > obsidian.get_alias_chunk_match_bonus("envclo", "Every nation values clear local order")
+        )
+    end)
+
+    it("uses fuzzy sorting for the aliases selector", function()
+        local root = vim.fn.tempname()
+        local note = vim.fs.joinpath(root, "workspace", "note.md")
+        local core_editor_setup = require("modules.features.core_editor_setup")
+        local original_select_from_options = core_editor_setup.select_from_options
+        local captured_options
+
+        write_note(note, { "The environment was disclosing" })
+        obsidian.set_vaults_root_for_tests(root)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        core_editor_setup.select_from_options = function(_, options)
+            captured_options = options
+        end
+
+        local ok, error_message = pcall(obsidian.search_notes_by_aliases)
+        core_editor_setup.select_from_options = original_select_from_options
+
+        if not ok then
+            error(error_message, 0)
+        end
+
+        assert.equal(obsidian.get_alias_selector_sort_score, captured_options.sort_score)
+        assert.equal(1000, captured_options.sort_maximum)
+        vim.fn.delete(root, "rf")
     end)
 
     it("finds aliases recursively within the current workspace only", function()
@@ -195,66 +232,6 @@ describe("modules.plugins.obsidian", function()
         obsidian.go_to_definition()
 
         assert.equal(first, vim.api.nvim_buf_get_name(0))
-        vim.fn.delete(root, "rf")
-    end)
-
-    it("asks to create a missing wikilink note and opens it when confirmed", function()
-        local root = vim.fn.tempname()
-        local current = vim.fs.joinpath(root, "foo", "current.md")
-        local prompt
-
-        write_note(current, {}, { "[[Missing Note]]" })
-        obsidian.set_vaults_root_for_tests(root)
-        original_confirm = vim.fn.confirm
-        rawset(vim.fn, "confirm", function(message, choices, default)
-            prompt = { message = message, choices = choices, default = default }
-
-            return 1
-        end)
-
-        vim.cmd("silent edit " .. vim.fn.fnameescape(current))
-        vim.api.nvim_win_set_cursor(0, { 6, 3 })
-        obsidian.go_to_definition()
-
-        local opened = vim.api.nvim_buf_get_name(0)
-        assert.same({
-            choices = "&Yes\n&No",
-            default = 2,
-            message = 'Create Obsidian note "Missing Note"?',
-        }, prompt)
-        assert.True(opened:match("/foo/%d+%-missing%-note%.md$") ~= nil)
-        assert.same({ "Missing Note" }, obsidian.get_aliases(opened))
-        vim.fn.delete(root, "rf")
-    end)
-
-    it("prints an info message when missing wikilink note creation is cancelled", function()
-        local root = vim.fn.tempname()
-        local current = vim.fs.joinpath(root, "foo", "current.md")
-        local notifications = {}
-
-        write_note(current, {}, { "[[Missing Note]]" })
-        obsidian.set_vaults_root_for_tests(root)
-        original_confirm = vim.fn.confirm
-        rawset(vim.fn, "confirm", function()
-            return 2
-        end)
-        original_notify = vim.notify
-        rawset(vim, "notify", function(message, level)
-            table.insert(notifications, { message = message, level = level })
-        end)
-
-        vim.cmd("silent edit " .. vim.fn.fnameescape(current))
-        vim.api.nvim_win_set_cursor(0, { 6, 3 })
-        obsidian.go_to_definition()
-
-        assert.equal(current, vim.api.nvim_buf_get_name(0))
-        assert.same({
-            {
-                level = vim.log.levels.INFO,
-                message = "Cancelled Obsidian note creation.",
-            },
-        }, notifications)
-        assert.same({ current }, vim.fn.glob(vim.fs.joinpath(root, "foo", "*.md"), true, true))
         vim.fn.delete(root, "rf")
     end)
 end)

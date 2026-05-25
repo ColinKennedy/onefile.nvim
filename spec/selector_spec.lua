@@ -32,6 +32,23 @@ local function get_selector_prompt_window()
     error("No selector prompt window was found.", 0)
 end
 
+--- Get the selector preview window by filetype.
+---
+---@param filetype string The expected preview filetype.
+---@return integer # The preview window.
+local function get_selector_preview_window(filetype)
+    for _, window in ipairs(vim.api.nvim_list_wins()) do
+        local configuration = vim.api.nvim_win_get_config(window)
+        local buffer = vim.api.nvim_win_get_buf(window)
+
+        if configuration.relative == "editor" and vim.bo[buffer].filetype == filetype then
+            return window
+        end
+    end
+
+    error("No selector preview window was found.", 0)
+end
+
 --- Close all floating windows.
 local function close_floating_windows()
     for _, window in ipairs(vim.api.nvim_list_wins()) do
@@ -230,6 +247,192 @@ describe("selector UI", function()
 
         assert.are.same("%#Directory#/tmp/100%%/project%*", vim.wo[list_window].winbar)
     end)
+    it("renders a top preview window with the requested filetype", function()
+        local refresh = core_editor_setup.select_from_options({ "alpha" }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            preview = {
+                location = "top",
+                min_height = 4,
+                height_ratio = 0.5,
+                render = function(entry)
+                    return {
+                        buftype = "nofile",
+                        filetype = "lua",
+                        lines = { "local value = " .. entry.value },
+                    }
+                end,
+            },
+        })
+
+        refresh()
+
+        local preview_window = get_selector_preview_window("lua")
+        local preview_buffer = vim.api.nvim_win_get_buf(preview_window)
+
+        assert.equal("nofile", vim.bo[preview_buffer].buftype)
+        assert.are.same({ "local value = alpha" }, vim.api.nvim_buf_get_lines(preview_buffer, 0, -1, false))
+        local preview_row = vim.api.nvim_win_get_config(preview_window).row
+        local prompt_row = vim.api.nvim_win_get_config(get_selector_prompt_window()).row
+
+        assert.is_true(preview_row < prompt_row)
+    end)
+
+    it("scrolls a top preview window from the prompt", function()
+        local refresh = core_editor_setup.select_from_options({ "alpha" }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            preview = {
+                location = "top",
+                min_height = 4,
+                height_ratio = 0.5,
+                render = function()
+                    ---@type string[]
+                    local lines = {}
+
+                    for index = 1, 40 do
+                        table.insert(lines, "line " .. index)
+                    end
+
+                    return {
+                        buftype = "nofile",
+                        filetype = "markdown",
+                        lines = lines,
+                    }
+                end,
+            },
+        })
+
+        refresh()
+
+        local preview_window = get_selector_preview_window("markdown")
+        local before = vim.fn.getwininfo(preview_window)[1].topline
+        press("<C-d>")
+        local after = vim.fn.getwininfo(preview_window)[1].topline
+
+        assert.is_true(after > before)
+    end)
+
+    it("keeps a top preview scrolled after the selector refreshes", function()
+        local refresh = core_editor_setup.select_from_options({ "alpha" }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            preview = {
+                location = "top",
+                min_height = 4,
+                height_ratio = 0.5,
+                render = function()
+                    ---@type string[]
+                    local lines = {}
+
+                    for index = 1, 40 do
+                        table.insert(lines, "line " .. index)
+                    end
+
+                    return {
+                        buftype = "nofile",
+                        filetype = "markdown",
+                        lines = lines,
+                    }
+                end,
+            },
+        })
+
+        refresh()
+
+        local preview_window = get_selector_preview_window("markdown")
+        press("<C-d>")
+        local scrolled = vim.fn.getwininfo(preview_window)[1].topline
+        refresh()
+        local refreshed = vim.fn.getwininfo(preview_window)[1].topline
+
+        assert.is_true(scrolled > 1)
+        assert.equal(scrolled, refreshed)
+    end)
+
+    it("scrolls a top preview after moving to another selected item", function()
+        local refresh = core_editor_setup.select_from_options({ "alpha", "beta" }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            preview = {
+                location = "top",
+                min_height = 4,
+                height_ratio = 0.5,
+                render = function(entry)
+                    ---@type string[]
+                    local lines = {}
+
+                    for index = 1, 40 do
+                        table.insert(lines, entry.value .. " line " .. index)
+                    end
+
+                    return {
+                        buftype = "nofile",
+                        filetype = "markdown",
+                        lines = lines,
+                    }
+                end,
+            },
+        })
+
+        refresh()
+        press("<C-n>")
+
+        local preview_window = get_selector_preview_window("markdown")
+        local before = vim.fn.getwininfo(preview_window)[1].topline
+        press("<C-d>")
+        local after = vim.fn.getwininfo(preview_window)[1].topline
+
+        assert.is_true(after > before)
+    end)
+
+    it("renders a right preview window and scrolls it from the prompt", function()
+        local refresh = core_editor_setup.select_from_options({ "alpha" }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            preview = {
+                location = "right",
+                min_height = 4,
+                width_ratio = 0.5,
+                render = function()
+                    ---@type string[]
+                    local lines = {}
+
+                    for index = 1, 40 do
+                        table.insert(lines, "line " .. index)
+                    end
+
+                    return {
+                        buftype = "nofile",
+                        filetype = "diff",
+                        lines = lines,
+                    }
+                end,
+            },
+        })
+
+        refresh()
+
+        local preview_window = get_selector_preview_window("diff")
+        local prompt_window = get_selector_prompt_window()
+        local before = vim.fn.getwininfo(preview_window)[1].topline
+        press("<C-d>")
+        local after = vim.fn.getwininfo(preview_window)[1].topline
+
+        assert.is_true(vim.api.nvim_win_get_config(preview_window).col > vim.api.nvim_win_get_config(prompt_window).col)
+        assert.is_true(after > before)
+    end)
+
     it("preserves filtered source order unless sorting is explicitly enabled", function()
         local refresh = core_editor_setup.select_from_options({
             "lua/modules/plugins/todo_comment_highlighting.lua",
@@ -576,14 +779,64 @@ describe("selector UI", function()
         assert.is_not_nil(captured_options)
         ---@cast captured_options _my.selection_gui.GuiOptions
         assert.is_true(captured_options.multiple_selection)
+        assert.is_not_nil(captured_options.preview)
+        assert.equal("top", captured_options.preview.location)
         assert.equal(200, captured_options.sort_maximum)
         assert.equal(core_editor_setup.get_file_selector_sort_score, captured_options.sort_score)
+    end)
+
+    it("top file preview content can be scrolled", function()
+        local root = vim.fn.tempname()
+        local path = vim.fs.joinpath(root, "preview.lua")
+        ---@type string[]
+        local lines = {}
+
+        for index = 1, 80 do
+            table.insert(lines, "local value_" .. index .. " = " .. index)
+        end
+
+        vim.fn.mkdir(root, "p")
+        vim.fn.writefile(lines, path)
+
+        local refresh = core_editor_setup.select_from_options({ path }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = vim.fs.basename(value), value = value }
+            end,
+            preview = {
+                location = "top",
+                min_height = 4,
+                height_ratio = 0.5,
+                render = function(entry)
+                    local filetype = vim.filetype.match({ filename = entry.value })
+
+                    return {
+                        buftype = "nofile",
+                        filetype = filetype,
+                        lines = vim.fn.readfile(entry.value, "", 200),
+                    }
+                end,
+            },
+        })
+
+        refresh()
+
+        local preview_window = get_selector_preview_window("lua")
+        local before = vim.fn.getwininfo(preview_window)[1].topline
+        press("<C-d>")
+        local after = vim.fn.getwininfo(preview_window)[1].topline
+
+        vim.fn.delete(root, "rf")
+
+        assert.is_true(after > before)
     end)
 
     it("<leader>gsa refreshes when deferred stash results arrive", function()
         local core_helpers = require("modules.utilities.core_helpers")
         local original_exists_command = core_helpers.exists_command
         local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
+        local original_get_stash_changed_line_count = core_editor_setup.get_stash_changed_line_count
+        local original_get_stash_preview_lines = core_editor_setup.get_stash_preview_lines
         local stashes = {}
         local on_update
 
@@ -596,6 +849,14 @@ describe("selector UI", function()
             on_update = callback
 
             return stashes
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        core_editor_setup.get_stash_changed_line_count = function()
+            return 20
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        core_editor_setup.get_stash_preview_lines = function()
+            return { "diff --git a/file b/file" }
         end
 
         require("modules.features.git_keymaps")
@@ -614,7 +875,7 @@ describe("selector UI", function()
                 local buffer = vim.api.nvim_win_get_buf(window)
                 local lines = table.concat(vim.api.nvim_buf_get_lines(buffer, 0, -1, false), "\n")
 
-                if lines:find("important stash", 1, true) then
+                if lines:find("important stash %(20 lines%)", 1, false) then
                     found_stash_text = true
 
                     break
@@ -624,6 +885,8 @@ describe("selector UI", function()
 
         core_helpers.exists_command = original_exists_command
         core_helpers.get_deferred_shell_command_results = original_get_deferred_results
+        core_editor_setup.get_stash_changed_line_count = original_get_stash_changed_line_count
+        core_editor_setup.get_stash_preview_lines = original_get_stash_preview_lines
 
         assert.is_true(found_stash_text)
     end)

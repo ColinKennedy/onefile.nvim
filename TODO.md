@@ -47,17 +47,6 @@
 
 - Add [m, ]m, [c, ]c mappings
 
-- Remove the z mapping (see below, it's broken)
-```
-vim.keymap.set("n", "J", "mzJ`z", {
-    desc = "Keep the cursor in the same position while pressing ``J``.",
-})
-
-vim.keymap.set("n", "J", "mzJ`z:delmarks z<cr>")
-
-from this code and from my actual config
-```
-
 - filetype defaults
  - python and lua - 4 spaces, expandtab
 

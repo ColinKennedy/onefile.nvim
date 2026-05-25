@@ -238,6 +238,22 @@ function M.select_file_in_directory(root)
             { text = M.shorten_selector_directory_path(root), highlight = "Directory" },
         },
         multiple_selection = true,
+        preview = {
+            location = "top",
+            min_height = 4,
+            height_ratio = 0.3,
+            render = function(entry)
+                local path = tostring(entry.value)
+                local ok, lines_ = pcall(vim.fn.readfile, path, "", 200)
+                local filetype = vim.filetype.match({ filename = path })
+
+                return {
+                    buftype = "nofile",
+                    filetype = filetype,
+                    lines = ok and lines_ or { "Could not preview file." },
+                }
+            end,
+        },
         sort_maximum = 200,
         sort_score = M.get_file_selector_sort_score,
         confirm = function(entries)
@@ -335,12 +351,46 @@ function M.select_from_options(values, options)
     local margin_y = math.floor(lines * margin)
 
     -- List window dimensions
-    local list_width = columns - (margin_x * 2) - 2
+    local available_width = columns - (margin_x * 2) - 2
+    local list_width = available_width
     local list_selection_column_width = options.multiple_selection and 1 or 0
     local list_window_width = list_width + list_selection_column_width
     local list_height = lines - (margin_y * 2) - 5
     local list_row = margin_y + 1
     local list_column = margin_x + 1
+    local preview_width = 0
+    local preview_height = 0
+    local preview_row = 0
+    local preview_column = 0
+    local should_show_preview = false
+
+    if options.preview then
+        if options.preview.location == "top" then
+            preview_height = math.floor(lines * (options.preview.height_ratio or 0.1))
+            should_show_preview = preview_height >= (options.preview.min_height or 4)
+
+            if should_show_preview then
+                preview_width = available_width
+                preview_row = margin_y + 1
+                preview_column = list_column
+                list_row = preview_row + preview_height + 4
+                list_height = math.max(1, lines - list_row - margin_y - 2)
+            end
+        elseif options.preview.location == "right" then
+            preview_height = list_height
+            should_show_preview = preview_height >= (options.preview.min_height or 4)
+
+            if should_show_preview then
+                local split_width = math.max(40, available_width - 4)
+                preview_width = math.floor(split_width * (options.preview.width_ratio or 0.5))
+                preview_width = math.max(20, preview_width)
+                list_width = math.max(20, split_width - preview_width)
+                list_window_width = list_width + list_selection_column_width
+                preview_row = list_row
+                preview_column = list_column + list_window_width + 4
+            end
+        end
+    end
 
     ---@type _my.selector_gui.State
     local state = { input = "", all = values, filtered = {}, selected = 1, selected_by_value = {} }
@@ -350,6 +400,10 @@ function M.select_from_options(values, options)
     local prompt_height = 1
     local prompt_row = list_row - 2
     local prompt_column = list_column
+
+    if should_show_preview and options.preview and options.preview.location == "right" then
+        prompt_width = available_width
+    end
 
     --- Escape selector header text for use in a window-local statusline string.
     ---
@@ -396,6 +450,27 @@ function M.select_from_options(values, options)
 
     if list_window_winbar then
         vim.wo[list_window].winbar = list_window_winbar
+    end
+
+    local preview_buffer = nil
+    local preview_window = nil
+    local preview_key = nil
+
+    if should_show_preview then
+        preview_buffer = vim.api.nvim_create_buf(false, true)
+        preview_window = vim.api.nvim_open_win(preview_buffer, false, {
+            relative = "editor",
+            width = preview_width,
+            height = preview_height,
+            row = preview_row,
+            col = preview_column,
+            style = "minimal",
+            border = "single",
+        })
+        vim.bo[preview_buffer].buftype = "nofile"
+        vim.bo[preview_buffer].bufhidden = "wipe"
+        vim.bo[preview_buffer].swapfile = false
+        vim.bo[preview_buffer].modifiable = false
     end
 
     -- Create prompt buffer and window
@@ -514,6 +589,62 @@ function M.select_from_options(values, options)
         end)
     end
 
+    --- Redraw the selector preview window for the currently selected item.
+    local function _redraw_preview()
+        if not options.preview or not preview_buffer or not preview_window then
+            return
+        end
+
+        local entry = state.filtered[state.selected]
+
+        if not entry then
+            return
+        end
+
+        local content = options.preview.render(entry)
+
+        if not content then
+            return
+        end
+
+        local next_preview_key = tostring(entry.value)
+        local should_preserve_view = preview_key == next_preview_key
+        local previous_view = should_preserve_view and vim.api.nvim_win_call(preview_window, vim.fn.winsaveview) or nil
+
+        vim.bo[preview_buffer].modifiable = true
+        vim.api.nvim_buf_set_lines(preview_buffer, 0, -1, false, content.lines)
+        vim.bo[preview_buffer].buftype = content.buftype or "nofile"
+        vim.bo[preview_buffer].filetype = content.filetype or ""
+        vim.bo[preview_buffer].modifiable = false
+
+        if previous_view then
+            pcall(vim.api.nvim_win_call, preview_window, function()
+                local line_count = vim.api.nvim_buf_line_count(0)
+                previous_view.topline = math.min(previous_view.topline, line_count)
+                previous_view.lnum = math.min(previous_view.lnum, line_count)
+                vim.fn.winrestview(previous_view)
+            end)
+        else
+            pcall(vim.api.nvim_win_set_cursor, preview_window, { 1, 0 })
+        end
+
+        preview_key = next_preview_key
+    end
+
+    --- Scroll the preview window if it is visible.
+    ---
+    ---@param amount integer The signed line amount to scroll.
+    local function _scroll_preview(amount)
+        if not preview_window or not vim.api.nvim_win_is_valid(preview_window) then
+            return
+        end
+
+        vim.api.nvim_win_call(preview_window, function()
+            local command = amount > 0 and "normal! " .. amount .. "\005" or "normal! " .. math.abs(amount) .. "\025"
+            vim.cmd(command)
+        end)
+    end
+
     --- Redraw the current, filtered list.
     local function _redraw()
         -- TODO: Don't redraw the whole buffer. This is slow.
@@ -575,6 +706,7 @@ function M.select_from_options(values, options)
         end
 
         _draw_match_count()
+        _redraw_preview()
     end
 
     --- Populate filtered items.
@@ -629,6 +761,10 @@ function M.select_from_options(values, options)
     local function _close_all()
         vim.api.nvim_win_close(list_window, true)
         vim.api.nvim_win_close(prompt_window, true)
+
+        if preview_window and vim.api.nvim_win_is_valid(preview_window) then
+            vim.api.nvim_win_close(preview_window, true)
+        end
     end
 
     --- Get the selected item, close all the windows, and do something with the selection.
@@ -714,6 +850,31 @@ function M.select_from_options(values, options)
 
         vim.keymap.set("n", "k", select_up, up_options)
         vim.keymap.set("i", "<C-p>", select_up, up_options)
+
+        local preview_down_options = vim.tbl_deep_extend("force", opts, { desc = "Scroll the preview down." })
+        local preview_up_options = vim.tbl_deep_extend("force", opts, { desc = "Scroll the preview up." })
+        vim.keymap.set("n", "<C-d>", function()
+            _scroll_preview(math.max(1, math.floor(preview_height / 2)))
+        end, preview_down_options)
+        vim.keymap.set("i", "<C-d>", function()
+            _scroll_preview(math.max(1, math.floor(preview_height / 2)))
+        end, preview_down_options)
+        vim.keymap.set("n", "<C-u>", function()
+            _scroll_preview(-math.max(1, math.floor(preview_height / 2)))
+        end, preview_up_options)
+        vim.keymap.set("i", "<C-u>", function()
+            _scroll_preview(-math.max(1, math.floor(preview_height / 2)))
+        end, preview_up_options)
+
+        if preview_buffer then
+            local preview_opts = { noremap = true, silent = true, buffer = preview_buffer }
+            vim.keymap.set("n", "<C-d>", function()
+                _scroll_preview(math.max(1, math.floor(preview_height / 2)))
+            end, vim.tbl_deep_extend("force", preview_opts, { desc = "Scroll the preview down." }))
+            vim.keymap.set("n", "<C-u>", function()
+                _scroll_preview(-math.max(1, math.floor(preview_height / 2)))
+            end, vim.tbl_deep_extend("force", preview_opts, { desc = "Scroll the preview up." }))
+        end
 
         if options.multiple_selection then
             local toggle_selection = function()
@@ -912,6 +1073,44 @@ function M.show_bookmarks()
     end
 end
 
+--- Count changed lines in a stash using `git stash show --numstat`.
+---
+---@param stash string The stash reference to inspect.
+---@return integer # The number of added and removed lines in the stash.
+function M.get_stash_changed_line_count(stash)
+    local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--numstat", stash }):wait()
+
+    if process.code ~= 0 then
+        return 0
+    end
+
+    local count = 0
+
+    for line in vim.gsplit(process.stdout or "", "\n") do
+        local added, deleted = line:match("^(%S+)%s+(%S+)%s+")
+
+        if added and deleted then
+            count = count + (tonumber(added) or 0) + (tonumber(deleted) or 0)
+        end
+    end
+
+    return count
+end
+
+--- Get unified diff preview lines for a stash.
+---
+---@param stash string The stash reference to inspect.
+---@return string[] # The preview lines to draw.
+function M.get_stash_preview_lines(stash)
+    local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }):wait()
+
+    if process.code ~= 0 then
+        return { process.stderr ~= "" and process.stderr or "Could not preview stash." }
+    end
+
+    return vim.split(process.stdout or "", "\n", { plain = true })
+end
+
 --- Show all git stashes in the repository in a floating window, if any.
 function M.show_git_stashes()
     local command = { core_helpers._GIT_EXECUTABLE, "stash", "list" }
@@ -924,6 +1123,10 @@ function M.show_git_stashes()
 
     local refresh_selector
     local should_refresh_selector = false
+    ---@type table<string, integer>
+    local changed_line_count_by_stash = {}
+    ---@type table<string, string[]>
+    local preview_lines_by_stash = {}
 
     local options = core_helpers.get_deferred_shell_command_results(command, nil, function()
         if refresh_selector then
@@ -959,9 +1162,38 @@ function M.show_git_stashes()
 
             local name = vim.fn.join(name_parts, separator)
             local index = parts[1]
+            local changed_line_count = changed_line_count_by_stash[index]
 
-            return { display = name, value = { index = index, name = name } }
+            if changed_line_count == nil then
+                changed_line_count = M.get_stash_changed_line_count(index)
+                changed_line_count_by_stash[index] = changed_line_count
+            end
+
+            return {
+                display = string.format("%s (%d lines)", name, changed_line_count),
+                value = { index = index, name = name },
+            }
         end,
+        preview = {
+            location = "right",
+            min_height = 4,
+            width_ratio = 0.5,
+            render = function(entry)
+                local stash = entry.value.index
+                local preview_lines = preview_lines_by_stash[stash]
+
+                if not preview_lines then
+                    preview_lines = M.get_stash_preview_lines(stash)
+                    preview_lines_by_stash[stash] = preview_lines
+                end
+
+                return {
+                    buftype = "nofile",
+                    filetype = "diff",
+                    lines = preview_lines,
+                }
+            end,
+        },
         confirm = function(entry)
             local stash = entry.value.index
             local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "apply", stash }):wait()

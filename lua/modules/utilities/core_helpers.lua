@@ -32,6 +32,18 @@ local _P = {}
 ---@field text string The text to draw at the top of the selector's results window.
 ---@field highlight string The highlight group to apply to `text`.
 
+---@class _my.selector_gui.PreviewContent The content to draw in a selector preview window.
+---@field lines string[] The lines to show in the preview window.
+---@field filetype string? The preview buffer filetype.
+---@field buftype string? The preview buffer buftype.
+
+---@class _my.selector_gui.PreviewOptions Preview-window settings for the selector GUI.
+---@field location "top"|"right" Where to render the preview window.
+---@field min_height integer? Do not render the preview if it would be shorter than this.
+---@field height_ratio number? How much editor height to use for a top preview.
+---@field width_ratio number? How much selector width to use for a right preview.
+---@field render fun(entry: _my.selector_gui.entry.Selection): _my.selector_gui.PreviewContent?
+
 ---@alias _my.easymotion.ExtmarksData table<string, {line: integer, column: integer, id: integer}>
 
 ---@alias _my.window.Edge "top" | "bottom" | "left" | "right"
@@ -82,6 +94,8 @@ local _P = {}
 ---@field multiple_selection boolean?
 ---    If enabled, <Tab> toggles selected entries and confirm sends all selected
 ---    entries, or the hovered entry if nothing was explicitly selected.
+---@field preview _my.selector_gui.PreviewOptions?
+---    If provided, render a preview window for the currently selected entry.
 ---@field cancel (fun(value: _my.selector_gui.entry.Selection): nil)?
 ---    Custom "close selection GUI" behavior.
 ---@field confirm fun(value: _my.selector_gui.entry.Selection|_my.selector_gui.entry.Selection[]): nil

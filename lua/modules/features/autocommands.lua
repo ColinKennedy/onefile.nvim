@@ -18,6 +18,11 @@ vim.api.nvim_create_autocmd("FileType", {
 
         local buffer = vim.api.nvim_get_current_buf()
         local filetype = vim.bo[buffer].filetype
+
+        if filetype == "" or filetype == "unknown" then
+            return
+        end
+
         local treesitter_language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
 
         local success, result = pcall(function()

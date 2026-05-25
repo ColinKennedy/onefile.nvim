@@ -1776,7 +1776,7 @@ vim.api.nvim_create_autocmd({ "BufWinEnter", "WinEnter" }, {
             return
         end
 
-        if not vim.bo.filetype then
+        if vim.bo.filetype == "" or vim.bo.filetype == "unknown" then
             return
         end
 
@@ -1811,7 +1811,7 @@ vim.api.nvim_create_autocmd("BufRead", {
         end
 
         -- TODO: Check if this is needed
-        if vim.bo.filetype then
+        if vim.bo.filetype ~= "" then
             return
         end
 

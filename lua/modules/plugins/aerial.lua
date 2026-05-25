@@ -792,60 +792,44 @@ function M.get_indentation_symbols(buffer)
 
             if fallback_language ~= nil then
                 kind, name = _get_language_fallback_definition(assert(fallback_language), line)
-
-                if kind == nil or name == nil then
-                    goto continue
-                end
             elseif use_unknown_language_definitions then
                 kind, name = _get_unknown_language_fallback_definition(line)
-
-                if kind == nil or name == nil then
-                    goto continue
-                end
             end
 
-            local should_create = use_language_definitions
-                or previous_indent == nil
-                or indent ~= previous_indent
-                or blank_since_previous
+            if kind ~= nil and name ~= nil then
+                local should_create = use_language_definitions
+                    or previous_indent == nil
+                    or indent ~= previous_indent
+                    or blank_since_previous
 
-            if should_create then
-                while #stack > 0 and stack[#stack].indent >= indent do
-                    table.remove(stack)
-                end
+                if should_create then
+                    while #stack > 0 and stack[#stack].indent >= indent do
+                        table.remove(stack)
+                    end
 
-                local symbol_kind = assert(kind)
-                local symbol_name = assert(name)
-                local symbol = _make_symbol(
-                    symbol_kind,
-                    symbol_name,
-                    index,
-                    0,
-                    line_count,
-                    #stack,
-                    _get_fallback_highlight_segments(
-                        buffer,
-                        line_count,
+                    local symbol = _make_symbol(
+                        kind,
+                        name,
                         index,
-                        start_column,
-                        start_column + #symbol_name
+                        0,
+                        line_count,
+                        #stack,
+                        _get_fallback_highlight_segments(buffer, line_count, index, start_column, start_column + #name)
                     )
-                )
 
-                if #stack == 0 then
-                    table.insert(roots, symbol)
-                else
-                    table.insert(stack[#stack].symbol.children, symbol)
+                    if #stack == 0 then
+                        table.insert(roots, symbol)
+                    else
+                        table.insert(stack[#stack].symbol.children, symbol)
+                    end
+
+                    table.insert(stack, { indent = indent, symbol = symbol })
                 end
 
-                table.insert(stack, { indent = indent, symbol = symbol })
+                previous_indent = indent
+                blank_since_previous = false
             end
-
-            previous_indent = indent
-            blank_since_previous = false
         end
-
-        ::continue::
     end
 
     return roots
@@ -1675,6 +1659,9 @@ function M.setup()
                 M.jump_to_selected(false)
             end, vim.tbl_extend("force", options, { desc = "Jump to the selected outline item." }))
             vim.keymap.set("n", "<Space>", function()
+                M.jump_to_selected(true)
+            end, vim.tbl_extend("force", options, { desc = "Preview the selected outline item." }))
+            vim.keymap.set("n", "<C-l>", function()
                 M.jump_to_selected(true)
             end, vim.tbl_extend("force", options, { desc = "Preview the selected outline item." }))
             vim.keymap.set(

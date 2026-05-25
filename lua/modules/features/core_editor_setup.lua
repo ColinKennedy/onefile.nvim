@@ -1576,10 +1576,8 @@ function M.elide_git_branch_name(branch)
         return branch
     end
 
-    local suffix_length = math.min(
-        _GIT_BRANCH_ELIDE_SUFFIX_LENGTH,
-        math.max(1, _GIT_BRANCH_ELIDE_LENGTH - #prefix - #"...")
-    )
+    local suffix_length =
+        math.min(_GIT_BRANCH_ELIDE_SUFFIX_LENGTH, math.max(1, _GIT_BRANCH_ELIDE_LENGTH - #prefix - #"..."))
     local suffix = middle:sub(-suffix_length)
 
     return prefix .. "..." .. suffix

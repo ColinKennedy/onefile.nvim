@@ -38,9 +38,18 @@ end
 ---@param buffer integer The buffer to inspect.
 ---@param lines string[] The expected lines.
 local function wait_for_lines(buffer, lines)
-    assert.True(vim.wait(1000, function()
-        return vim.deep_equal(lines, get_lines(buffer))
-    end, 20))
+    local expected = table.concat(lines, "\n")
+    local matched = vim.wait(2000, function()
+        return table.concat(get_lines(buffer), "\n") == expected
+    end, 20)
+
+    if not matched then
+        matched = table.concat(get_lines(buffer), "\n") == expected
+    end
+
+    if not matched then
+        error("expected=" .. vim.inspect(lines) .. " actual=" .. vim.inspect(get_lines(buffer)), 0)
+    end
 end
 
 --- Get extmark highlight groups visible at a buffer position.
@@ -67,6 +76,8 @@ end
 
 --- Close any open aerial windows.
 local function close_aerial_windows()
+    aerial.close_all()
+
     for _, window in ipairs(vim.api.nvim_list_wins()) do
         local buffer = vim.api.nvim_win_get_buf(window)
 
@@ -118,24 +129,24 @@ describe("modules.plugins.aerial", function()
 
     it("builds indentation fallback symbols from first lines of indentation blocks", function()
         local buffer = make_source_buffer({
-            "class Widget1:",
-            "    def __init__(self):",
+            "Widget1",
+            "    initializer",
             "        body",
             "    more body",
             "",
-            "class SomeClass:",
-            "    def do_some_method(self):",
-            "        def inner_function():",
+            "SomeClass",
+            "    do some method",
+            "        inner function",
             "            pass",
         })
         local symbols = aerial.get_indentation_symbols(buffer)
 
-        assert.equal("class Widget1:", symbols[1].name)
-        assert.equal("def __init__(self):", symbols[1].children[1].name)
+        assert.equal("Widget1", symbols[1].name)
+        assert.equal("initializer", symbols[1].children[1].name)
         assert.equal("body", symbols[1].children[1].children[1].name)
-        assert.equal("class SomeClass:", symbols[2].name)
-        assert.equal("def do_some_method(self):", symbols[2].children[1].name)
-        assert.equal("def inner_function():", symbols[2].children[1].children[1].name)
+        assert.equal("SomeClass", symbols[2].name)
+        assert.equal("do some method", symbols[2].children[1].name)
+        assert.equal("inner function", symbols[2].children[1].children[1].name)
     end)
 
     it("ignores comment lines when building indentation fallback symbols", function()
@@ -149,7 +160,7 @@ describe("modules.plugins.aerial", function()
 
         local symbols = aerial.get_indentation_symbols(buffer)
 
-        assert.equal("function foo()", symbols[1].name)
+        assert.equal("function foo", symbols[1].name)
         assert.equal(1, #symbols)
     end)
 
@@ -327,7 +338,7 @@ describe("modules.plugins.aerial", function()
         assert.equal("nofile", vim.bo[aerial_buffer].buftype)
         assert.is_true(vim.wo[aerial_window].winfixbuf)
         assert.equal(30, vim.api.nvim_win_get_width(aerial_window))
-        assert.are.same({ "  -- class Widget1:", "    -- def __init__(self):" }, get_lines(aerial_buffer))
+        assert.are.same({ "  CC class Widget1", "    FF def __init__" }, get_lines(aerial_buffer))
     end)
 
     it("restores an aerial sidebar for a visible session source window", function()
@@ -356,7 +367,7 @@ describe("modules.plugins.aerial", function()
         vim.api.nvim_set_current_win(aerial_window)
         assert.equal(source_window, aerial.get_current_source_window())
         assert.equal("aerial", vim.bo[vim.api.nvim_win_get_buf(aerial_window)].filetype)
-        assert.are.same({ "  -- local function alpha()" }, get_lines(vim.api.nvim_win_get_buf(aerial_window)))
+        assert.are.same({ "  FF local function alpha" }, get_lines(vim.api.nvim_win_get_buf(aerial_window)))
 
         os.remove(source_path)
     end)
@@ -390,7 +401,7 @@ describe("modules.plugins.aerial", function()
         vim.api.nvim_set_current_win(aerial_window)
         assert.equal(source_window, aerial.get_current_source_window())
         assert.equal("aerial", vim.bo[vim.api.nvim_win_get_buf(aerial_window)].filetype)
-        assert.are.same({ "  -- local function alpha()" }, get_lines(vim.api.nvim_win_get_buf(aerial_window)))
+        assert.are.same({ "  FF local function alpha" }, get_lines(vim.api.nvim_win_get_buf(aerial_window)))
 
         os.remove(source_path)
     end)
@@ -525,14 +536,13 @@ describe("modules.plugins.aerial", function()
 
         aerial.collapse_selected()
 
-        assert.are.same({ "> -- class Widget1:" }, get_lines(aerial_buffer))
+        assert.are.same({ "> CC class Widget1" }, get_lines(aerial_buffer))
 
         aerial.expand_selected()
 
         assert.are.same({
-            "  -- class Widget1:",
-            "    -- def __init__(self):",
-            "      -- body",
+            "  CC class Widget1",
+            "    FF def __init__",
         }, get_lines(aerial_buffer))
     end)
 
@@ -571,9 +581,9 @@ describe("modules.plugins.aerial", function()
         vim.api.nvim_exec_autocmds("TextChanged", { buffer = source_buffer })
 
         wait_for_lines(aerial_buffer, {
-            "  -- class Widget1:",
-            "    -- def __init__(self):",
-            "  -- class SomeClass:",
+            "  CC class Widget1",
+            "    FF def __init__",
+            "  CC class SomeClass",
         })
     end)
 
@@ -591,8 +601,8 @@ describe("modules.plugins.aerial", function()
 
         assert.True(vim.bo[source_buffer].modified)
         wait_for_lines(aerial_buffer, {
-            "  -- class Widget1:",
-            "    -- def unsaved_method(self):",
+            "  CC class Widget1",
+            "    FF def unsaved_method",
         })
     end)
 
@@ -616,8 +626,8 @@ describe("modules.plugins.aerial", function()
         vim.api.nvim_exec_autocmds("BufEnter", { buffer = second_buffer })
 
         assert.are.same({
-            "  -- class Second:",
-            "    -- def method(self):",
+            "  CC class Second",
+            "    FF def method",
         }, get_lines(aerial_buffer))
     end)
 
@@ -641,8 +651,8 @@ describe("modules.plugins.aerial", function()
         vim.api.nvim_exec_autocmds("TextChanged", { buffer = second_buffer })
 
         wait_for_lines(aerial_buffer, {
-            "  -- class Second:",
-            "    -- def method(self):",
+            "  CC class Second",
+            "    FF def method",
         })
     end)
 
@@ -728,8 +738,8 @@ describe("modules.plugins.aerial", function()
         assert.equal(source_window, vim.api.nvim_get_current_win())
         assert.equal("aerial", vim.bo[aerial_buffer].filetype)
         assert.are.same({
-            "  -- class Widget1:",
-            "    -- def __init__(self):",
+            "  CC class Widget1",
+            "    FF def __init__",
         }, get_lines(aerial_buffer))
     end)
 

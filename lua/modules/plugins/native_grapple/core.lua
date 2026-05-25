@@ -438,7 +438,7 @@ function M.serialize_mark_code(root)
     local output = {
         "local function set_mark(path, mark, line, column)",
         "    local buffer = vim.fn.bufnr(path, true)",
-        "    vim.fn.setpos(\"'\" .. mark, { buffer, line, column + 1, 0 })",
+        '    vim.fn.setpos("\'" .. mark, { buffer, line, column + 1, 0 })',
         "end",
     }
 

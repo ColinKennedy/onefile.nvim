@@ -1882,6 +1882,8 @@ function M.select_buffer()
 
     core_editor_setup.select_from_options(buffers, {
         multiple_selection = true,
+        sort_maximum = 200,
+        sort_score = core_editor_setup.get_file_selector_sort_score,
         deserialize = function(choice)
             ---@cast choice integer
 

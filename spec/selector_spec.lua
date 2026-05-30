@@ -913,6 +913,8 @@ describe("selector UI", function()
         assert.is_not_nil(captured_options)
         ---@cast captured_options _my.selection_gui.GuiOptions
         assert.is_true(captured_options.multiple_selection)
+        assert.equal(200, captured_options.sort_maximum)
+        assert.equal(core_editor_setup.get_file_selector_sort_score, captured_options.sort_score)
         assert.is_table(core_helpers)
     end)
 end)

@@ -1097,6 +1097,30 @@ function M.get_stash_changed_line_count(stash)
     return count
 end
 
+--- Count changed lines in a stash asynchronously.
+---
+---@param stash string The stash reference to inspect.
+---@param callback fun(count: integer): nil The callback that receives the changed line count.
+function M.get_stash_changed_line_count_async(stash, callback)
+    vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--numstat", stash }, {}, function(process)
+        local count = 0
+
+        if process.code == 0 then
+            for line in vim.gsplit(process.stdout or "", "\n") do
+                local added, deleted = line:match("^(%S+)%s+(%S+)%s+")
+
+                if added and deleted then
+                    count = count + (tonumber(added) or 0) + (tonumber(deleted) or 0)
+                end
+            end
+        end
+
+        vim.schedule(function()
+            callback(count)
+        end)
+    end)
+end
+
 --- Get unified diff preview lines for a stash.
 ---
 ---@param stash string The stash reference to inspect.
@@ -1109,6 +1133,58 @@ function M.get_stash_preview_lines(stash)
     end
 
     return vim.split(process.stdout or "", "\n", { plain = true })
+end
+
+--- Get unified diff preview lines for a stash asynchronously.
+---
+---@param stash string The stash reference to inspect.
+---@param callback fun(lines: string[]): nil The callback that receives preview lines.
+function M.get_stash_preview_lines_async(stash, callback)
+    vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }, {}, function(process)
+        ---@type string[]
+        local lines_
+
+        if process.code == 0 then
+            lines_ = vim.split(process.stdout or "", "\n", { plain = true })
+        else
+            lines_ = { process.stderr ~= "" and process.stderr or "Could not preview stash." }
+        end
+
+        vim.schedule(function()
+            callback(lines_)
+        end)
+    end)
+end
+
+--- Parse a line from `git stash list`.
+---
+---@param value string A line from `git stash list`.
+---@return {index: string, name: string} # Parsed stash index and display name.
+function M.parse_stash_list_entry(value)
+    local separator = ":"
+    local parts = vim.fn.split(value, separator)
+
+    if #parts < 3 then
+        error(
+            string.format(
+                'Got unexpected "%s" parts from "%s" value. ' .. "Expected a stash index and stash name.",
+                vim.inspect(parts),
+                value
+            )
+        )
+    end
+
+    ---@type string[]
+    local name_parts = {}
+
+    for index = 3, #parts do
+        table.insert(name_parts, parts[index])
+    end
+
+    return {
+        index = parts[1],
+        name = vim.fn.join(name_parts, separator),
+    }
 end
 
 --- Show all git stashes in the repository in a floating window, if any.
@@ -1125,52 +1201,86 @@ function M.show_git_stashes()
     local should_refresh_selector = false
     ---@type table<string, integer>
     local changed_line_count_by_stash = {}
+    ---@type table<string, boolean>
+    local queued_line_count_by_stash = {}
+    ---@type string[]
+    local line_count_queue = {}
+    local is_counting_stash_lines = false
     ---@type table<string, string[]>
     local preview_lines_by_stash = {}
+    ---@type table<string, boolean>
+    local preview_in_flight_by_stash = {}
+    local refresh_timer = assert((vim.uv or vim.loop).new_timer())
 
-    local options = core_helpers.get_deferred_shell_command_results(command, nil, function()
-        if refresh_selector then
-            refresh_selector()
+    --- Schedule a debounced selector refresh.
+    local function schedule_refresh()
+        if not refresh_selector then
+            should_refresh_selector = true
 
             return
         end
 
-        should_refresh_selector = true
+        refresh_timer:stop()
+        refresh_timer:start(50, 0, function()
+            vim.schedule(function()
+                if refresh_selector then
+                    refresh_selector()
+                end
+            end)
+        end)
+    end
+
+    --- Start the next queued stash line-count job.
+    local function pump_line_count_queue()
+        if is_counting_stash_lines then
+            return
+        end
+
+        local stash = table.remove(line_count_queue, 1)
+
+        if not stash then
+            return
+        end
+
+        is_counting_stash_lines = true
+        M.get_stash_changed_line_count_async(stash, function(count)
+            changed_line_count_by_stash[stash] = count
+            is_counting_stash_lines = false
+            schedule_refresh()
+            pump_line_count_queue()
+        end)
+    end
+
+    --- Queue a stash line-count job, if needed.
+    ---
+    ---@param stash string The stash reference to inspect.
+    local function request_line_count(stash)
+        if changed_line_count_by_stash[stash] ~= nil or queued_line_count_by_stash[stash] then
+            return
+        end
+
+        queued_line_count_by_stash[stash] = true
+        table.insert(line_count_queue, stash)
+        pump_line_count_queue()
+    end
+
+    local options = core_helpers.get_deferred_shell_command_results(command, nil, function()
+        schedule_refresh()
     end)
 
     refresh_selector = M.select_from_options(options, {
         deserialize = function(value)
-            local separator = ":"
-            local parts = vim.fn.split(value, separator)
-
-            if #parts < 3 then
-                error(
-                    string.format(
-                        'Got unexpected "%s" parts from "%s" value. ' .. "Expected a stash index and stash name.",
-                        vim.inspect(parts),
-                        value
-                    )
-                )
-            end
-
-            ---@type string[]
-            local name_parts = {}
-
-            for index = 3, #parts do
-                table.insert(name_parts, parts[index])
-            end
-
-            local name = vim.fn.join(name_parts, separator)
-            local index = parts[1]
+            local parsed = M.parse_stash_list_entry(value)
+            local name = parsed.name
+            local index = parsed.index
             local changed_line_count = changed_line_count_by_stash[index]
 
             if changed_line_count == nil then
-                changed_line_count = M.get_stash_changed_line_count(index)
-                changed_line_count_by_stash[index] = changed_line_count
+                request_line_count(index)
             end
 
             return {
-                display = string.format("%s (%d lines)", name, changed_line_count),
+                display = string.format("%s (%s lines)", name, changed_line_count or "..."),
                 value = { index = index, name = name },
             }
         end,
@@ -1183,8 +1293,16 @@ function M.show_git_stashes()
                 local preview_lines = preview_lines_by_stash[stash]
 
                 if not preview_lines then
-                    preview_lines = M.get_stash_preview_lines(stash)
-                    preview_lines_by_stash[stash] = preview_lines
+                    if not preview_in_flight_by_stash[stash] then
+                        preview_in_flight_by_stash[stash] = true
+                        M.get_stash_preview_lines_async(stash, function(lines_)
+                            preview_lines_by_stash[stash] = lines_
+                            preview_in_flight_by_stash[stash] = nil
+                            schedule_refresh()
+                        end)
+                    end
+
+                    preview_lines = { "Loading stash preview..." }
                 end
 
                 return {

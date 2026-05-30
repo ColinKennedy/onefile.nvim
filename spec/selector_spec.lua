@@ -394,6 +394,46 @@ describe("selector UI", function()
         assert.is_true(after > before)
     end)
 
+    it("debounces preview rendering after moving selection", function()
+        local render_count = 0
+        local refresh = core_editor_setup.select_from_options({ "alpha", "beta" }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            preview = {
+                location = "top",
+                min_height = 4,
+                height_ratio = 0.5,
+                render = function(entry)
+                    render_count = render_count + 1
+
+                    return {
+                        buftype = "nofile",
+                        filetype = "markdown",
+                        lines = { "preview " .. entry.value },
+                    }
+                end,
+            },
+        })
+
+        refresh()
+        assert.equal(1, render_count)
+
+        press("<C-n>")
+        assert.equal(1, render_count)
+
+        vim.wait(1000, function()
+            return render_count == 2
+        end)
+
+        local preview_window = get_selector_preview_window("markdown")
+        local preview_buffer = vim.api.nvim_win_get_buf(preview_window)
+
+        assert.equal(2, render_count)
+        assert.are.same({ "preview beta" }, vim.api.nvim_buf_get_lines(preview_buffer, 0, -1, false))
+    end)
+
     it("renders a right preview window and scrolls it from the prompt", function()
         local refresh = core_editor_setup.select_from_options({ "alpha" }, {
             confirm = function() end,

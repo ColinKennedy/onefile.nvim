@@ -467,6 +467,7 @@ function M.select_from_options(values, options)
     local preview_buffer = nil
     local preview_window = nil
     local preview_key = nil
+    local preview_timer = assert((vim.uv or vim.loop).new_timer())
 
     if should_show_preview then
         preview_buffer = vim.api.nvim_create_buf(false, true)
@@ -643,6 +644,28 @@ function M.select_from_options(values, options)
         preview_key = next_preview_key
     end
 
+    --- Debounce preview rendering so fast typing/navigation does not read files immediately.
+    local function _schedule_redraw_preview()
+        if not options.preview or not preview_buffer or not preview_window then
+            return
+        end
+
+        if not preview_key then
+            _redraw_preview()
+
+            return
+        end
+
+        preview_timer:stop()
+        preview_timer:start(60, 0, function()
+            vim.schedule(function()
+                if preview_window and vim.api.nvim_win_is_valid(preview_window) then
+                    _redraw_preview()
+                end
+            end)
+        end)
+    end
+
     --- Scroll the preview window if it is visible.
     ---
     ---@param amount integer The signed line amount to scroll.
@@ -718,7 +741,7 @@ function M.select_from_options(values, options)
         end
 
         _draw_match_count()
-        _redraw_preview()
+        _schedule_redraw_preview()
     end
 
     --- Populate filtered items.
@@ -777,6 +800,9 @@ function M.select_from_options(values, options)
         if preview_window and vim.api.nvim_win_is_valid(preview_window) then
             vim.api.nvim_win_close(preview_window, true)
         end
+
+        preview_timer:stop()
+        preview_timer:close()
     end
 
     --- Get the selected item, close all the windows, and do something with the selection.

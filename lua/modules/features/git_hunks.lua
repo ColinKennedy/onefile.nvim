@@ -280,8 +280,8 @@ function _P.apply_current_file(action)
         end
 
         git_diff.has_unmerged_entries(details, function(has_unmerged)
-            if has_unmerged then
-                _notify_error("Cannot use Git whole-file actions on a file with unresolved merge entries.")
+            if has_unmerged and action == "reset" then
+                _notify_error("Cannot reset a file with unresolved merge entries.")
 
                 return
             end

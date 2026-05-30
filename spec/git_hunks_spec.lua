@@ -509,6 +509,38 @@ describe("git visual hunk selection commands", function()
         remove_tree(root)
     end)
 
+    it("stages a resolved conflicted current buffer", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "README.md")
+            write_text(path, "title\nshared\n")
+            run_git(root, { "add", "README.md" })
+            run_git(root, { "commit", "-m", "init" })
+            run_git(root, { "branch", "feature" })
+
+            write_text(path, "title\nmain change\n")
+            run_git(root, { "add", "README.md" })
+            run_git(root, { "commit", "-m", "main change" })
+            run_git(root, { "checkout", "feature" })
+            write_text(path, "title\nfeature change\n")
+            run_git(root, { "add", "README.md" })
+            run_git(root, { "commit", "-m", "feature change" })
+
+            local merge = vim.system({ "git", "-C", root, "merge", "master" }, { text = true }):wait()
+            assert.is_true(merge.code ~= 0)
+            assert.matches("README.md", run_git(root, { "diff", "--name-only", "--diff-filter=U" }), 1, true)
+
+            edit_file(path, { "title", "resolved change" })
+            press_normal_keys(",gac")
+
+            assert.equal("", run_git(root, { "ls-files", "-u", "--", "README.md" }))
+            assert.equal("title\nresolved change\n", run_git(root, { "show", ":README.md" }))
+        end)
+
+        remove_tree(root)
+    end)
+
     it("resets the entire current file from the index", function()
         local root = make_repo()
 

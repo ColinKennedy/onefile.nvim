@@ -154,6 +154,16 @@ function M.run_git(arguments, directory, stdin, callback)
     _P.run_git(arguments, directory, stdin, callback)
 end
 
+--- Get the first path from Git path-list output.
+---
+---@param text string The Git command stdout.
+---@return string # The first path, or an empty string.
+function _P.first_git_path(text)
+    local first = text:match("([^\n]+)")
+
+    return first and vim.trim(first) or ""
+end
+
 --- Get git details for `buffer`.
 ---
 ---@param buffer integer The buffer to inspect.
@@ -187,11 +197,11 @@ function M.get_file_details(buffer, callback)
         local repository_path = vim.trim(repository.stdout)
 
         _P.run_git(
-            { "-C", repository_path, "ls-files", "--full-name", "--", absolute_path },
+            { "-C", repository_path, "ls-files", "--full-name", "--deduplicate", "--", absolute_path },
             repository_path,
             nil,
             function(relative)
-                local relative_path = vim.trim(relative.stdout)
+                local relative_path = _P.first_git_path(relative.stdout)
 
                 if relative_path ~= "" then
                     callback({

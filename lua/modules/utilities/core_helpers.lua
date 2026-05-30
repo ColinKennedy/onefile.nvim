@@ -126,9 +126,11 @@ local _P = {}
 ---@field buffer integer The Vim buffer of the terminal.
 ---@field mode string The last Vim mode (NORMAL, TERMINAL, etc).
 
+---@type string[]
 local _ALL_CONTIGUOUS_PROJECT_ROOT_MARKERS = { "CMakeLists.txt", "__init__.py" }
 M._ENGLISH_LANGUAGE = "en"
 
+---@type string[]
 M._LUA_ROOT_PATHS = {
     ".luacheckrc",
     ".luarc.json",
@@ -194,6 +196,7 @@ M._BOOKMARK_MAXIMUM = 9
 ---@type integer?
 local _CURRENT_RIPGREP_COMMAND = nil
 
+---@type table<string, string>
 M._FILETYPE_TO_TREESITTER = { python = "python" }
 M._LSP_GROUP = vim.api.nvim_create_augroup("my.lsp.start", { clear = true })
 M._SNIPPET_AUGROUP = vim.api.nvim_create_augroup("my.snippet.completion", { clear = true })
@@ -687,6 +690,7 @@ function _P.debounce_trailing(caller, timeout, first)
     if not first then
         --- Debounce `caller` and use the last arguments of the last debounced call.
         function wrapped(...)
+            ---@type unknown[]
             local argv = { ... }
             local argc = select("#", ...)
 
@@ -1560,6 +1564,7 @@ function M.push_stash_by_name()
             return
         end
 
+        ---@type string[]
         local command = { M._GIT_EXECUTABLE, "stash", "push", "--message", input }
 
         if not M.exists_command(command[1]) then
@@ -1795,6 +1800,7 @@ function _P.run_ripgrep(command)
         return
     end
 
+    ---@type table<string, fun()>
     local commands = {
         M._RIPGREP_EXECUTABLE,
         "--vimgrep", -- Format: file:line:column:match

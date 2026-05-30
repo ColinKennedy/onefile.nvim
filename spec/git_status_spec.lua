@@ -6,6 +6,7 @@ local git_status = require("modules.utilities.git_status")
 ---@param arguments string[] The Git arguments to pass.
 ---@return string # The command stdout.
 local function run_git(root, arguments)
+    ---@type string[]
     local command = { "git", "-C", root }
 
     vim.list_extend(command, arguments)

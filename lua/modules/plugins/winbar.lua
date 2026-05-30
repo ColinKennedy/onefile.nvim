@@ -10,6 +10,7 @@ local core_helpers = require("modules.utilities.core_helpers")
 ---@field end_row integer The final zero-based row in the scope.
 ---@field end_column integer The final zero-based column in the scope.
 
+---@type table<string, boolean>
 local _EXCLUDED_FILETYPES = {
     alpha = true,
     checkhealth = true,
@@ -33,6 +34,7 @@ local _EXCLUDED_FILETYPES = {
     Trouble = true,
 }
 
+---@type table<string, boolean>
 local _EXCLUDED_BUFTYPES = {
     acwrite = true,
     help = true,
@@ -43,6 +45,7 @@ local _EXCLUDED_BUFTYPES = {
     terminal = true,
 }
 
+---@type table<string, string>
 local _ICONS = {
     file_icon_default = "[file]",
     lock_icon = "[lock]",
@@ -200,6 +203,7 @@ function _P.get_editor_state_text(buffer)
     return table.concat(output, "")
 end
 
+---@type table<string, string>
 local _TREESITTER_QUERIES = {
     lua = [[
         (function_declaration

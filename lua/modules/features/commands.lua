@@ -1,5 +1,6 @@
 --- Register project-aware commands for ripgrep search and project-root detection.
 
+---@type string[]
 local _REPOSITORY_ROOT = { ".git" }
 local _REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
 table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
@@ -168,6 +169,7 @@ end
 ---@param options {fargs: string[]} User-provided arguments to add to the `rg` command.
 ---
 local function _run_rg(directory, options)
+    ---@type string[]
     local command = { "Rg" }
     vim.list_extend(command, options.fargs)
     table.insert(command, directory)

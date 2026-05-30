@@ -76,52 +76,94 @@ local _ACCENT_WARNING_50 = "#ffcc00"
 local _ACCENT_CRITICAL_30 = "#FF4400"
 
 -- Controller Variables - Colors
+---@type vim.api.keyset.highlight
 local _BLACK_30_BG = { bg = _BLACK_30, ctermbg = 235 }
+---@type vim.api.keyset.highlight
 local _ACCENT_BLUE_50_BG = { bg = _ACCENT_DEEP_BLUE_10, ctermbg = 17 }
+---@type vim.api.keyset.highlight
 local _ACCENT_COOL_GRAY_BG = { bg = _ACCENT_COOL_GRAY, ctermbg = 60 }
+---@type vim.api.keyset.highlight
 local _CYAN_10_BG = { bg = _COOL_BLUE_10, ctermbg = 109 }
+---@type vim.api.keyset.highlight
 local _CYAN_10_FG = { fg = _COOL_BLUE_10, ctermfg = 109 }
+---@type vim.api.keyset.highlight
 local _CYAN_30_BG = { bg = _COOL_BLUE_20, ctermbg = 23 }
+---@type vim.api.keyset.highlight
 local _GRAY_20_FG = { fg = _GRAY_10, ctermfg = 250 }
+---@type vim.api.keyset.highlight
 local _GRAY_30_BG = { bg = _GRAY_30, ctermbg = 242 }
+---@type vim.api.keyset.highlight
 local _KHAKI_GREEN = { fg = _GREEN_10, ctermfg = 143 }
+---@type vim.api.keyset.highlight
 local _PURPLE_20_FG = { fg = _PURPLE_30, ctermfg = 139 }
+---@type vim.api.keyset.highlight
 local _PURPLE_50_BG = { bg = _PURPLE_50, ctermbg = 53 }
+---@type vim.api.keyset.highlight
 local _WHITE_BG = { bg = _WHITE, ctermbg = 249 }
+---@type vim.api.keyset.highlight
 local _WHITE_FG = { fg = _WHITE, ctermfg = 249 }
+---@type vim.api.keyset.highlight
 local _WHITE_10_FG = { fg = _BLACK_50, ctermfg = 234 }
 
 -- Controller Variables - Purposes
+---@type vim.api.keyset.highlight
 local _BG = { bg = _BLACK_50, ctermbg = 234 }
+---@type vim.api.keyset.highlight
 local _BG_DARKER_20 = { ctermbg = 16, bg = "#111111" } -- Like _BG, but much darker
+---@type vim.api.keyset.highlight
 local _BG_AS_FG = { fg = _BLACK_50, ctermfg = 234 }
+---@type vim.api.keyset.highlight
 local _COMMENT = { fg = _GRAY_20, ctermfg = 243 }
+---@type vim.api.keyset.highlight
 local _CONSTANT_FG = { fg = _RED_10, ctermfg = 167 }
+---@type vim.api.keyset.highlight
 local _CURSOR_GRAY_FG = { fg = _BLACK_20, ctermfg = 236 }
+---@type vim.api.keyset.highlight
 local _DIFF_CHANGE_FG = { fg = _PURPLE_10, ctermfg = 189 }
+---@type vim.api.keyset.highlight
 local _ERROR_50_BG = { bg = _RED_20, ctermbg = 52 }
+---@type vim.api.keyset.highlight
 local _ERROR_BG = { bg = _RED_10, ctermbg = 167 }
+---@type vim.api.keyset.highlight
 local _ERROR_FG = { fg = _RED_10, ctermfg = 167 }
+---@type vim.api.keyset.highlight
 local _KNOWN_VARIABLE = { fg = _PURPLE_30, ctermfg = 216 } -- LightSalmon1
+---@type vim.api.keyset.highlight
 local _LINE_GRAY_BG = { bg = _GRAY_20, ctermbg = 243 }
+---@type vim.api.keyset.highlight
 local _NON_TEXT_FG = { fg = _GRAY_50, ctermfg = 237 }
+---@type vim.api.keyset.highlight
 local _NOTE_10_FG = { fg = _ACCENT_ATTENTION_NORMAL, ctermfg = 193 }
 local _NOTE_DIFF_ADD_10_FG = _NOTE_10_FG
+---@type vim.api.keyset.highlight
 local _SEARCH_FG = { fg = _BLACK_50, ctermfg = 234 }
+---@type vim.api.keyset.highlight
 local _SPECIAL_GRAY_FG = { fg = _GRAY_50, ctermfg = 238 }
+---@type vim.api.keyset.highlight
 local _SPECIAL_VARIABLE = { fg = _ACCENT_CRITICAL_30, ctermfg = 96 }
+---@type vim.api.keyset.highlight
 local _STATEMENT = { fg = _COOL_BLUE_10, ctermfg = 109 }
+---@type vim.api.keyset.highlight
 local _TITLE_BG = { bg = _SECTION_30, ctermbg = 222 }
+---@type vim.api.keyset.highlight
 local _TITLE_FG = { fg = _SECTION_30, ctermfg = 222 }
+---@type vim.api.keyset.highlight
 local _TYPE = { fg = _SECTION_10, ctermfg = 173 }
+---@type vim.api.keyset.highlight
 local _VERT_SPLIT_FG = { fg = _GRAY_50, ctermfg = 236 }
+---@type vim.api.keyset.highlight
 local _VISUAL_GRAY_BG = { bg = _GRAY_50, ctermbg = 237 }
+---@type vim.api.keyset.highlight
 local _VISUAL_GRAY_FG = { fg = _GRAY_50, ctermfg = 237 }
 
 -- Controller Variables - Miscellaneous
+---@type vim.api.keyset.highlight
 local _BOLD = { bold = true }
+---@type vim.api.keyset.highlight
 local _NONE = { cterm = nil, gui = nil } -- Use this to disable highlighting on a group
+---@type vim.api.keyset.highlight
 local _REVERSE = { reverse = true }
+---@type vim.api.keyset.highlight
 local _UNDERLINE = { underline = true }
 
 -- General
@@ -191,6 +233,7 @@ end
 --- Prefer linking to an existing bright-white text group so the selector follows
 --- the active colorscheme. If no bright-white group exists, use a direct color.
 local function _set_selector_current_line_highlight()
+    ---@type string[]
     local candidates = {
         "FzfLuaCursorLine",
         "FzfLuaCursorLineNr",
@@ -340,6 +383,7 @@ vim.cmd("set cursorline")
 vim.api.nvim_set_hl(0, "HighlightedyankRegion", { link = "Search" })
 
 -- Reference: https://www.reddit.com/r/neovim/comments/12gvms4/this_is_why_your_higlights_look_different_in_90/
+---@type table<string, string>
 local links = {
     ["@lsp.type.namespace"] = "@namespace",
     ["@lsp.type.type"] = "@type",

@@ -561,6 +561,7 @@ describe("selector UI", function()
     end)
 
     it("skips opt-in sorting when filtered results exceed the configured maximum", function()
+        ---@type _my.selector_gui.entry.Selection[]
         local values = {}
 
         for index = 1, 201 do
@@ -865,6 +866,7 @@ describe("selector UI", function()
         local original_exists_command = core_helpers.exists_command
         local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
         local original_notify = vim.notify
+        ---@type string[]
         local notifications = {}
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -958,6 +960,7 @@ describe("selector UI", function()
         local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
         local original_get_stash_changed_line_count_async = core_editor_setup.get_stash_changed_line_count_async
         local original_get_stash_preview_lines_async = core_editor_setup.get_stash_preview_lines_async
+        ---@type _my.selector_gui.entry.Selection[]
         local stashes = {}
         local on_update
 

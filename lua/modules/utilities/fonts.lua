@@ -9,12 +9,14 @@ M.Icon = {
     aerial_function = "aerial_function",
 }
 
+---@type table<string, string>
 local _ASCII_ICONS = {
     [M.Icon.aerial_class] = "CC",
     [M.Icon.aerial_fallback] = "--",
     [M.Icon.aerial_function] = "FF",
 }
 
+---@type table<string, string>
 local _NERDFONT_ICONS = {
     [M.Icon.aerial_class] = "󰠱",
     [M.Icon.aerial_fallback] = "--",

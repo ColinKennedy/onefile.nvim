@@ -81,6 +81,7 @@ end
 ---@return _my.completion.Entry[] # Completion entries ordered by nearby usage first.
 function _P.collect_matches(buffer, prefix, cursor_line)
     local escaped_prefix = vim.pesc(prefix)
+    ---@type table<string, number>
     local scores = {}
     local seen_count = 0
 

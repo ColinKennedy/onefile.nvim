@@ -2,6 +2,7 @@
 
 local M = {}
 
+---@type table<string, boolean>
 local _IGNORED_CLIENTS = {
     ["copilot"] = true,
     ["null-ls"] = true,

@@ -133,6 +133,7 @@ end
 ---@param token string The token text.
 ---@return _my.subvariable.Range # The around range.
 local function _get_around_underscore_range(range, token)
+    ---@type _my.subvariable.Range
     local around = {
         start_column = range.start_column,
         end_column = range.end_column,

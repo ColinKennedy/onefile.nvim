@@ -52,18 +52,21 @@ local function _define_symmetric_mapping(character)
     end, { expr = true, desc = "Create a quote pair or move to the right of the closing quote." })
 end
 
+---@type table<string, string>
 local _ASYMMETRIC_PAIRS = {
     ["("] = ")",
     ["["] = "]",
     ["{"] = "}",
 }
 
+---@type table<string, string>
 local _SYMMETRIC_PAIRS = {
     ["'"] = "'",
     ['"'] = '"',
     ["`"] = "`",
 }
 
+---@type string[]
 local _CLOSING_PAIRS = {
     ")",
     "]",

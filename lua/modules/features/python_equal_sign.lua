@@ -2,6 +2,7 @@
 
 local _P = {}
 
+---@type table<string, boolean>
 local _BUILTINS = {
     ["False"] = true,
     ["None"] = true,

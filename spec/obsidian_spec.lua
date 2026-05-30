@@ -110,11 +110,13 @@ describe("modules.plugins.obsidian", function()
     end)
 
     it("ranks alias selector matches by fuzzy closeness", function()
+        ---@type _my.selector_gui.entry.Selection
         local close = {
             display = "The environment was disclosing",
             score = 1,
             value = "close.md",
         }
+        ---@type _my.selector_gui.entry.Selection
         local weak = {
             display = "Every nation values clear local order",
             score = 1,

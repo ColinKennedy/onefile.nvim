@@ -13,6 +13,7 @@ local M = {}
 
 ---@alias _my.quick_scope.Direction "backward" | "forward"
 
+---@type string[]
 local _DEFAULT_ACCEPTED_CHARS = {
     "a",
     "b",
@@ -78,6 +79,7 @@ local _DEFAULT_ACCEPTED_CHARS = {
     "9",
 }
 
+---@type string[]
 local _DEFAULT_BUFTYPE_BLACKLIST = { "terminal" }
 ---@type table<integer, integer[]>
 local _MATCH_IDS_BY_WINDOW = {}
@@ -179,8 +181,11 @@ local function _get_directional_highlights(line, line_number, cursor_column, dir
     local is_first_word = true
     ---@type table<string, integer>
     local occurrences = {}
+    ---@type _my.quick_scope.Highlight?
     local primary = nil
+    ---@type _my.quick_scope.Highlight?
     local secondary = nil
+    ---@type table<string, _my.quick_scope.Highlight[]>
     local result = { primary = {}, secondary = {} }
 
     while
@@ -283,6 +288,7 @@ function M.get_line_highlights(line, line_number, cursor_column)
     local accepted = _make_set(_get_accepted_chars())
     local ignorecase = _get_option("qs_ignorecase", 0) == 1
     local normalized_cursor_column = math.max(1, math.min(cursor_column or 1, math.max(#line, 1)))
+    ---@type table<string, _my.quick_scope.Highlight[]>
     local result = { primary = {}, secondary = {} }
     local forward =
         _get_directional_highlights(line, line_number, normalized_cursor_column, "forward", accepted, ignorecase)

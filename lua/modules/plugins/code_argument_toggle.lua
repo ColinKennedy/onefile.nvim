@@ -12,12 +12,14 @@ local M = {}
 ---@field open_character string The opening delimiter text.
 ---@field close_character string The closing delimiter text.
 
+---@type table<string, string>
 local _OPEN_TO_CLOSE = {
     ["("] = ")",
     ["{"] = "}",
     ["["] = "]",
 }
 
+---@type table<string, string>
 local _CLOSE_TO_OPEN = {
     [")"] = "(",
     ["}"] = "{",
@@ -78,6 +80,7 @@ local function _find_pair(lines, cursor)
     for line_number, line in ipairs(lines) do
         for column = 1, #line do
             local character = line:sub(column, column)
+            ---@type {line: integer, column: integer}
             local position = { line = line_number, column = column - 1 }
 
             if _OPEN_TO_CLOSE[character] then
@@ -229,6 +232,7 @@ end
 ---@return string[] # Replacement lines.
 local function _build_expanded_lines(pair, items, base_indent)
     local child_indent = base_indent .. _make_indent_level()
+    ---@type string[]
     local lines = { pair.open_character }
 
     for _, item in ipairs(items) do

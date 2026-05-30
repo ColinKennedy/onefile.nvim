@@ -22,6 +22,7 @@ end
 ---@param arguments string[] The arguments passed to `:Git`.
 ---@return string[] # The argv list to pass to `jobstart()`.
 function M.build_git_command(executable, arguments)
+    ---@type string[]
     local command = { executable }
 
     for _, argument in ipairs(arguments) do

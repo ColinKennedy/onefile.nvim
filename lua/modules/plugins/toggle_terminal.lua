@@ -9,6 +9,7 @@ local _TAB_TERMINALS = {}
 local _BUFFER_TO_TERMINAL = {}
 local _DARKER_TERMINAL_COLOR = "#111111"
 
+---@type table<string, string>
 local _Mode = {
     insert = "insert",
     normal = "normal",
@@ -342,6 +343,7 @@ end
 --- Add Neovim `toggleterminal`-related autocommands.
 function _P.setup_autocommands()
     local group = vim.api.nvim_create_augroup("my.toggle_terminal.commands", { clear = true })
+    ---@type string[]
     local toggleterm_pattern = { "term://*::toggleterminal::*" }
 
     vim.api.nvim_create_autocmd("BufEnter", {

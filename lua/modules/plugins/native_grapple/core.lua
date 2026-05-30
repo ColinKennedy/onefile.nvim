@@ -86,6 +86,7 @@ end
 function _P.resolve_context(reference_path)
     local cwd = _P.get_reference_directory(reference_path)
     local core_helpers = require("modules.utilities.core_helpers")
+    ---@type string[]
     local command = {
         core_helpers._GIT_EXECUTABLE,
         "-C",
@@ -438,6 +439,7 @@ end
 ---@param root string?
 ---@return string[] # The Lua code that restores the current marks.
 function M.serialize_mark_code(root)
+    ---@type string[]
     local output = {
         "local function set_mark(path, mark, line, column)",
         "    local buffer = vim.fn.bufnr(path, true)",

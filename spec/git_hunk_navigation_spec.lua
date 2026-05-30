@@ -6,6 +6,7 @@ local git_hunk_navigation = require("modules.features.git_hunk_navigation")
 ---@param arguments string[] The Git arguments to run after `-C root`.
 ---@return string # The command's standard output.
 local function run_git(root, arguments)
+    ---@type string[]
     local command = { "git", "-C", root }
     vim.list_extend(command, arguments)
 

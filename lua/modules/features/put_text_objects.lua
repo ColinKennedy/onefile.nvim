@@ -122,6 +122,7 @@ local function _native_put(command)
     local register = vim.v.register ~= "" and vim.v.register or '"'
     local keys = register == '"' and command or string.format('"%s%s', register, command)
     local cursor = vim.api.nvim_win_get_cursor(0)
+    ---@type _my.directional_put.NativePutContext
     local context = {
         command = command,
         cursor_line = cursor[1],

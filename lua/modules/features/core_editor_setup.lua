@@ -200,6 +200,7 @@ function M.select_file_in_directory(root)
     end
 
     root = root or vim.fn.getcwd()
+    ---@type string[]
     local command = {
         core_helpers._RIPGREP_EXECUTABLE,
         "--files",
@@ -855,6 +856,7 @@ function M.select_from_options(values, options)
 
     --- Set up keymaps for list window navigation
     local function _setup_keys()
+        ---@type vim.keymap.set.Opts
         local opts = { noremap = true, silent = true, buffer = prompt_buffer }
         local confirm_options = vim.tbl_deep_extend("force", opts, { desc = "Confirm your current selection." })
         vim.keymap.set("n", "<CR>", vim.schedule_wrap(_confirm_selection), confirm_options)
@@ -904,6 +906,7 @@ function M.select_from_options(values, options)
         end, preview_up_options)
 
         if preview_buffer then
+            ---@type vim.keymap.set.Opts
             local preview_opts = { noremap = true, silent = true, buffer = preview_buffer }
             vim.keymap.set("n", "<C-d>", function()
                 _scroll_preview(math.max(1, math.floor(preview_height / 2)))
@@ -1226,6 +1229,7 @@ end
 
 --- Show all git stashes in the repository in a floating window, if any.
 function M.show_git_stashes()
+    ---@type string[]
     local command = { core_helpers._GIT_EXECUTABLE, "stash", "list" }
 
     if not core_helpers.exists_command(command[1]) then

@@ -5,8 +5,19 @@ local _P = {}
 ---@alias _my.tmux.DirectionKey "h" | "j" | "k" | "l"
 ---@alias _my.tmux.DirectionName "left" | "down" | "up" | "right"
 
+---@class _my.tmux.DirectionDetails
+---@field description _my.tmux.DirectionName
+---@field edge _my.tmux.DirectionName|"bottom"|"top"
+---@field resize_amount integer
+---@field resize_direction _my.tmux.DirectionName
+---@field send_target string
+---@field tmux string
+---@field tmux_resize_amount integer
+
+---@type _my.tmux.DirectionName[]
 local _DIRECTION_NAMES = { "left", "down", "up", "right" }
 
+---@type table<_my.tmux.DirectionKey, _my.tmux.DirectionDetails>
 local _DIRECTIONS = {
     h = {
         description = "left",
@@ -46,6 +57,7 @@ local _DIRECTIONS = {
     },
 }
 
+---@type table<_my.tmux.DirectionName, _my.tmux.DirectionKey>
 local _DIRECTION_BY_NAME = {
     down = "j",
     left = "h",
@@ -61,6 +73,7 @@ local function _run_tmux_pane_command(direction, command)
     end
 
     local details = _DIRECTIONS[direction]
+    ---@type string[]
     local arguments = { "tmux", command, "-" .. details.tmux }
 
     if command == "resize-pane" then
@@ -263,6 +276,7 @@ end
 function _P.get_send_text_arguments(direction_name, text)
     local direction = _DIRECTION_BY_NAME[direction_name]
     local details = _DIRECTIONS[direction]
+    ---@type string[]
     local arguments = { "tmux", "send-keys", "-t", details.send_target }
 
     vim.list_extend(arguments, _split_send_text(text))

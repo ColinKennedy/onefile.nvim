@@ -77,6 +77,7 @@ local function _stop_refresh_timer(state)
     state.refresh_timer = nil
 end
 
+---@type table<string, string>
 local _TREESITTER_QUERIES = {
     javascript = [[
         (class_declaration
@@ -172,6 +173,7 @@ end
 ---@param buffer integer The source buffer.
 ---@return string[] # Comment prefixes to ignore in fallback outlines.
 local function _get_comment_prefixes(buffer)
+    ---@type string[]
     local prefixes = { "#", "//", "--", "/*", "*", ";" }
     local commentstring = vim.bo[buffer].commentstring
     local comment_prefix = commentstring:match("^(.-)%%s")
@@ -1653,6 +1655,7 @@ function M.setup()
         pattern = _AERIAL_FILETYPE,
         desc = "Configure aerial buffer mappings.",
         callback = function(event)
+            ---@type vim.keymap.set.Opts
             local options = { buffer = event.buf }
 
             vim.keymap.set("n", "<CR>", function()

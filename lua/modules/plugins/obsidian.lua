@@ -234,6 +234,7 @@ function _P.create_note_in_workspace(workspace_root, title)
     local date = os.date("%Y-%m-%d")
     local time = os.date("%H:%M")
 
+    ---@type string[]
     local lines = {
         "---",
         "id: " .. identifier,
@@ -561,6 +562,7 @@ function _P.open_daily_note(time)
     local path = vim.fs.joinpath(_P.get_workspace_path(), date .. ".md")
 
     if vim.fn.filereadable(path) ~= 1 then
+        ---@type string[]
         local lines = {
             "---",
             "id: " .. date,
@@ -593,6 +595,7 @@ function _P.tomorrow()
     _P.open_daily_note(_P.get_business_day_time(_P.get_today_time(), 1))
 end
 
+---@type table<string, fun(): nil>
 local _SUBCOMMANDS = {
     aliases = _P.search_notes_by_aliases,
     get_workspace = _P.print_current_workspace,

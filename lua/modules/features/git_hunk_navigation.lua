@@ -124,6 +124,7 @@ end
 ---@param arguments string[] User-provided arguments after `:LoadGitDiff`.
 ---@return string[] # The complete Git arguments.
 local function _make_diff_arguments(arguments)
+    ---@type string[]
     local command = { "diff", "--unified=0", "--no-color", "--find-renames" }
     vim.list_extend(command, arguments)
 
@@ -449,6 +450,7 @@ function M.load(arguments, callback)
             return
         end
 
+        ---@type string[]
         local command = { "-C", repository }
         vim.list_extend(command, _make_diff_arguments(arguments))
         git_diff.run_git(command, repository, nil, function(diff)

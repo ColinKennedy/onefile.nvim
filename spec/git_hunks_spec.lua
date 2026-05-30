@@ -6,6 +6,7 @@
 local function run_git(root, arguments)
     vim.wait(120)
 
+    ---@type string[]
     local command = { "git", "-C", root }
     vim.list_extend(command, arguments)
 

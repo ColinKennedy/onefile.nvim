@@ -4,6 +4,7 @@ local core_helpers = require("modules.utilities.core_helpers")
 local git_status = require("modules.utilities.git_status")
 
 -- TODO: Make these colors better later
+---@type table<string, string>
 local _Color = {
     command = "#e5c07b",
     normal = "#98c379",
@@ -14,6 +15,7 @@ local _Color = {
 }
 
 -- Note: termcodes \19 and \22 are ^S and ^V
+---@type table<string, {name: string, hl: string}>
 local _ModeColor = {
     ["n"] = { name = "NORMAL", hl = _Color.normal },
     ["no"] = { name = "OP-PENDING", hl = _Color.pending },

@@ -45,6 +45,7 @@ vim.keymap.set(
 -- Reference: https://stackoverflow.com/q/3760444
 -- Reference: http://vim.wikia.com/wiki/Simplifying_regular_expressions_using_magic_and_no-magic
 --
+---@type vim.keymap.set.Opts
 local description = { desc = 'Make Vim\'s search more "magic", by default.' }
 vim.keymap.set("n", "/", "/\\v", description)
 vim.keymap.set("v", "/", "/\\v", description)

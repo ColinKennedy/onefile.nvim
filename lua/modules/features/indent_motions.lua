@@ -5,6 +5,7 @@ local _P = {}
 ---@alias _my.indent_motion.Direction "previous" | "next"
 ---@alias _my.indent_motion.Relation "lesser" | "greater" | "equal"
 
+---@type table<_my.indent_motion.Direction, integer>
 local _DIRECTION_STEPS = {
     next = 1,
     previous = -1,

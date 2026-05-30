@@ -116,6 +116,7 @@ end
 ---
 ---@param mode "i" | "t" The mode that receives the mappings.
 local function _map_mode(mode)
+    ---@type vim.keymap.set.Opts
     local options = { expr = true, desc = "Escape to NORMAL mode with a delayed jk chord." }
 
     vim.keymap.set(mode, "j", function()

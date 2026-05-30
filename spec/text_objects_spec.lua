@@ -3,6 +3,12 @@ local line_text_object = require("modules.plugins.line_text_object")
 local subvariable_text_object = require("modules.plugins.subvariable_text_object")
 local argument_text_object = require("modules.plugins.argument_text_object")
 
+---@class _my.test.ObjectCase
+---@field after string
+---@field before string
+---@field cursor integer
+---@field keys string?
+
 --- Create a scratch buffer with `lines`.
 ---
 ---@param lines string[] Initial buffer lines.
@@ -175,6 +181,7 @@ describe("argument text object", function()
     end)
 
     it("deletes first, middle, and final single-line arguments", function()
+        ---@type _my.test.ObjectCase[]
         local cases = {
             { before = "(foo, bar, fizz)", cursor = 2, after = "(bar, fizz)" },
             { before = "(foo, bar, fizz)", cursor = 7, after = "(foo, fizz)" },
@@ -260,6 +267,7 @@ describe("subvariable text object", function()
     end)
 
     it("deletes underscore inner and around ranges", function()
+        ---@type _my.test.ObjectCase[]
         local cases = {
             { before = "foo_bar", cursor = 6, keys = "div", after = "foo_" },
             { before = "foo_bar", cursor = 5, keys = "div", after = "foo_" },
@@ -279,6 +287,7 @@ describe("subvariable text object", function()
     end)
 
     it("deletes camelCase inner and around ranges", function()
+        ---@type _my.test.ObjectCase[]
         local cases = {
             { before = "fooBar", cursor = 5, keys = "div", after = "foo" },
             { before = "fooBar", cursor = 5, keys = "dav", after = "foo" },

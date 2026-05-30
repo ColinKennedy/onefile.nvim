@@ -43,6 +43,11 @@ local _P = {}
 ---@field failed boolean
 ---@field watcher uv_fs_event_t?
 
+---@class _my.git_status.Options
+---@field auto_fetch_interval integer
+---@field git_status_timeout integer
+
+---@type _my.git_status.Options
 M.opts = {
     auto_fetch_interval = 30000,
     git_status_timeout = 1000,
@@ -56,6 +61,7 @@ local _IS_GIT_AVAILABLE = nil
 local _DID_SETUP = false
 local _FETCH_TIMER = nil
 
+---@type table<string, table<string, string>>
 local _ICONS = {
     nerd = {
         ahead = "{}",
@@ -83,6 +89,7 @@ local _ICONS = {
     },
 }
 
+---@type { [integer]: { [1]: string, hl: string } }
 local _SECTIONS = {
     { "ahead", hl = "StatusGitAhead" },
     { "behind", hl = "StatusGitBehind" },

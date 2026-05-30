@@ -785,6 +785,54 @@ describe("selector UI", function()
         assert.equal(core_editor_setup.get_file_selector_sort_score, captured_options.sort_score)
     end)
 
+    it("<Space>E ignores ripgrep permission errors when partial results exist", function()
+        local core_helpers = require("modules.utilities.core_helpers")
+        local original_select_from_options = core_editor_setup.select_from_options
+        local original_get_project_root = core_helpers.get_nearest_project_root
+        local original_exists_command = core_helpers.exists_command
+        local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
+        local original_notify = vim.notify
+        local notifications = {}
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        core_helpers.get_nearest_project_root = function()
+            return vim.fn.getcwd()
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        core_helpers.exists_command = function()
+            return true
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        core_helpers.get_deferred_shell_command_results = function(_, on_fail, on_complete)
+            on_fail({ code = 2, stdout = "file-one\n", stderr = "permission denied" })
+
+            if on_complete then
+                on_complete()
+            end
+
+            return { "file-one" }
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        core_editor_setup.select_from_options = function()
+            return function() end
+        end
+        rawset(vim, "notify", function(message, level)
+            table.insert(notifications, { message = message, level = level })
+        end)
+
+        local mapping = vim.fn.maparg("<Space>E", "n", false, true)
+        assert.is_function(mapping.callback)
+        mapping.callback()
+
+        core_editor_setup.select_from_options = original_select_from_options
+        core_helpers.get_nearest_project_root = original_get_project_root
+        core_helpers.exists_command = original_exists_command
+        core_helpers.get_deferred_shell_command_results = original_get_deferred_results
+        rawset(vim, "notify", original_notify)
+
+        assert.same({}, notifications)
+    end)
+
     it("top file preview content can be scrolled", function()
         local root = vim.fn.tempname()
         local path = vim.fs.joinpath(root, "preview.lua")

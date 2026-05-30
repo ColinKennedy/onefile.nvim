@@ -837,23 +837,30 @@ function M.get_deferred_shell_command_results(command, on_fail, on_update)
     ---@type string[]
     local options = {}
 
+    --- Add command stdout lines to `options`.
+    ---
+    ---@param stdout string? The command stdout text.
+    local function append_stdout(stdout)
+        for line in vim.gsplit(stdout or "", "\n") do
+            if line ~= "" then
+                table.insert(options, line)
+            end
+        end
+    end
+
     vim.system(command, { text = true }, function(obj)
+        append_stdout(obj.stdout)
+
+        if on_update then
+            vim.schedule(on_update)
+        end
+
         if obj.code ~= 0 then
             vim.schedule(function()
                 on_fail(obj)
             end)
 
             return
-        end
-
-        for line in vim.gsplit(obj.stdout or "", "\n") do
-            if line ~= "" then
-                table.insert(options, line)
-            end
-        end
-
-        if on_update then
-            vim.schedule(on_update)
         end
     end)
 

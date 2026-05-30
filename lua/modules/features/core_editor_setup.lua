@@ -200,7 +200,15 @@ function M.select_file_in_directory(root)
     end
 
     root = root or vim.fn.getcwd()
-    local command = { core_helpers._RIPGREP_EXECUTABLE, "--files", "--hidden", "--glob", "!.git", root }
+    local command = {
+        core_helpers._RIPGREP_EXECUTABLE,
+        "--files",
+        "--hidden",
+        "--no-messages",
+        "--glob",
+        "!.git",
+        root,
+    }
 
     if not core_helpers.exists_command(command[1]) then
         vim.notify("Cannot do search. No `rg` command was found.", vim.log.levels.ERROR)
@@ -215,6 +223,10 @@ function M.select_file_in_directory(root)
     local should_refresh_selector = false
 
     local options = core_helpers.get_deferred_shell_command_results(command, function(obj)
+        if obj.stdout and obj.stdout ~= "" then
+            return
+        end
+
         if obj.stdout == "" then
             -- NOTE: This happens when No files were found.
             vim.notify(string.format('Rg command found no files at "%s" directory.', root), vim.log.levels.ERROR)

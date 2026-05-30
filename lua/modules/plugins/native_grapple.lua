@@ -3,6 +3,22 @@
 --- Reference:
 ---     https://www.reddit.com/r/neovim/comments/1js5bg8/comment/mloidmn/
 
+local _P = {}
+
+--- Sync native grapple marks without letting autocmds throw user-facing errors.
+---
+---@param reference_path string?
+---@param options {force: boolean}?
+function _P.sync_branch(reference_path, options)
+    local ok, message = pcall(function()
+        require("modules.plugins.native_grapple.core").sync_branch(reference_path, options)
+    end)
+
+    if not ok then
+        vim.notify("Could not sync native grapple marks: " .. tostring(message), vim.log.levels.WARN)
+    end
+end
+
 for index = 1, 9 do
     vim.keymap.set("n", "<leader>" .. index, function()
         local core = require("modules.plugins.native_grapple.core")
@@ -40,17 +56,14 @@ vim.api.nvim_create_autocmd({ "DirChanged", "FocusGained", "ShellCmdPost", "Term
             reference_path = vim.v.event.cwd
         end
 
-        require("modules.plugins.native_grapple.core").sync_branch(
-            reference_path,
-            { force = args.event ~= "DirChanged" }
-        )
+        _P.sync_branch(reference_path, { force = args.event ~= "DirChanged" })
         vim.cmd.redrawstatus()
     end,
     desc = "Reload native grapple marks when the cwd or Git branch may have changed.",
 })
 
 vim.schedule(function()
-    require("modules.plugins.native_grapple.core").sync_branch()
+    _P.sync_branch()
 end)
 
 vim.api.nvim_create_autocmd("VimLeavePre", {

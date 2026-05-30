@@ -159,14 +159,14 @@ describe("modules.plugins.native_grapple", function()
             return original_mkdir(path, flags)
         end)
 
-        vim.notify = function(message, level)
+        rawset(vim, "notify", function(message, level)
             notification = { message = message, level = level }
-        end
+        end)
 
         local ok, result = pcall(native_grapple.write_branch_marks, "/usr", "cwd")
 
         rawset(vim.fn, "mkdir", original_mkdir)
-        vim.notify = original_notify
+        rawset(vim, "notify", original_notify)
 
         assert.True(ok)
         assert.False(result)

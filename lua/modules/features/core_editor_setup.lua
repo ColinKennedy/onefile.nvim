@@ -364,9 +364,8 @@ function M.select_from_options(values, options)
 
     -- List window dimensions
     local available_width = columns - (margin_x * 2) - 2
-    local list_width = available_width
     local list_selection_column_width = options.multiple_selection and 1 or 0
-    local list_window_width = list_width + list_selection_column_width
+    local list_window_width = available_width
     local list_height = lines - (margin_y * 2) - 5
     local list_row = margin_y + 1
     local list_column = margin_x + 1
@@ -396,8 +395,8 @@ function M.select_from_options(values, options)
                 local split_width = math.max(40, available_width - 4)
                 preview_width = math.floor(split_width * (options.preview.width_ratio or 0.5))
                 preview_width = math.max(20, preview_width)
-                list_width = math.max(20, split_width - preview_width)
-                list_window_width = list_width + list_selection_column_width
+                local list_content_width = math.max(20, split_width - preview_width - list_selection_column_width)
+                list_window_width = list_content_width + list_selection_column_width
                 preview_row = list_row
                 preview_column = list_column + list_window_width + 4
             end
@@ -408,7 +407,7 @@ function M.select_from_options(values, options)
     local state = { input = "", all = values, filtered = {}, selected = 1, selected_by_value = {} }
 
     -- Prompt window dimensions
-    local prompt_width = list_width
+    local prompt_width = list_window_width
     local prompt_height = 1
     local prompt_row = list_row - 2
     local prompt_column = list_column

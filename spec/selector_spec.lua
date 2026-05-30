@@ -877,7 +877,7 @@ describe("selector UI", function()
         end
         ---@diagnostic disable-next-line: duplicate-set-field
         core_helpers.get_deferred_shell_command_results = function(_, on_fail, on_complete)
-            on_fail({ code = 2, stdout = "file-one\n", stderr = "permission denied" })
+            on_fail({ code = 2, signal = 0, stdout = "file-one\n", stderr = "permission denied" })
 
             if on_complete then
                 on_complete()

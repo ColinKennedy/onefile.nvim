@@ -280,6 +280,39 @@ describe("selector UI", function()
         assert.is_true(preview_row < prompt_row)
     end)
 
+    it("keeps multi-select top preview, prompt, and list borders aligned", function()
+        local refresh = core_editor_setup.select_from_options({ "alpha" }, {
+            multiple_selection = true,
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            preview = {
+                location = "top",
+                min_height = 4,
+                height_ratio = 0.5,
+                render = function(entry)
+                    return {
+                        buftype = "nofile",
+                        filetype = "lua",
+                        lines = { "local value = " .. entry.value },
+                    }
+                end,
+            },
+        })
+
+        refresh()
+
+        local list_configuration = vim.api.nvim_win_get_config(get_selector_list_window())
+        local prompt_configuration = vim.api.nvim_win_get_config(get_selector_prompt_window())
+        local preview_configuration = vim.api.nvim_win_get_config(get_selector_preview_window("lua"))
+
+        assert.are.same(preview_configuration.col, prompt_configuration.col)
+        assert.are.same(prompt_configuration.col, list_configuration.col)
+        assert.are.same(preview_configuration.width, prompt_configuration.width)
+        assert.are.same(prompt_configuration.width, list_configuration.width)
+    end)
+
     it("scrolls a top preview window from the prompt", function()
         local refresh = core_editor_setup.select_from_options({ "alpha" }, {
             confirm = function() end,

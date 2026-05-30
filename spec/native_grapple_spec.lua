@@ -146,6 +146,37 @@ describe("modules.plugins.native_grapple", function()
         vim.fn.delete(root, "rf")
     end)
 
+    it("warns and skips writes when the sessions directory cannot be created", function()
+        local original_mkdir = vim.fn.mkdir
+        local original_notify = vim.notify
+        local notification
+
+        rawset(vim.fn, "mkdir", function(path, flags)
+            if path == "/usr/.sessions/cwd" then
+                error("Vim:E739: Cannot create directory /usr/.sessions: permission denied")
+            end
+
+            return original_mkdir(path, flags)
+        end)
+
+        vim.notify = function(message, level)
+            notification = { message = message, level = level }
+        end
+
+        local ok, result = pcall(native_grapple.write_branch_marks, "/usr", "cwd")
+
+        rawset(vim.fn, "mkdir", original_mkdir)
+        vim.notify = original_notify
+
+        assert.True(ok)
+        assert.False(result)
+        assert.is_not_nil(notification)
+        ---@cast notification {message: string, level: integer}
+        assert.equal(vim.log.levels.WARN, notification.level)
+        assert.is_not_nil(notification.message:find("Could not write native grapple marks", 1, true))
+        assert.is_not_nil(notification.message:find("/usr/.sessions/cwd/.nvim.marks.lua", 1, true))
+    end)
+
     it("clears marks when the new branch has no saved marks", function()
         local root, branch = make_repository()
         write_marks_file(root, branch, "main.txt", 1)

@@ -43,6 +43,9 @@ local _HEAD_WATCHERS_BY_ROOT = {}
 local _BRANCH_RELOAD_TIMER = assert(vim.uv.new_timer())
 local _BRANCH_RELOAD_DEBOUNCE_MS = 80
 
+---@type table<string, true>
+local _WARNED_WRITE_FAILURES = {}
+
 --- Recompute statuslines after native grapple mark text changes.
 function _P.redraw_statusline()
     vim.cmd.redrawstatus()
@@ -461,26 +464,56 @@ function M.serialize_mark_code(root)
     return output
 end
 
----@param root string?
----@param branch string?
-function M.write_branch_marks(root, branch)
-    if not root or not branch then
+--- Notify once when native grapple marks cannot be written.
+---
+---@param path string The marks file path that could not be written.
+---@param message string The failure details.
+function _P.notify_write_failed(path, message)
+    if _WARNED_WRITE_FAILURES[path] then
         return
     end
 
-    local path = _P.get_marks_path(root, branch)
-    vim.fn.mkdir(vim.fs.dirname(path), "p")
+    _WARNED_WRITE_FAILURES[path] = true
+    vim.notify(string.format('Could not write native grapple marks to "%s": %s', path, message), vim.log.levels.WARN)
+end
 
-    local handle = assert(io.open(path, "w"))
+---@param root string?
+---@param branch string?
+---@return boolean # Whether the marks were written.
+function M.write_branch_marks(root, branch)
+    if not root or not branch then
+        return false
+    end
+
+    local path = _P.get_marks_path(root, branch)
+    local directory = vim.fs.dirname(path)
+    local ok, mkdir_result = pcall(vim.fn.mkdir, directory, "p")
+
+    if not ok or mkdir_result == 0 then
+        _P.notify_write_failed(path, tostring(mkdir_result))
+
+        return false
+    end
+
+    local handle, message = io.open(path, "w")
+
+    if not handle then
+        _P.notify_write_failed(path, tostring(message))
+
+        return false
+    end
 
     handle:write(table.concat(M.serialize_mark_code(root), "\n"))
     handle:write("\n")
     handle:close()
+
+    return true
 end
 
 --- Write marks for the currently loaded root and branch.
+---@return boolean # Whether the marks were written.
 function M.write_current_branch_marks()
-    M.write_branch_marks(_STATE.root, _STATE.branch)
+    return M.write_branch_marks(_STATE.root, _STATE.branch)
 end
 
 --- Set a Vim mark, falling back to the file top when a saved line is stale.

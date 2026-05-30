@@ -1,5 +1,7 @@
 - Add :Dispatch support
 
+- When solving merge conflicts, <leader>gac doesn't actually stage the file correctly on Windows. Fix
+
 - `:Git diff` isn't showing anything. Fix
 
 - If I load a session with a terminal, it starts the wrong buffer in INSERT
@@ -21,10 +23,6 @@
 
 - Add my tmux config at work, for psmux
 
-- The AI should do a pass to make sure all functions are documented with type
-  annotations, it's missing them in several places
- - and also for any {} table definitions
-
 - Make an AI write my commit messages for me, somehow. SLM?
 
 - There's probably greater opportunity for defer-evalling in the codebase. For
@@ -35,8 +33,6 @@
 
 - Update my LSp setup to use config + start
  - add ty LSP support
-
-- Add tests
 
 - Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
 
@@ -49,10 +45,6 @@
 
 - filetype defaults
  - python and lua - 4 spaces, expandtab
-
-`<leader>`gsa - appears to not be working when the stash applies successfully
-`<leader>`gsa - add a preview window (diff)
-
 
 ```lua
 vim.schedule(
@@ -79,5 +71,3 @@ vim.schedule(
 
 write_current_session fails on windows due to path mismatch issues
 - e.g. one file has ~, another doesn't
-
-Change my company GIT_EDITOR to be neovim

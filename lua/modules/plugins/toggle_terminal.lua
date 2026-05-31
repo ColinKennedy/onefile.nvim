@@ -244,11 +244,22 @@ local function _create_terminal(buffer)
     return { buffer = buffer, mode = _STARTING_MODE }
 end
 
+--- Check whether `buffer` is the current buffer in the current window.
+---
+---@param buffer integer The terminal buffer that triggered the event.
+---@return boolean # Whether terminal mode may be restored now.
+function _P.is_current_buffer(buffer)
+    return vim.api.nvim_get_current_buf() == buffer
+end
+
 --- Change `buffer` to insert or normal mode.
 ---
 --- @param buffer number A 1-or-more index pointing to a `toggleterm` buffer.
----
-local function _handle_term_enter(buffer)
+function _P.handle_term_enter(buffer)
+    if not _P.is_current_buffer(buffer) then
+        return
+    end
+
     local terminal = _BUFFER_TO_TERMINAL[buffer]
 
     if not terminal then
@@ -367,7 +378,7 @@ function _P.setup_autocommands()
                     return
                 end
 
-                _handle_term_enter(buffer)
+                _P.handle_term_enter(buffer)
             end)
         end,
     })
@@ -416,5 +427,7 @@ vim.keymap.set(
     _toggle_terminal,
     { desc = "Toggle [T]erminal, in a split at the bottom of the current tab." }
 )
+
+M._P = _P
 
 return M

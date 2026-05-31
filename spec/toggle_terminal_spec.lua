@@ -35,6 +35,31 @@ describe("modules.plugins.toggle_terminal", function()
         vim.o.showmode = showmode
     end)
 
+    it("does not enter insert mode for a terminal buffer unless that buffer is current", function()
+        local original_window = vim.api.nvim_get_current_win()
+
+        press_toggle_terminal()
+
+        assert.True(vim.wait(1000, function()
+            return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
+        end, 20))
+
+        local terminal_buffer = vim.api.nvim_get_current_buf()
+
+        vim.cmd.stopinsert()
+        vim.api.nvim_set_current_win(original_window)
+        require("modules.plugins.toggle_terminal")._P.handle_term_enter(terminal_buffer)
+
+        assert.equal(original_window, vim.api.nvim_get_current_win())
+        assert.equal("n", vim.fn.mode())
+
+        for _, window in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            if vim.api.nvim_win_get_buf(window) == terminal_buffer then
+                vim.api.nvim_win_close(window, true)
+            end
+        end
+    end)
+
     it("can open, close, and reopen the terminal mapping", function()
         local shortmess = vim.o.shortmess
 

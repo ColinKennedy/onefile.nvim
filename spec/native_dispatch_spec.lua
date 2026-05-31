@@ -130,6 +130,24 @@ describe("native dispatch", function()
         assert.equal("qf", vim.bo.filetype)
     end)
 
+    it("does not open quickfix and notifies when a dispatch command passes", function()
+        native_dispatch._P.finish({
+            command = { "make", "luacheck" },
+            raw_command = "make luacheck",
+            display = "on_error",
+        }, {
+            "Checking lua/modules/example.lua OK",
+        }, 0)
+
+        local quickfix = vim.fn.getqflist({ title = true, items = true })
+
+        assert.equal("Dispatch: make luacheck", quickfix.title)
+        assert.are.same({}, quickfix.items)
+        assert.equal(vim.log.levels.INFO, notifications[1].level)
+        assert.equal("Dispatch passed: make luacheck", notifications[1].message)
+        assert.Not.equal("qf", vim.bo.filetype)
+    end)
+
     it("uses ad-hoc compilers and restores compiler options afterward", function()
         local original_buffer = vim.api.nvim_get_current_buf()
         local original_errorformat = vim.o.errorformat

@@ -328,11 +328,14 @@ end
 ---
 ---@param options _my.dispatch.Options The dispatch options.
 ---@param lines string[] The raw output lines.
-function _P.finish(options, lines)
+---@param code integer? The command exit code.
+function _P.finish(options, lines, code)
     local first_valid_index = nil
+    ---@type vim.quickfix.entry[]
+    local items = {}
 
     _P.with_compiler(options.compiler, function()
-        local items = _P.lines_to_quickfix(lines)
+        items = _P.lines_to_quickfix(lines)
 
         for index, item in ipairs(items) do
             if item.valid == 1 then
@@ -346,6 +349,17 @@ function _P.finish(options, lines)
             items = items,
         })
     end)
+
+    if code == 0 and not first_valid_index then
+        vim.fn.setqflist({}, "r", {
+            title = "Dispatch: " .. options.raw_command,
+            items = {},
+        })
+        vim.cmd("silent! cclose")
+        vim.notify(string.format("Dispatch passed: %s", options.raw_command), vim.log.levels.INFO)
+
+        return
+    end
 
     vim.cmd("silent copen")
 
@@ -457,7 +471,7 @@ function M.run(options)
                     end
                 end
 
-                _P.finish(options, output)
+                _P.finish(options, output, code)
             end)
         end,
     })

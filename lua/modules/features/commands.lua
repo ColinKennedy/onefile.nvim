@@ -273,10 +273,9 @@ end
 ---
 local function _run_rg(directory, options)
     ---@type string[]
-    local command = { "Rg" }
-    vim.list_extend(command, options.fargs)
+    local command = vim.deepcopy(options.fargs)
     table.insert(command, directory)
-    vim.cmd(vim.fn.join(command, " "))
+    require("modules.utilities.core_helpers").run_ripgrep(command, { display_root = directory })
 end
 
 vim.api.nvim_create_user_command("Crg", function(options)

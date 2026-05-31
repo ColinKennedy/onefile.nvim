@@ -76,6 +76,45 @@ describe("modules.plugins.winbar", function()
         assert.equal("if thing", winbar.simplify_context_text("if thing { with [many] noisy(parts) }:"))
     end)
 
+    it("strips fallback class and function markers and prefixes typed contexts", function()
+        local core_helpers = require("modules.utilities.core_helpers")
+        local original_is_nerdfont_allowed = core_helpers.IS_NERDFONT_ALLOWED
+        core_helpers.IS_NERDFONT_ALLOWED = false
+
+        local buffer = make_buffer({
+            "class SomeClass:",
+            "    def some_method(self):",
+            "        return True",
+        })
+
+        vim.api.nvim_win_set_cursor(0, { 3, 0 })
+
+        assert.are.same({
+            "CC SomeClass",
+            "FF some_method",
+        }, winbar.get_indentation_scope_names(buffer, 3))
+
+        core_helpers.IS_NERDFONT_ALLOWED = original_is_nerdfont_allowed
+    end)
+
+    it("detects Tree-sitter class and function scope kinds", function()
+        assert.equal("class", winbar.get_treesitter_scope_kind({
+            type = function()
+                return "class_definition"
+            end,
+        }))
+        assert.equal("function", winbar.get_treesitter_scope_kind({
+            type = function()
+                return "function_definition"
+            end,
+        }))
+        assert.equal("function", winbar.get_treesitter_scope_kind({
+            type = function()
+                return "method_declaration"
+            end,
+        }))
+    end)
+
     it("keeps unmatched bracket text while removing matched bracket contents", function()
         assert.equal("call unfinished(", winbar.simplify_context_text("call unfinished("))
         assert.equal("call unmatched)", winbar.simplify_context_text("call unmatched)"))

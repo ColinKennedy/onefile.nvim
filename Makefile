@@ -10,6 +10,7 @@ else
 endif
 
 CONFIGURATION = .luarc.json
+ARGUMENTS ?=
 
 download-dependencies:
 	git clone git@github.com:Bilal2453/luvit-meta.git .dependencies/luvit-meta $(IGNORE_EXISTING)
@@ -20,7 +21,7 @@ llscheck: download-dependencies
 	VIMRUNTIME="`nvim --clean --headless --cmd 'lua io.write(os.getenv("VIMRUNTIME"))' --cmd 'quit'`" llscheck --configpath $(CONFIGURATION) .
 
 luacheck:
-	luacheck init.lua lua spec
+	luacheck $(ARGUMENTS) init.lua lua spec
 
 check-stylua:
 	stylua init.lua lua spec --color always --check

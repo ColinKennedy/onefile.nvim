@@ -1,5 +1,3 @@
-- Add :Dispatch support
-
 - `:Git diff` isn't showing anything. Fix
 
 - Fix CI/CD later - https://github.com/ColinKennedy/onefile.nvim/actions/runs/26374509626/job/77632334991

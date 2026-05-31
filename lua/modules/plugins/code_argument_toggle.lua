@@ -76,14 +76,28 @@ end
 local function _find_pair(lines, cursor)
     ---@type any[]
     local stack = {}
+    ---@type string?
+    local quote = nil
 
     for line_number, line in ipairs(lines) do
+        local escaping = false
+
         for column = 1, #line do
             local character = line:sub(column, column)
             ---@type {line: integer, column: integer}
             local position = { line = line_number, column = column - 1 }
 
-            if _OPEN_TO_CLOSE[character] then
+            if quote ~= nil then
+                if escaping then
+                    escaping = false
+                elseif character == "\\" then
+                    escaping = true
+                elseif character == quote then
+                    quote = nil
+                end
+            elseif character == '"' or character == "'" then
+                quote = character
+            elseif _OPEN_TO_CLOSE[character] then
                 table.insert(stack, {
                     open = position,
                     open_character = character,
@@ -149,11 +163,24 @@ local function _split_top_level_items(text)
     local items = {}
     local start_index = 1
     local depth = 0
+    ---@type string?
+    local quote = nil
+    local escaping = false
 
     for index = 1, #text do
         local character = text:sub(index, index)
 
-        if _OPEN_TO_CLOSE[character] then
+        if quote ~= nil then
+            if escaping then
+                escaping = false
+            elseif character == "\\" then
+                escaping = true
+            elseif character == quote then
+                quote = nil
+            end
+        elseif character == '"' or character == "'" then
+            quote = character
+        elseif _OPEN_TO_CLOSE[character] then
             depth = depth + 1
         elseif _CLOSE_TO_OPEN[character] then
             depth = depth - 1

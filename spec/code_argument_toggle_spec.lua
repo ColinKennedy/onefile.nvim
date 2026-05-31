@@ -97,6 +97,22 @@ describe("code argument toggle", function()
         assert.are.same({ "{foo: 1, bar: {baz: 2}, fizz: 3}" }, get_lines())
     end)
 
+    it("keeps quoted commas and bracket hints together when expanding braced options", function()
+        local line = '{ desc = "Run [m]ake [l]uacheck, parse its output, '
+            .. 'and show the result in a quickfix window.", silent = true }'
+
+        make_buffer({ line }, 1, 42)
+
+        code_argument_toggle.toggle()
+
+        assert.are.same({
+            "{",
+            '    desc = "Run [m]ake [l]uacheck, parse its output, and show the result in a quickfix window.",',
+            "    silent = true,",
+            "}",
+        }, get_lines())
+    end)
+
     it("targets the innermost containing wrapper", function()
         make_buffer({ "outer(foo, inner(bar, fizz), buzz)" }, 1, 18)
 

@@ -5,6 +5,43 @@ local _REPOSITORY_ROOT = { ".git" }
 local _REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
 table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
 
+--- Get the current Git repository root.
+---
+---@return string? # The Git repository root, if one was found.
+local function _get_git_repository_root()
+    local core_helpers = require("modules.utilities.core_helpers")
+    local result = vim.system(
+        { core_helpers._GIT_EXECUTABLE, "-C", vim.fn.getcwd(), "rev-parse", "--show-toplevel" },
+        { text = true }
+    ):wait()
+
+    if result.code ~= 0 then
+        return nil
+    end
+
+    local root = vim.trim(result.stdout or "")
+
+    if root == "" then
+        return nil
+    end
+
+    return root
+end
+
+--- Change Neovim's directory to the current Git repository root.
+local function _cd_to_git_repository_root()
+    local root = _get_git_repository_root()
+
+    if not root then
+        vim.notify("No Git repository root was found.", vim.log.levels.ERROR)
+
+        return
+    end
+
+    vim.cmd("silent cd " .. vim.fn.fnameescape(root))
+    vim.notify(string.format('cd\'ed to "%s"', root), vim.log.levels.INFO)
+end
+
 --- Notify that `command` cannot be run for the current buffer.
 ---
 ---@param command string The command name that failed.
@@ -287,6 +324,10 @@ end, {
 vim.api.nvim_create_user_command("Pcd", function()
     require("modules.utilities.core_helpers").cd_to_parent_project_root()
 end, { nargs = 0, desc = "From the [P]roject, [c]hange [d]irectory." })
+vim.api.nvim_create_user_command("Gcd", _cd_to_git_repository_root, {
+    desc = "From the [G]it repository, [c]hange [d]irectory.",
+    nargs = 0,
+})
 vim.api.nvim_create_user_command("BufferOnly", _buffer_only, {
     complete = _complete_buffer_only,
     desc = ":only, but window-aware",

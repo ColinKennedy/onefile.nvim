@@ -18,8 +18,6 @@ local core_helpers = require("modules.utilities.core_helpers")
 
 ---@alias _my.winbar.ScopeKind "class"|"function"
 
----@alias _my.winbar.ScopeKind "class"|"function"
-
 ---@type table<string, boolean>
 local _EXCLUDED_FILETYPES = {
     alpha = true,

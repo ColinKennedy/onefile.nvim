@@ -82,22 +82,28 @@ describe("selector UI", function()
     local original_lines
     local original_columns
     local original_scrolloff
+    local original_showmode
 
     before_each(function()
         original_lines = vim.o.lines
         original_columns = vim.o.columns
         original_scrolloff = vim.o.scrolloff
+        original_showmode = vim.o.showmode
         vim.o.lines = 24
         vim.o.columns = 80
         vim.o.scrolloff = 999
+        vim.o.showmode = false
     end)
 
     after_each(function()
-        vim.cmd.stopinsert()
+        pcall(function()
+            vim.cmd("silent! stopinsert")
+        end)
         close_floating_windows()
         vim.o.lines = original_lines
         vim.o.columns = original_columns
         vim.o.scrolloff = original_scrolloff
+        vim.o.showmode = original_showmode
     end)
 
     it("keeps the selected row centered after it reaches the middle of the view", function()

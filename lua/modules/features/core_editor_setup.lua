@@ -18,6 +18,38 @@ local function _normalize_display_path(path)
     return path
 end
 
+--- Normalize preview renderer output for `nvim_buf_set_lines`.
+---
+--- Neovim rejects replacement-list items containing newlines, so preview
+--- renderers may return either true line arrays or multiline strings.
+---@param lines string[]|string|nil Preview lines to normalize.
+---@return string[] # Lines safe to pass to `nvim_buf_set_lines`.
+local function _normalize_preview_lines(lines)
+    if type(lines) == "string" then
+        lines = { lines }
+    elseif type(lines) ~= "table" then
+        lines = { "" }
+    end
+
+    ---@type string[]
+    local output = {}
+
+    for _, line in ipairs(lines) do
+        line = tostring(line or "")
+        line = line:gsub("\r\n", "\n"):gsub("\r", "\n")
+
+        for _, part in ipairs(vim.split(line, "\n", { plain = true })) do
+            table.insert(output, part)
+        end
+    end
+
+    if #output == 0 then
+        table.insert(output, "")
+    end
+
+    return output
+end
+
 --- Abbreviate a single directory segment for the selector header.
 ---
 ---@param segment string A directory name.
@@ -625,7 +657,7 @@ function M.select_from_options(values, options)
         local previous_view = should_preserve_view and vim.api.nvim_win_call(preview_window, vim.fn.winsaveview) or nil
 
         vim.bo[preview_buffer].modifiable = true
-        vim.api.nvim_buf_set_lines(preview_buffer, 0, -1, false, content.lines)
+        vim.api.nvim_buf_set_lines(preview_buffer, 0, -1, false, _normalize_preview_lines(content.lines))
         vim.bo[preview_buffer].buftype = content.buftype or "nofile"
         vim.bo[preview_buffer].filetype = content.filetype or ""
         vim.bo[preview_buffer].modifiable = false

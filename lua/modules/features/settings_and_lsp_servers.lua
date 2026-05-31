@@ -67,6 +67,9 @@ pcall(function()
     vim.o.scrolloffpad = 1
 end)
 
+-- Allow local project .nvim.lua files to run on-Neovim-startup.
+vim.o.exrc = true
+
 ---------- Settings [End] ----------
 
 -- NOTE: If you need to override the shell, use $NEOVIM_SHELL_COMMAND

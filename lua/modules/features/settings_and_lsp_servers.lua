@@ -82,7 +82,7 @@ vim.o.exrc = true
 vim.opt.shell = os.getenv("NEOVIM_SHELL_COMMAND") or vim.opt.shell
 
 ---@type _my.lsp.ServerDefinition[]
-_P.servers = {
+M.servers = {
     {
         name = "ty",
         config = {
@@ -93,7 +93,7 @@ _P.servers = {
     {
         name = "lua_ls",
         config = function()
-            local paths = vim.tbl_deep_extend("force", {}, require("modules.utilities.core_helpers").LUA_ROOT_PATHS)
+            local paths = vim.tbl_deep_extend("force", {}, require("modules.utilities.core_helpers")._LUA_ROOT_PATHS)
             table.insert(paths, ".git")
 
             return {
@@ -109,15 +109,7 @@ _P.servers = {
 ---
 ---@param config_lsp? fun(name: string, config: vim.lsp.Config): nil Test seam for `vim.lsp.config`.
 ---@param enable_lsp? fun(name: string): nil Test seam for `vim.lsp.enable`.
-function M._configure_lsp_servers(config_lsp, enable_lsp)
-    if
-        not config_lsp
-        and not enable_lsp
-        and (type(vim.lsp.config) ~= "function" or type(vim.lsp.enable) ~= "function")
-    then
-        return
-    end
-
+function M.configure_lsp_servers(config_lsp, enable_lsp)
     config_lsp = config_lsp or function(name, config)
         vim.lsp.config(name, config)
     end
@@ -125,7 +117,7 @@ function M._configure_lsp_servers(config_lsp, enable_lsp)
         vim.lsp.enable(name)
     end
 
-    for _, server in ipairs(_P.servers) do
+    for _, server in ipairs(M.servers) do
         ---@type vim.lsp.Config
         local config
 
@@ -140,21 +132,6 @@ function M._configure_lsp_servers(config_lsp, enable_lsp)
     end
 end
 
---- Check if Neovim is running the Busted test harness.
----
----@return boolean # If this process is running Busted, return `true`.
-function _P.is_running_busted()
-    if vim.g.my_is_running_busted then
-        return true
-    end
-
-    local arguments = _G.arg or {}
-
-    return tostring(arguments[0] or ""):match("busted") ~= nil
-end
-
-if not _P.is_running_busted() then
-    M._configure_lsp_servers()
-end
+M.configure_lsp_servers()
 
 return M

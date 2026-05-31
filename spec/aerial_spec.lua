@@ -87,6 +87,30 @@ local function close_aerial_windows()
     end
 end
 
+--- Flatten symbol names in depth-first order.
+---
+---@param symbols _my.aerial.Symbol[] Symbols to inspect.
+---@return string[] # All symbol names.
+local function flatten_symbol_names(symbols)
+    ---@type string[]
+    local names = {}
+
+    ---@param symbol _my.aerial.Symbol
+    local function visit(symbol)
+        table.insert(names, symbol.name)
+
+        for _, child in ipairs(symbol.children) do
+            visit(child)
+        end
+    end
+
+    for _, symbol in ipairs(symbols) do
+        visit(symbol)
+    end
+
+    return names
+end
+
 --- Find the first visible aerial window.
 ---
 ---@return integer? # The aerial window, if visible.
@@ -186,6 +210,80 @@ describe("modules.plugins.aerial", function()
         assert.equal("function", symbols[1].kind)
         assert.equal("def function", symbols[1].name)
         assert.equal(5, symbols[1].line)
+    end)
+
+    it("finds Python fallback function names across complicated signature permutations", function()
+        local buffer = make_source_buffer({
+            "# Module comment should not become a symbol.",
+            "def single_line(a, b=1, *, flag: bool = False) -> str:",
+            '    """Single-line function docstring."""',
+            "    return str(a)",
+            "",
+            "@decorator",
+            "@decorator_with_args(",
+            '    name="value",',
+            "    retries=3,",
+            ")",
+            "async def decorated_async(",
+            "    client: Client,",
+            "    payload: Mapping[str, Any] | None = None,",
+            ") -> Response:",
+            "    # Inline body comment.",
+            "    return await client.send(payload)",
+            "",
+            "class Handler:",
+            "    @classmethod",
+            "    def from_config(",
+            "        cls,",
+            "        config: Config,",
+            "        *,",
+            "        strict: bool = True,",
+            "    ) -> 'Handler':",
+            "        return cls(config)",
+            "",
+            "    @property",
+            "    def display_name(self) -> str:",
+            "        return self.name",
+            "",
+            "    async def __call__(",
+            "        self,",
+            "        request: Request,",
+            "        /,",
+            "        *args: object,",
+            "        timeout: float | None = None,",
+            "        **kwargs: object,",
+            "    ) -> Result:",
+            '        """Multiline call implementation."""',
+            "        return await self.handle(request, *args, **kwargs)",
+            "",
+            "def identity[T](value: T) -> T:",
+            "    return value",
+            "",
+            "def continuation_style(",
+            "    first: Callable[[int], str],",
+            "    second: tuple[str, ...] = (",
+            '        "alpha",',
+            '        "beta",',
+            "    ),",
+            ") -> None:",
+            "    pass",
+        })
+
+        vim.bo[buffer].filetype = "python"
+        vim.bo[buffer].commentstring = "# %s"
+
+        local names = flatten_symbol_names(aerial.get_indentation_symbols(buffer))
+
+        assert.are.same({
+            "def single_line",
+            "async def decorated_async",
+            "class Handler",
+            "def from_config",
+            "def display_name",
+            "async def __call__",
+            "def identity",
+            "def continuation_style",
+        }, names)
     end)
 
     it("uses Python fallback symbols for py files even when filetype is empty", function()

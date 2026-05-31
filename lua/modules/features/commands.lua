@@ -11,7 +11,7 @@ table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
 local function _get_git_repository_root()
     local core_helpers = require("modules.utilities.core_helpers")
     local result = vim.system(
-        { core_helpers.GIT_EXECUTABLE, "-C", vim.fn.getcwd(), "rev-parse", "--show-toplevel" },
+        { core_helpers._GIT_EXECUTABLE, "-C", vim.fn.getcwd(), "rev-parse", "--show-toplevel" },
         { text = true }
     ):wait()
 
@@ -327,6 +327,10 @@ end, {
 vim.api.nvim_create_user_command("Pcd", function()
     require("modules.utilities.core_helpers").cd_to_parent_project_root()
 end, { nargs = 0, desc = "From the [P]roject, [c]hange [d]irectory." })
+vim.api.nvim_create_user_command("Gcd", _cd_to_git_repository_root, {
+    desc = "From the [G]it repository, [c]hange [d]irectory.",
+    nargs = 0,
+})
 vim.api.nvim_create_user_command("BufferOnly", _buffer_only, {
     complete = _complete_buffer_only,
     desc = ":only, but window-aware",

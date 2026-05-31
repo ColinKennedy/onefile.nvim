@@ -20,6 +20,19 @@ local function make_directory()
     return root
 end
 
+--- Run a Git command inside `root`.
+---
+---@param root string The Git repository root.
+---@param arguments string[] The Git command arguments.
+local function run_git(root, arguments)
+    local command = { "git", "-C", root }
+    vim.list_extend(command, arguments)
+
+    local result = vim.system(command, { text = true }):wait()
+
+    assert.equal(0, result.code, result.stderr)
+end
+
 --- Edit `path` in the current window.
 ---
 ---@param path string The file path to edit.
@@ -144,6 +157,38 @@ describe("file commands", function()
         local command = vim.api.nvim_get_commands({ builtin = false }).BufferOnly
 
         assert.equal(":only, but window-aware", command.definition)
+    end)
+
+    it("changes directory to the Git repository root with Gcd", function()
+        local original_cwd = vim.fn.getcwd()
+        local root = make_directory()
+        local nested = vim.fs.joinpath(root, "nested", "child")
+
+        assert.equal(1, vim.fn.mkdir(nested, "p"))
+        run_git(root, { "init" })
+        vim.cmd.cd(nested)
+
+        vim.cmd.Gcd()
+
+        assert.equal(vim.fs.normalize(root), vim.fs.normalize(vim.fn.getcwd()))
+        vim.cmd.cd(original_cwd)
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("notifies when Gcd is used outside of a Git repository", function()
+        local original_cwd = vim.fn.getcwd()
+        local root = make_directory()
+
+        vim.cmd.cd(root)
+
+        local notifications = capture_notifications(function()
+            vim.cmd.Gcd()
+        end)
+
+        assert.equal(vim.log.levels.ERROR, notifications[1].level)
+        assert.matches("No Git repository root", notifications[1].message)
+        vim.cmd.cd(original_cwd)
+        vim.fn.delete(root, "rf")
     end)
 
     it("deletes the current file and buffer with Delete", function()

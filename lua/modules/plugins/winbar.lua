@@ -9,6 +9,7 @@ local core_helpers = require("modules.utilities.core_helpers")
 ---@field start_column integer The first zero-based column in the scope.
 ---@field end_row integer The final zero-based row in the scope.
 ---@field end_column integer The final zero-based column in the scope.
+---@field kind _my.winbar.ScopeKind? The scope kind, when known.
 
 ---@alias _my.winbar.ScopeKind "class"|"function"
 
@@ -357,6 +358,24 @@ function _P.get_match_scope(match, query)
     return nil
 end
 
+--- Get the winbar kind represented by a Tree-sitter scope node.
+---
+---@param node TSNode The Tree-sitter scope node.
+---@return _my.winbar.ScopeKind? # The matching winbar kind, if known.
+function _P.get_treesitter_scope_kind(node)
+    local node_type = node:type()
+
+    if node_type:find("class", 1, true) then
+        return "class"
+    end
+
+    if node_type:find("function", 1, true) or node_type:find("method", 1, true) then
+        return "function"
+    end
+
+    return nil
+end
+
 ---@param buffer integer
 ---@return string[]
 function _P.get_treesitter_scope_names(buffer)
@@ -407,6 +426,7 @@ function _P.get_treesitter_scope_names(buffer)
                 table.insert(scopes, {
                     end_column = end_column,
                     end_row = end_row,
+                    kind = _P.get_treesitter_scope_kind(scope),
                     name = name,
                     start_column = start_column,
                     start_row = start_row,
@@ -421,7 +441,13 @@ function _P.get_treesitter_scope_names(buffer)
     local names = {}
 
     for _, scope in ipairs(scopes) do
-        table.insert(names, scope.name)
+        local name = scope.name
+
+        if scope.kind then
+            name = _P.get_kind_prefix(scope.kind) .. " " .. name
+        end
+
+        table.insert(names, name)
     end
 
     return names

@@ -77,83 +77,55 @@ vim.opt.shell = os.getenv("NEOVIM_SHELL_COMMAND") or vim.opt.shell
 
 ---@type _my.lsp.ServerDefinition[]
 M.servers = {
-    -- {
-    --     name = "basedpyright",
-    --     filetypes = "python",
-    --     callback = function(event)
-    --         local command = "basedpyright-langserver"
-    --
-    --         if vim.fn.executable(command) ~= 1 then
-    --             vim.notify(
-    --                 string.format('Cannot load LSP. There is no "%s" executable.', command),
-    --                 vim.log.levels.ERROR
-    --             )
-    --
-    --             return
-    --         end
-    --
-    --         vim.lsp.start({
-    --             name = "basedpyright",
-    --             cmd = { command, "--stdio" },
-    --             settings = {
-    --                 basedpyright = {
-    --                     disableOrganizeImports = true,
-    --                     analysis = {
-    --                         typeCheckingMode = "basic",
-    --                     },
-    --                 },
-    --             },
-    --         }, { bufnr = event.buf })
-    --     end,
-    -- },
     {
         name = "ty",
-        filetypes = "python",
-        callback = function(event)
-            local command = "ty"
-
-            if vim.fn.executable(command) ~= 1 then
-                vim.notify(
-                    string.format('Cannot load LSP. There is no "%s" executable.', command),
-                    vim.log.levels.ERROR
-                )
-
-                return
-            end
-
-            vim.lsp.start({
-                name = "ty",
-                cmd = { command, "server" },
-            }, { bufnr = event.buf })
-        end,
+        config = {
+            cmd = { "ty", "server" },
+            filetypes = { "python" },
+        },
     },
     {
         name = "lua_ls",
-        filetypes = { "lua" },
-        callback = function(event)
+        config = function()
             local paths = vim.tbl_deep_extend("force", {}, require("modules.utilities.core_helpers")._LUA_ROOT_PATHS)
             table.insert(paths, ".git")
 
-            local command = "lua-language-server"
-
-            if vim.fn.executable(command) ~= 1 then
-                vim.schedule(function()
-                    vim.notify(
-                        string.format('Cannot load LSP. There is no "%s" executable.', command),
-                        vim.log.levels.ERROR
-                    )
-                end)
-
-                return
-            end
-
-            vim.lsp.start({
-                cmd = { command },
-                name = "lua-language-server",
-                root_dir = vim.fs.root(0, paths),
-            }, { bufnr = event.buf })
+            return {
+                cmd = { "lua-language-server" },
+                filetypes = { "lua" },
+                root_markers = paths,
+            }
         end,
     },
 }
+
+--- Configure and enable all built-in LSP servers.
+---
+---@param config_lsp? fun(name: string, config: vim.lsp.Config): nil Test seam for `vim.lsp.config`.
+---@param enable_lsp? fun(name: string): nil Test seam for `vim.lsp.enable`.
+function M.configure_lsp_servers(config_lsp, enable_lsp)
+    config_lsp = config_lsp or function(name, config)
+        vim.lsp.config(name, config)
+    end
+    enable_lsp = enable_lsp or function(name)
+        vim.lsp.enable(name)
+    end
+
+    for _, server in ipairs(M.servers) do
+        ---@type vim.lsp.Config
+        local config
+
+        if type(server.config) == "function" then
+            config = (server.config --[[@as fun(): vim.lsp.Config]])()
+        else
+            config = server.config --[[@as vim.lsp.Config]]
+        end
+
+        config_lsp(server.name, config)
+        enable_lsp(server.name)
+    end
+end
+
+M.configure_lsp_servers()
 
 return M

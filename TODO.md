@@ -17,12 +17,6 @@
 
 - Make an AI write my commit messages for me, somehow. SLM?
 
-- There's probably greater opportunity for defer-evalling in the codebase. For
-  example, each module's private functions don't need to be defined in the same
-  modules as the public functions. They could be moved and defer-eval required
-  into the relevant spots. This could make startup time faster, but by how much
-  I don't know
-
 - Update my LSp setup to use config + start
  - add ty LSP support
 

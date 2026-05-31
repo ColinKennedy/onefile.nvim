@@ -275,8 +275,7 @@ end
 ---@param options {fargs: string[]} User-provided arguments to add to the `rg` command.
 local function _run_rg(directory, options)
     ---@type string[]
-    local command = {}
-    vim.list_extend(command, options.fargs)
+    local command = vim.deepcopy(options.fargs)
     table.insert(command, directory)
     require("modules.utilities.core_helpers").run_ripgrep(command, { display_root = directory })
 end

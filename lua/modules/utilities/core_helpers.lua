@@ -1608,16 +1608,43 @@ function _P.is_ripgrep_filesystem_warning(stderr)
     return saw_warning
 end
 
+---@class _my.ripgrep.Options
+---@field display_root string? Directory that quickfix paths should be displayed relative to.
+
+--- Get an absolute path for a ripgrep result path.
+---
+---@param path string A path printed by ripgrep.
+---@return string # The absolute path.
+function _P.get_ripgrep_absolute_path(path)
+    if vim.fn.fnamemodify(path, ":p") == path then
+        return vim.fs.normalize(path)
+    end
+
+    return vim.fs.normalize(vim.fs.joinpath(vim.fn.getcwd(), path))
+end
+
+--- Get the display path for a ripgrep quickfix entry.
+---
+---@param path string The absolute result path.
+---@param display_root string? Directory that quickfix paths should be displayed relative to.
+---@return string # The display path.
+function _P.get_ripgrep_display_path(path, display_root)
+    if not display_root then
+        return _P.cleanup_path(path)
+    end
+
+    local relative = vim.fs.relpath(vim.fs.normalize(display_root), path)
+
+    return relative or _P.cleanup_path(path)
+end
+
 --- Run raw ripgrep `command`.
 ---
 ---@param command string[] A raw ripgrep command to run.
 ---@param options _my.ripgrep.Options? Options for quickfix display.
 ---
-function M.run_ripgrep(command, options)
+function _P.run_ripgrep(command, options)
     options = options or {}
-    local cwd = vim.fn.getcwd()
-    local display_root = options.display_root or cwd
-
     if _CURRENT_RIPGREP_COMMAND then
         _CURRENT_RIPGREP_COMMAND = nil
         vim.notify("Search interrupted. Please try your search again.", vim.log.levels.WARN)
@@ -1677,13 +1704,13 @@ function M.run_ripgrep(command, options)
         for line in vim.gsplit(stdout, "\n") do
             local filename, matched_line, column, text = _P.parse_ripgrep_vimgrep_line(line)
 
-            if filename and matched_line and column and text then
-                local path = _P.get_ripgrep_absolute_path(filename, cwd)
+            if filename and line and column and text then
+                local path = _P.get_ripgrep_absolute_path(filename)
 
                 table.insert(entries, {
                     filename = path,
-                    module = _P.get_ripgrep_display_path(path, display_root),
-                    lnum = tonumber(matched_line),
+                    module = _P.get_ripgrep_display_path(path, options.display_root),
+                    lnum = tonumber(line),
                     col = tonumber(column),
                     text = text,
                 })
@@ -1706,6 +1733,14 @@ function M.run_ripgrep(command, options)
     end)
 
     _CURRENT_RIPGREP_COMMAND = process.pid
+end
+
+--- Run raw ripgrep `command`.
+---
+---@param command string[] A raw ripgrep command to run.
+---@param options _my.ripgrep.Options? Options for quickfix display.
+function M.run_ripgrep(command, options)
+    _P.run_ripgrep(command, options)
 end
 
 --- Run `ripgrep` using Neovim.

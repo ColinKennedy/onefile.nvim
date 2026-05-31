@@ -456,17 +456,12 @@ end
 ---@param lines string[] The raw output lines.
 ---@param code integer? The command exit code.
 function _P.finish(options, lines, code)
-    ---@type integer?
     local first_valid_index = nil
     ---@type vim.quickfix.entry[]
     local items = {}
 
     _P.with_compiler(options.compiler, function()
         items = _P.lines_to_quickfix(lines)
-
-        if not options.allow_duplicates then
-            items = _P.remove_consecutive_duplicates(items)
-        end
 
         for index, item in ipairs(items) do
             if item.valid == 1 then
@@ -477,20 +472,17 @@ function _P.finish(options, lines, code)
     end)
 
     if code == 0 and not first_valid_index then
-        _P.clear_previous_results(options)
+        vim.fn.setqflist({}, "r", {
+            title = "Dispatch: " .. options.raw_command,
+            items = {},
+        })
+        vim.cmd("silent! cclose")
         vim.notify(string.format("Dispatch passed: %s", options.raw_command), vim.log.levels.INFO)
 
         return
     end
 
-    vim.fn.setqflist({}, "r", {
-        title = _P.get_quickfix_title(options),
-        items = items,
-    })
-
-    require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
-        vim.cmd("silent copen")
-    end)
+    vim.cmd("silent copen")
 
     if options.jump_first and first_valid_index then
         require("modules.utilities.core_helpers").with_file_messages_suppressed(function()

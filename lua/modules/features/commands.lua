@@ -122,6 +122,72 @@ local function _move_current_file(options)
     end
 end
 
+--- Close non-terminal sibling windows and delete every unprotected buffer.
+---
+---@param options vim.api.keyset.create_user_command.command_args The command options.
+local function _buffer_only(options)
+    local include_terminals = false
+
+    if options.args ~= "" then
+        if options.args ~= "--all" then
+            vim.notify(string.format('Unknown BufferOnly argument "%s".', options.args), vim.log.levels.ERROR)
+
+            return
+        end
+
+        include_terminals = true
+    end
+
+    local current_window = vim.api.nvim_get_current_win()
+    local current_buffer = vim.api.nvim_get_current_buf()
+    ---@type table<integer, boolean>
+    local protected_buffers = { [current_buffer] = true }
+
+    for _, window in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        local buffer = vim.api.nvim_win_get_buf(window)
+        local is_terminal = vim.bo[buffer].buftype == "terminal"
+
+        if window ~= current_window then
+            if is_terminal then
+                protected_buffers[buffer] = true
+            else
+                pcall(vim.api.nvim_win_close, window, true)
+            end
+        end
+    end
+
+    if not include_terminals then
+        for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].buftype == "terminal" then
+                protected_buffers[buffer] = true
+            end
+        end
+    end
+
+    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].buflisted and not protected_buffers[buffer] then
+            local is_terminal = vim.bo[buffer].buftype == "terminal"
+            local ok, error_message = pcall(vim.api.nvim_buf_delete, buffer, { force = is_terminal })
+
+            if not ok then
+                vim.notify(string.format("Could not delete buffer %d: %s", buffer, error_message), vim.log.levels.WARN)
+            end
+        end
+    end
+end
+
+--- Complete :BufferOnly arguments.
+---
+---@param argument_lead string The current argument fragment.
+---@return string[] # Matching arguments.
+local function _complete_buffer_only(argument_lead)
+    if ("--all"):sub(1, #argument_lead) == argument_lead then
+        return { "--all" }
+    end
+
+    return {}
+end
+
 --- Send command-line text to an adjacent tmux pane.
 ---
 ---@param options vim.api.keyset.create_user_command.command_args The command options.
@@ -221,6 +287,11 @@ end, {
 vim.api.nvim_create_user_command("Pcd", function()
     require("modules.utilities.core_helpers").cd_to_parent_project_root()
 end, { nargs = 0, desc = "From the [P]roject, [c]hange [d]irectory." })
+vim.api.nvim_create_user_command("BufferOnly", _buffer_only, {
+    complete = _complete_buffer_only,
+    desc = ":only, but window-aware",
+    nargs = "?",
+})
 vim.api.nvim_create_user_command("Delete", _delete_current_file, {
     nargs = 0,
     desc = "Delete the current file and its buffer.",

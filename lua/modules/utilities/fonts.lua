@@ -7,6 +7,8 @@ M.Icon = {
     aerial_class = "aerial_class",
     aerial_fallback = "aerial_fallback",
     aerial_function = "aerial_function",
+    winbar_class = "winbar_class",
+    winbar_function = "winbar_function",
 }
 
 ---@type table<string, string>
@@ -14,6 +16,8 @@ local _ASCII_ICONS = {
     [M.Icon.aerial_class] = "CC",
     [M.Icon.aerial_fallback] = "--",
     [M.Icon.aerial_function] = "FF",
+    [M.Icon.winbar_class] = "CC",
+    [M.Icon.winbar_function] = "FF",
 }
 
 ---@type table<string, string>
@@ -21,6 +25,8 @@ local _NERDFONT_ICONS = {
     [M.Icon.aerial_class] = "󰠱",
     [M.Icon.aerial_fallback] = "--",
     [M.Icon.aerial_function] = "󰊕",
+    [M.Icon.winbar_class] = "󰠱",
+    [M.Icon.winbar_function] = "󰊕",
 }
 
 --- Check whether Nerd Font icons are allowed in this configuration.

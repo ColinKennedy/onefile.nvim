@@ -10,6 +10,8 @@ local core_helpers = require("modules.utilities.core_helpers")
 ---@field end_row integer The final zero-based row in the scope.
 ---@field end_column integer The final zero-based column in the scope.
 
+---@alias _my.winbar.ScopeKind "class"|"function"
+
 ---@type table<string, boolean>
 local _EXCLUDED_FILETYPES = {
     alpha = true,
@@ -57,6 +59,20 @@ if core_helpers.IS_NERDFONT_ALLOWED then
     _ICONS.file_icon_default = ""
     _ICONS.lock_icon = ""
     _ICONS.separator = ">"
+end
+
+--- Get the visible prefix for a winbar context kind.
+---
+---@param kind _my.winbar.ScopeKind The context kind.
+---@return string # The configured prefix text.
+function _P.get_kind_prefix(kind)
+    local fonts = require("modules.utilities.fonts")
+
+    if kind == "class" then
+        return fonts.get_icon(fonts.Icon.winbar_class)
+    end
+
+    return fonts.get_icon(fonts.Icon.winbar_function)
 end
 
 --- Escape `text` for use inside a statusline-like option.
@@ -495,6 +511,48 @@ function _P.simplify_context_text(text)
     return cleaned
 end
 
+--- Strip common class/function definition markers from fallback context text.
+---
+---@param text string The simplified context text.
+---@return string text The text without the leading definition marker.
+---@return _my.winbar.ScopeKind? kind The detected context kind, if any.
+function _P.strip_context_definition_marker(text)
+    local class_name = text:match("^class%s+([%w_][%w_]*)")
+
+    if class_name then
+        return class_name, "class"
+    end
+
+    local function_name = text:match("^async%s+def%s+([%w_][%w_]*)") or text:match("^def%s+([%w_][%w_]*)")
+
+    if function_name then
+        return function_name, "function"
+    end
+
+    function_name = text:match("^local%s+function%s+([%w_%.:][%w_%.:]*)")
+        or text:match("^function%s+([%w_%.:][%w_%.:]*)")
+
+    if function_name then
+        return function_name, "function"
+    end
+
+    return text, nil
+end
+
+--- Simplify a context section and prefix it with its inferred type.
+---
+---@param text string The raw context text.
+---@return string # The display-ready context text.
+function _P.simplify_typed_context_text(text)
+    local cleaned, kind = _P.strip_context_definition_marker(_P.simplify_context_text(text))
+
+    if kind then
+        return _P.get_kind_prefix(kind) .. " " .. cleaned
+    end
+
+    return cleaned
+end
+
 --- Get the indentation level of `text`.
 ---
 ---@param text string The line text to inspect.
@@ -560,7 +618,7 @@ function _P.get_indentation_scope_names(buffer, row)
             local indent = _P.get_line_indent(line, tabstop)
 
             if indent < maximum_indent then
-                local name = _P.simplify_context_text(line)
+                local name = _P.simplify_typed_context_text(line)
 
                 if name ~= "" then
                     table.insert(names, 1, name)

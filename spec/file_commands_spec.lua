@@ -32,6 +32,20 @@ local function edit_file(path)
     vim.api.nvim_set_current_buf(buffer)
 end
 
+--- Create a real terminal buffer for command tests.
+---
+---@return integer # The terminal buffer.
+local function make_terminal_buffer()
+    local original = vim.api.nvim_get_current_buf()
+    local buffer = vim.api.nvim_create_buf(true, true)
+
+    vim.api.nvim_set_current_buf(buffer)
+    vim.api.nvim_open_term(buffer, {})
+    vim.api.nvim_set_current_buf(original)
+
+    return buffer
+end
+
 --- Capture vim.notify calls while `callback` runs.
 ---
 ---@param callback fun(): nil The function to run.
@@ -59,6 +73,77 @@ end
 describe("file commands", function()
     after_each(function()
         vim.cmd.enew({ bang = true })
+    end)
+
+    it("deletes hidden non-terminal buffers with BufferOnly", function()
+        local current = vim.api.nvim_create_buf(true, true)
+        local hidden = vim.api.nvim_create_buf(true, true)
+        local terminal = make_terminal_buffer()
+        vim.api.nvim_set_current_buf(current)
+
+        vim.cmd.BufferOnly()
+
+        assert.True(vim.api.nvim_buf_is_valid(current))
+        assert.False(vim.api.nvim_buf_is_valid(hidden))
+        assert.True(vim.api.nvim_buf_is_valid(terminal))
+        vim.api.nvim_buf_delete(terminal, { force = true })
+    end)
+
+    it("deletes hidden terminal buffers with BufferOnly all", function()
+        local current = vim.api.nvim_create_buf(true, true)
+        local terminal = make_terminal_buffer()
+        vim.api.nvim_set_current_buf(current)
+
+        vim.cmd("BufferOnly --all")
+
+        assert.True(vim.api.nvim_buf_is_valid(current))
+        assert.False(vim.api.nvim_buf_is_valid(terminal))
+    end)
+
+    it("closes non-terminal windows and deletes their buffers with BufferOnly", function()
+        local current = vim.api.nvim_create_buf(true, true)
+        local sibling = vim.api.nvim_create_buf(true, true)
+        local hidden = vim.api.nvim_create_buf(true, true)
+
+        vim.api.nvim_set_current_buf(current)
+        vim.cmd.vsplit()
+        local sibling_window = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(sibling_window, sibling)
+        vim.cmd.wincmd("p")
+
+        vim.cmd.BufferOnly()
+
+        assert.True(vim.api.nvim_buf_is_valid(current))
+        assert.False(vim.api.nvim_buf_is_valid(sibling))
+        assert.False(vim.api.nvim_buf_is_valid(hidden))
+        assert.False(vim.api.nvim_win_is_valid(sibling_window))
+        assert.equal(current, vim.api.nvim_get_current_buf())
+    end)
+
+    it("keeps terminal windows and buffers with BufferOnly", function()
+        local current = vim.api.nvim_create_buf(true, true)
+        local terminal = make_terminal_buffer()
+
+        vim.api.nvim_set_current_buf(current)
+        vim.cmd.vsplit()
+        local terminal_window = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(terminal_window, terminal)
+        vim.cmd.wincmd("p")
+
+        vim.cmd.BufferOnly()
+
+        assert.True(vim.api.nvim_buf_is_valid(current))
+        assert.True(vim.api.nvim_buf_is_valid(terminal))
+        assert.True(vim.api.nvim_win_is_valid(terminal_window))
+
+        vim.api.nvim_win_close(terminal_window, true)
+        vim.api.nvim_buf_delete(terminal, { force = true })
+    end)
+
+    it("describes BufferOnly as window-aware only", function()
+        local command = vim.api.nvim_get_commands({ builtin = false }).BufferOnly
+
+        assert.equal(":only, but window-aware", command.definition)
     end)
 
     it("deletes the current file and buffer with Delete", function()

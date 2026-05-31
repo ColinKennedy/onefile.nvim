@@ -64,7 +64,15 @@ end
 ---    also make a VCS-root session file too, if needed.
 ---
 function _P.save_session(session)
+    pcall(function()
+        require("modules.plugins.toggle_terminal").save_terminal_state()
+    end)
+
     vim.cmd("mksession! " .. session)
+
+    pcall(function()
+        require("modules.plugins.toggle_terminal").append_session_state(session)
+    end)
 
     local path = _P.get_session_branch_path(session)
 

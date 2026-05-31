@@ -60,6 +60,62 @@ describe("modules.plugins.toggle_terminal", function()
         end
     end)
 
+    it("restores a saved terminal-normal mode without entering terminal insert", function()
+        press_toggle_terminal()
+
+        assert.True(vim.wait(1000, function()
+            return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
+        end, 20))
+
+        local toggle_terminal = require("modules.plugins.toggle_terminal")
+        local terminal_buffer = vim.api.nvim_get_current_buf()
+        local terminal_name = vim.api.nvim_buf_get_name(terminal_buffer)
+
+        vim.cmd.stopinsert()
+        toggle_terminal.restore_session_modes({ [terminal_name] = "normal" })
+        toggle_terminal._P.handle_term_enter(terminal_buffer)
+
+        assert.equal(terminal_buffer, vim.api.nvim_get_current_buf())
+        assert.equal("n", vim.fn.mode())
+
+        for _, window in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            if vim.api.nvim_win_get_buf(window) == terminal_buffer then
+                vim.api.nvim_win_close(window, true)
+            end
+        end
+    end)
+
+    it("writes terminal-normal mode into appended session state", function()
+        press_toggle_terminal()
+
+        assert.True(vim.wait(1000, function()
+            return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
+        end, 20))
+
+        local toggle_terminal = require("modules.plugins.toggle_terminal")
+        local terminal_buffer = vim.api.nvim_get_current_buf()
+        local terminal_name = vim.api.nvim_buf_get_name(terminal_buffer)
+        local session = vim.fn.tempname()
+
+        vim.cmd.stopinsert()
+        toggle_terminal.save_terminal_state()
+        toggle_terminal.append_session_state(session)
+
+        local lines = table.concat(vim.fn.readfile(session), "\n")
+
+        assert.is_not_nil(lines:find("restore_session_modes", 1, true))
+        assert.is_not_nil(lines:find(terminal_name, 1, true))
+        assert.is_not_nil(lines:find('"normal"', 1, true))
+
+        for _, window in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            if vim.api.nvim_win_get_buf(window) == terminal_buffer then
+                vim.api.nvim_win_close(window, true)
+            end
+        end
+
+        vim.fn.delete(session)
+    end)
+
     it("can open, close, and reopen the terminal mapping", function()
         local shortmess = vim.o.shortmess
 

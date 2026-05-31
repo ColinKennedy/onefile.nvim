@@ -20,6 +20,9 @@ local _STARTING_MODE = _Mode.insert -- NOTE: Start off in insert mode
 
 local _IS_VIM_ENTERED = false
 local _DEFAULT_SHELL_COMMAND = nil
+local _TERMINAL_MODE_VARIABLE = "_toggle_terminal_mode"
+---@type table<string, string>
+local _SESSION_TERMINAL_MODES = {}
 
 --- Check if `buffer` is shown to the user.
 ---
@@ -143,6 +146,52 @@ local function _suggest_name(name)
     return current
 end
 
+--- Check whether `mode` is a tracked toggle-terminal mode.
+---
+---@param mode any The mode to inspect.
+---@return boolean # Whether `mode` can be stored for a toggle terminal.
+local function _is_valid_mode(mode)
+    return mode == _Mode.insert or mode == _Mode.normal or mode == _Mode.unknown
+end
+
+--- Read the persisted terminal mode for `buffer`.
+---
+---@param buffer integer The terminal buffer to inspect.
+---@return string # The terminal mode to restore.
+local function _get_buffer_mode(buffer)
+    local mode = vim.b[buffer][_TERMINAL_MODE_VARIABLE]
+
+    if _is_valid_mode(mode) then
+        return mode
+    end
+
+    mode = _SESSION_TERMINAL_MODES[vim.api.nvim_buf_get_name(buffer)]
+
+    if _is_valid_mode(mode) then
+        return mode
+    end
+
+    return _STARTING_MODE
+end
+
+--- Store the latest known mode for `buffer`.
+---
+---@param buffer integer The terminal buffer to update.
+---@param mode string The terminal mode to remember.
+local function _set_buffer_mode(buffer, mode)
+    if not _is_valid_mode(mode) then
+        return
+    end
+
+    vim.b[buffer][_TERMINAL_MODE_VARIABLE] = mode
+
+    local terminal = _BUFFER_TO_TERMINAL[buffer]
+
+    if terminal then
+        terminal.mode = mode
+    end
+end
+
 --- Bootstrap `toggleterminal` logic to an existing terminal `buffer`.
 ---
 --- @param buffer number A 0-or-more index pointing to some Vim data.
@@ -151,6 +200,7 @@ local function _initialize_terminal_buffer(buffer)
     vim.bo[buffer].bufhidden = "hide"
     vim.b[buffer]._toggle_terminal_buffer = true
     vim.b[buffer]._toggle_terminal_cwd = vim.b[buffer]._toggle_terminal_cwd or vim.fn.getcwd()
+    vim.b[buffer][_TERMINAL_MODE_VARIABLE] = _get_buffer_mode(buffer)
 end
 
 --- Set colors onto `window`.
@@ -230,7 +280,7 @@ local function _create_terminal(buffer)
             _initialize_terminal_buffer(buffer)
             require("modules.utilities.core_helpers").close_terminal_afterwards(buffer)
 
-            return { buffer = buffer, mode = _STARTING_MODE }
+            return { buffer = buffer, mode = _get_buffer_mode(buffer) }
         end)
 
         assert(terminal)
@@ -241,7 +291,7 @@ local function _create_terminal(buffer)
     _initialize_terminal_buffer(buffer)
     require("modules.utilities.core_helpers").close_terminal_afterwards(buffer)
 
-    return { buffer = buffer, mode = _STARTING_MODE }
+    return { buffer = buffer, mode = _get_buffer_mode(buffer) }
 end
 
 --- Check whether `buffer` is the current buffer in the current window.
@@ -292,17 +342,13 @@ local function _handle_term_leave(buffer)
     local raw_mode = vim.api.nvim_get_mode().mode
     local mode = _Mode.unknown
 
-    if raw_mode:match("nt") then -- nt is normal mode in the terminal
+    if raw_mode:match("nt") or raw_mode == "n" then -- nt/n are normal mode in the terminal
         mode = _Mode.normal
     elseif raw_mode:match("t") then -- t is insert mode in the terminal
         mode = _Mode.insert
     end
 
-    local terminal = _BUFFER_TO_TERMINAL[buffer]
-
-    if terminal and mode then
-        terminal.mode = mode
-    end
+    _set_buffer_mode(buffer, mode)
 end
 
 --- Make a window (non-terminal) so we can assign a terminal into it later.
@@ -316,7 +362,77 @@ local function _prepare_terminal_window()
 end
 
 function M.save_terminal_state()
-    _handle_term_leave(vim.fn.bufnr())
+    local buffer = vim.fn.bufnr()
+
+    if vim.bo[buffer].buftype ~= "terminal" then
+        return
+    end
+
+    _handle_term_leave(buffer)
+end
+
+--- Restore toggle-terminal modes from a sourced Session.vim file.
+---
+---@param modes table<string, string> Terminal buffer names to saved modes.
+function M.restore_session_modes(modes)
+    _SESSION_TERMINAL_MODES = modes
+
+    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+        local mode = modes[vim.api.nvim_buf_get_name(buffer)]
+
+        if _is_valid_mode(mode) then
+            _set_buffer_mode(buffer, mode)
+        end
+    end
+end
+
+--- Get all toggle-terminal modes that should be written to Session.vim.
+---
+---@return table<string, string> # Terminal buffer names to saved modes.
+function M.get_session_modes()
+    if vim.bo.buftype == "terminal" then
+        _handle_term_leave(vim.fn.bufnr())
+    end
+
+    ---@type table<string, string>
+    local output = {}
+
+    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+        local name = vim.api.nvim_buf_get_name(buffer)
+
+        if name ~= "" and vim.b[buffer]._toggle_terminal_buffer then
+            output[name] = _get_buffer_mode(buffer)
+        end
+    end
+
+    return output
+end
+
+--- Append toggle-terminal state that `:mksession` cannot write by itself.
+---
+---@param session string The session file to update.
+function M.append_session_state(session)
+    local modes = M.get_session_modes()
+
+    if next(modes) == nil then
+        return
+    end
+
+    ---@type string[]
+    local entries = {}
+
+    for name, mode in pairs(modes) do
+        table.insert(entries, string.format("[%q] = %q", name, mode))
+    end
+
+    table.sort(entries)
+    vim.fn.writefile({
+        "",
+        '" noplugins toggle-terminal state',
+        "lua require('modules.plugins.toggle_terminal').restore_session_modes({ "
+            .. table.concat(entries, ", ")
+            .. " })",
+    }, session, "a")
 end
 
 --- Open an existing terminal for the current tab or create one if it doesn't exist.
@@ -387,9 +503,31 @@ function _P.setup_autocommands()
         group = group,
         pattern = toggleterm_pattern,
         callback = function()
+            local buffer = vim.fn.bufnr()
+            _set_buffer_mode(buffer, _Mode.insert)
+
+            vim.keymap.set("t", "<ESC><ESC>", function()
+                _set_buffer_mode(buffer, _Mode.normal)
+
+                return "<C-\\><C-n>"
+            end, {
+                buffer = buffer,
+                desc = "Exit the terminal by pressing <ESC> twice in a row.",
+                expr = true,
+                noremap = true,
+            })
+
             local window = vim.fn.win_getid()
 
             _configure_terminal_window(window)
+        end,
+    })
+
+    vim.api.nvim_create_autocmd("TermEnter", {
+        group = group,
+        pattern = toggleterm_pattern,
+        callback = function()
+            _set_buffer_mode(vim.fn.bufnr(), _Mode.insert)
         end,
     })
 

@@ -13,6 +13,11 @@
 
 - Make an AI write my commit messages for me, somehow. SLM?
 
+- Update my LSp setup to use config + start
+ - add ty LSP support
+
+- Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
+
 - trailing whitespace bug
  - adding prefix > lines does not delete trailing whitespace
 

@@ -192,6 +192,27 @@ function M.get_file_selector_sort_score(entry, input)
         return score - ((first_match or 1) * 4) - (#candidate / 10)
     end
 
+    ---@return number?
+    local function score_basename_prefix()
+        local index = 1
+
+        while index <= #query and index <= #compact_basename do
+            if compact_basename:sub(index, index) ~= query:sub(index, index) then
+                break
+            end
+
+            index = index + 1
+        end
+
+        local matched = index - 1
+
+        if matched >= math.min(3, #query) then
+            return 40000 + (matched * 1000) - #compact_basename
+        end
+
+        return nil
+    end
+
     local direct_basename_start = compact_basename:find(query, 1, true)
 
     if direct_basename_start then
@@ -202,6 +223,12 @@ function M.get_file_selector_sort_score(entry, input)
 
     if basename_score then
         return basename_score
+    end
+
+    local basename_prefix_score = score_basename_prefix()
+
+    if basename_prefix_score then
+        return basename_prefix_score
     end
 
     local direct_display_start = compact_display:find(query, 1, true)

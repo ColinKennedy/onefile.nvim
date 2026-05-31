@@ -566,6 +566,44 @@ describe("selector UI", function()
         }, lines)
     end)
 
+    it("keeps git basename prefix matches above scattered whole-path matches", function()
+        local refresh = core_editor_setup.select_from_options({
+            "lua/modules/utilities/git_status.lua",
+            "lua/modules/features/gitsigns_status.lua",
+            "lua/modules/features/git_commands.lua",
+            "lua/modules/plugins/native_dispatch.lua",
+            ".config/noplugins/auto_commands.lua",
+            "lua/modules/features/git_commit.lua",
+            "lua/modules/features/git_command.lua",
+        }, {
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            sort_maximum = 200,
+            sort_score = core_editor_setup.get_file_selector_sort_score,
+        })
+
+        local prompt_window = get_selector_prompt_window()
+        local prompt_buffer = vim.api.nvim_win_get_buf(prompt_window)
+        vim.api.nvim_buf_set_lines(prompt_buffer, 0, -1, false, { "gits" })
+        refresh()
+
+        local list_window = get_selector_list_window()
+        local list_buffer = vim.api.nvim_win_get_buf(list_window)
+        local lines = vim.api.nvim_buf_get_lines(list_buffer, 0, 7, false)
+
+        assert.are.same({
+            "> lua/modules/utilities/git_status.lua",
+            "  lua/modules/features/gitsigns_status.lua",
+            "  lua/modules/features/git_commands.lua",
+            "  lua/modules/features/git_commit.lua",
+            "  lua/modules/features/git_command.lua",
+            "  lua/modules/plugins/native_dispatch.lua",
+            "  .config/noplugins/auto_commands.lua",
+        }, lines)
+    end)
+
     it("skips opt-in sorting when filtered results exceed the configured maximum", function()
         ---@type _my.selector_gui.entry.Selection[]
         local values = {}

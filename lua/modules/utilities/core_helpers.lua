@@ -61,13 +61,8 @@ local _P = {}
 ---    A group of LSP-related settings to initialize with.
 ---@field name string
 ---    The name of the LSP.
----@field filetypes string[] | string
----    The Vim filetype(s) that the LSp is meant for.
----@field callback fun(event: _my.lsp.ServerDefinition.callback.parameter): nil
----    The function that sets up the LSP.
-
----@class _my.lsp.ServerDefinition.callback.parameter All details to handle LSP setup.
----@field buf integer The Vim buffer to attach the LSP server onto.
+---@field config vim.lsp.Config|fun(): vim.lsp.Config
+---    The config that Neovim should enable for the LSP.
 
 ---@class _neovim.commandline.Options Raw data that gets passed from `nvim_create_user_command`
 ---@field args string The input that a user writes to the command.

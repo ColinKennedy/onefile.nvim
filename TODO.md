@@ -1,13 +1,20 @@
 - `:Git diff` isn't showing anything. Fix
 
+- A <M-S-{1,2,3,4,5}> for grapple
+
+- Add a native file-tree plugin
+ - nested folders, hjkl mappings to expand and collapse
+ - icons for file types
+ - show modified files
+ - a mapping to toggle-filter to show only git-modified files
+ - use it to take the place of netrw
+
 - Fix CI/CD later - https://github.com/ColinKennedy/onefile.nvim/actions/runs/26374509626/job/77632334991
 
 - Once that neovim remote PR is merged, add that to my git commit / git rebase
   editor command so that I don't get nested Neovims anymore.
-- A <M-S-{1,2,3,4}> for grapple
 `<space>`W
 `<space>`q
-- Add :Gcd
 
 - Add Cli-based mark support
  - Async-update whenever the file is changed
@@ -16,11 +23,6 @@
 - Add my tmux config at work, for psmux
 
 - Make an AI write my commit messages for me, somehow. SLM?
-
-- Update my LSp setup to use config + start
- - add ty LSP support
-
-- Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
 
 - trailing whitespace bug
  - adding prefix > lines does not delete trailing whitespace

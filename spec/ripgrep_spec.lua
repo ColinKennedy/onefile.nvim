@@ -41,7 +41,20 @@ describe("ripgrep quickfix", function()
         local utility = vim.fs.joinpath(root, "lua", "modules", "utilities", "core_helpers.lua")
 
         ---@diagnostic disable-next-line: duplicate-set-field
-        vim.system = function(_, _, callback)
+        vim.system = function(_, options, callback)
+            if type(options) == "function" then
+                callback = options
+            end
+
+            if not callback then
+                return {
+                    pid = 123,
+                    wait = function()
+                        return { code = 0, stdout = "", stderr = "" }
+                    end,
+                }
+            end
+
             vim.schedule(function()
                 callback({
                     code = 0,
@@ -53,7 +66,12 @@ describe("ripgrep quickfix", function()
                 })
             end)
 
-            return { pid = 123 }
+            return {
+                pid = 123,
+                wait = function()
+                    return { code = 0, stdout = "", stderr = "" }
+                end,
+            }
         end
 
         core_helpers.run_ripgrep({ "something", root }, { display_root = root })
@@ -64,9 +82,9 @@ describe("ripgrep quickfix", function()
 
         local quickfix = vim.fn.getqflist()
 
-        assert.equal(feature, quickfix[1].filename)
+        assert.equal(feature, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
         assert.equal("lua/modules/features/core_editor_setup.lua", quickfix[1].module)
-        assert.equal(utility, quickfix[2].filename)
+        assert.equal(utility, vim.api.nvim_buf_get_name(quickfix[2].bufnr))
         assert.equal("lua/modules/utilities/core_helpers.lua", quickfix[2].module)
 
         local quickfix_window = vim.fn.getqflist({ winid = true }).winid

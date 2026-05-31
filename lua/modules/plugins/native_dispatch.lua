@@ -639,10 +639,6 @@ function M._run(options)
                     display.close()
                 end
 
-                if window_layout then
-                    _P.restore_window_layout(window_layout, window_total_lines)
-                end
-
                 _P.finish(options, output, code)
             end)
         end,

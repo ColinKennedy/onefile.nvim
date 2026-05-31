@@ -458,7 +458,7 @@ describe("native dispatch", function()
             return 1
         end
 
-        native_dispatch._run({
+        native_dispatch.run({
             command = { "fake" },
             raw_command = "fake",
             compiler = "vimgrep",

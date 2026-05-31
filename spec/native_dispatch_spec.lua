@@ -342,7 +342,7 @@ describe("native dispatch", function()
         native_dispatch._P.clamp_tmux_display_height("%7")
 
         assert.are.same({
-            { "tmux", "resize-pane", "-t", "%7", "-y", "40" },
+            { "tmux", "resize-pane", "-t", "%7", "-y", "15" },
         }, resize_commands)
     end)
 

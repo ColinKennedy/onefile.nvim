@@ -5,6 +5,8 @@ local _P = {}
 
 ---@alias _my.dispatch.DisplayMode "always" | "on_error" | "never"
 
+local _MAXIMUM_TMUX_DISPLAY_HEIGHT = 15
+
 ---@class _my.dispatch.Options
 ---@field command string[] The argv-style command to run.
 ---@field raw_command string The command text shown to the user.
@@ -227,6 +229,18 @@ function _P.open_vim_display()
     }
 end
 
+--- Clamp an oversized tmux display pane after tmux picks its natural split size.
+---
+---@param pane string The tmux pane id.
+function _P.clamp_tmux_display_height(pane)
+    local height_text = vim.fn.systemlist({ "tmux", "display-message", "-p", "-t", pane, "#{pane_height}" })[1]
+    local height = tonumber(height_text)
+
+    if height and height > _MAXIMUM_TMUX_DISPLAY_HEIGHT then
+        vim.fn.system({ "tmux", "resize-pane", "-t", pane, "-y", tostring(_MAXIMUM_TMUX_DISPLAY_HEIGHT) })
+    end
+end
+
 --- Open a tmux pane for mirrored command output.
 ---
 ---@return _my.dispatch.Display? # The display sink.
@@ -242,6 +256,8 @@ function _P.open_tmux_display()
     if vim.v.shell_error ~= 0 or not pane or pane == "" then
         return nil
     end
+
+    _P.clamp_tmux_display_height(pane)
 
     return {
         write = function(lines)

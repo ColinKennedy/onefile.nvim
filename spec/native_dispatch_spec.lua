@@ -24,11 +24,15 @@ end
 describe("native dispatch", function()
     local original_jobstart
     local original_notify
+    local original_system
+    local original_systemlist
     local notifications
 
     before_each(function()
         original_jobstart = vim.fn.jobstart
         original_notify = vim.notify
+        original_system = vim.fn.system
+        original_systemlist = vim.fn.systemlist
         notifications = {}
 
         rawset(vim, "notify", function(message, level)
@@ -38,6 +42,8 @@ describe("native dispatch", function()
 
     after_each(function()
         vim.fn.jobstart = original_jobstart
+        vim.fn.system = original_system
+        vim.fn.systemlist = original_systemlist
         rawset(vim, "notify", original_notify)
         vim.fn.setqflist({}, "r")
         vim.cmd("silent! cclose")
@@ -242,6 +248,46 @@ describe("native dispatch", function()
         assert.equal("split diagnostic", quickfix[1].text)
         assert.equal(0, quickfix[2].valid)
         assert.equal("plain log", quickfix[2].text)
+    end)
+
+    it("keeps tmux display panes smaller than the maximum at their natural height", function()
+        local resize_commands = {}
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.fn.systemlist = function()
+            return { "24" }
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.fn.system = function(command)
+            table.insert(resize_commands, command)
+
+            return ""
+        end
+
+        native_dispatch._P.clamp_tmux_display_height("%7")
+
+        assert.are.same({}, resize_commands)
+    end)
+
+    it("clamps oversized tmux display panes to forty rows", function()
+        local resize_commands = {}
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.fn.systemlist = function()
+            return { "80" }
+        end
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.fn.system = function(command)
+            table.insert(resize_commands, command)
+
+            return ""
+        end
+
+        native_dispatch._P.clamp_tmux_display_height("%7")
+
+        assert.are.same({
+            { "tmux", "resize-pane", "-t", "%7", "-y", "40" },
+        }, resize_commands)
     end)
 
     it("reports invalid dispatch flags", function()

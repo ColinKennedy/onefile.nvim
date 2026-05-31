@@ -235,6 +235,44 @@ describe("native dispatch", function()
         assert.equal("null", options.stdin)
     end)
 
+    it("does not open a display pane for on-error dispatch output", function()
+        local original_open_display = native_dispatch._P.open_display
+        local opened_display = false
+
+        rawset(native_dispatch._P, "open_display", function()
+            opened_display = true
+
+            return {
+                close = function() end,
+                write = function() end,
+            }
+        end)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.fn.jobstart = function(_, options)
+            options.on_stdout(1, { "lua/example.lua:4:2:error", "" })
+            options.on_exit(1, 1)
+
+            return 1
+        end
+
+        native_dispatch.run({
+            command = { "fake" },
+            raw_command = "fake",
+            compiler = "vimgrep",
+            display = "on_error",
+        })
+
+        vim.wait(100, function()
+            return #vim.fn.getqflist() > 0
+        end)
+
+        rawset(native_dispatch._P, "open_display", original_open_display)
+
+        assert.is_false(opened_display)
+        assert.equal("qf", vim.bo.filetype)
+    end)
+
     it("joins partial job output chunks before loading quickfix", function()
         vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
 

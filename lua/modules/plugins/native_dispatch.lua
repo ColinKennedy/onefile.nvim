@@ -463,14 +463,6 @@ function M.run(options)
                     display.close()
                 end
 
-                if options.display == "on_error" and code ~= 0 then
-                    display = _P.open_display()
-
-                    if display then
-                        display.write(output)
-                    end
-                end
-
                 _P.finish(options, output, code)
             end)
         end,

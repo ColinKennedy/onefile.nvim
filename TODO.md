@@ -1,12 +1,6 @@
 - Add :Dispatch support
 
-- When solving merge conflicts, <leader>gac doesn't actually stage the file correctly on Windows. Fix
-
 - `:Git diff` isn't showing anything. Fix
-
-- If I load a session with a terminal, it starts the wrong buffer in INSERT
-  mode (it tries to add insert mode for the terminal but touches the current
-  buffer instead)
 
 - Fix CI/CD later - https://github.com/ColinKennedy/onefile.nvim/actions/runs/26374509626/job/77632334991
 

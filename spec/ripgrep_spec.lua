@@ -27,11 +27,13 @@ end
 describe("ripgrep quickfix", function()
     local original_system
     local original_exists_command
+    local original_notify
     local original_ripgrep_executable
 
     before_each(function()
         original_system = vim.system
         original_exists_command = core_helpers.exists_command
+        original_notify = vim.notify
         original_ripgrep_executable = core_helpers._RIPGREP_EXECUTABLE
         core_helpers._RIPGREP_EXECUTABLE = "rg"
         rawset(core_helpers, "exists_command", function()
@@ -42,6 +44,7 @@ describe("ripgrep quickfix", function()
 
     after_each(function()
         vim.system = original_system
+        vim.notify = original_notify
         rawset(core_helpers, "exists_command", original_exists_command)
         core_helpers._RIPGREP_EXECUTABLE = original_ripgrep_executable
         vim.fn.setqflist({}, "r")
@@ -201,6 +204,57 @@ describe("ripgrep quickfix", function()
         vim.fn.delete(root, "rf")
     end)
 
+    it("displays Rg quickfix paths relative to a command cwd with spaces", function()
+        local original_cwd = vim.fn.getcwd()
+        local root_parent = make_directory()
+        local root = vim.fs.joinpath(root_parent, "Benchmark CPU")
+        local path = vim.fs.joinpath(root, "vaults", "personal", "note.md")
+        local captured_command
+
+        assert.equal(1, vim.fn.mkdir(vim.fs.dirname(path), "p"))
+        vim.cmd.tcd(root)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.system = function(command, options, callback)
+            if command[1] == "rg" then
+                captured_command = command
+            end
+            callback = type(options) == "function" and options or callback
+
+            if callback then
+                vim.schedule(function()
+                    callback({
+                        code = 0,
+                        stdout = path .. ":1:1:some hit",
+                        stderr = "",
+                    })
+                end)
+            end
+
+            return {
+                pid = 123,
+                wait = function()
+                    return { code = 0, stdout = "", stderr = "" }
+                end,
+            }
+        end
+
+        core_helpers.run_ripgrep_command({ args = "something" })
+
+        assert.True(vim.wait(1000, function()
+            return #vim.fn.getqflist() == 1
+        end))
+
+        local quickfix = vim.fn.getqflist()
+
+        assert.same({ "rg", "--vimgrep", "--smart-case", "--no-messages", "something" }, captured_command)
+        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal("vaults/personal/note.md", quickfix[1].module)
+
+        vim.cmd.tcd(original_cwd)
+        vim.fn.delete(root_parent, "rf")
+    end)
+
     it("displays Rrg quickfix paths relative to the Git repository root", function()
         local original_cwd = vim.fn.getcwd()
         local root = make_directory()
@@ -253,6 +307,116 @@ describe("ripgrep quickfix", function()
         assert.matches("^lua/modules/utilities/core_helpers.lua|907 col 65|", lines[1])
 
         vim.cmd.tcd(original_cwd)
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("passes Rrg repository roots with spaces as one ripgrep argument", function()
+        local original_cwd = vim.fn.getcwd()
+        local root_parent = make_directory()
+        local root = vim.fs.joinpath(root_parent, "Benchmark CPU")
+        local nested = vim.fs.joinpath(root, "vaults", "personal")
+        local path = vim.fs.joinpath(nested, "note.md")
+        local captured_command
+
+        assert.equal(1, vim.fn.mkdir(vim.fs.dirname(path), "p"))
+        run_git(root, { "init" })
+        vim.cmd.tcd(nested)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.system = function(command, options, callback)
+            if command[1] == "git" then
+                return original_system(command, options, callback)
+            end
+
+            captured_command = command
+            callback = type(options) == "function" and options or callback
+
+            if callback then
+                vim.schedule(function()
+                    callback({
+                        code = 0,
+                        stdout = path .. ":1:1:some hit",
+                        stderr = "",
+                    })
+                end)
+            end
+
+            return {
+                pid = 123,
+                wait = function()
+                    return { code = 0, stdout = "", stderr = "" }
+                end,
+            }
+        end
+
+        vim.cmd.Rrg("something")
+
+        assert.True(vim.wait(1000, function()
+            return #vim.fn.getqflist() == 1
+        end))
+
+        local quickfix = vim.fn.getqflist()
+
+        assert.equal(root, captured_command[#captured_command])
+        assert.same({
+            "rg",
+            "--vimgrep",
+            "--smart-case",
+            "--no-messages",
+            "something",
+            root,
+        }, captured_command)
+        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal("vaults/personal/note.md", quickfix[1].module)
+
+        vim.cmd.tcd(original_cwd)
+        vim.fn.delete(root_parent, "rf")
+    end)
+
+    it("does not fail ripgrep when stderr only has filesystem warnings", function()
+        local root = make_directory()
+        local path = vim.fs.joinpath(root, "ok.txt")
+        local notifications = {}
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.notify = function(message, level)
+            table.insert(notifications, { message = message, level = level })
+        end
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.system = function(_, options, callback)
+            callback = type(options) == "function" and options or callback
+
+            if callback then
+                vim.schedule(function()
+                    callback({
+                        code = 2,
+                        stdout = path .. ":1:1:some hit",
+                        stderr = "rg: ./vaults\\personal\\Benchmark CPU : "
+                            .. "The system cannot find the file specified. (os error 2)\n",
+                    })
+                end)
+            end
+
+            return {
+                pid = 123,
+                wait = function()
+                    return { code = 0, stdout = "", stderr = "" }
+                end,
+            }
+        end
+
+        core_helpers.run_ripgrep({ "something", root }, { display_root = root })
+
+        assert.True(vim.wait(1000, function()
+            return #vim.fn.getqflist() == 1
+        end))
+
+        local quickfix = vim.fn.getqflist()
+
+        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.are.same({}, notifications)
+
         vim.fn.delete(root, "rf")
     end)
 end)

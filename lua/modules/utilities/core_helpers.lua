@@ -1789,13 +1789,14 @@ end
 --- Get an absolute path for a ripgrep result path.
 ---
 ---@param path string A path printed by ripgrep.
+---@param cwd string The directory where ripgrep was started.
 ---@return string # The absolute path.
-function _P.get_ripgrep_absolute_path(path)
+function _P.get_ripgrep_absolute_path(path, cwd)
     if vim.fn.fnamemodify(path, ":p") == path then
         return vim.fs.normalize(path)
     end
 
-    return vim.fs.normalize(vim.fs.joinpath(vim.fn.getcwd(), path))
+    return vim.fs.normalize(vim.fs.joinpath(cwd, path))
 end
 
 --- Get the display path for a ripgrep quickfix entry.
@@ -1820,6 +1821,8 @@ end
 ---
 function _P.run_ripgrep(command, options)
     options = options or {}
+    local cwd = vim.fn.getcwd()
+
     if _CURRENT_RIPGREP_COMMAND then
         _CURRENT_RIPGREP_COMMAND = nil
         vim.notify("Search interrupted. Please try your search again.", vim.log.levels.WARN)
@@ -1865,7 +1868,7 @@ function _P.run_ripgrep(command, options)
             line = matched_line
 
             if filename and line and column and text then
-                local path = _P.get_ripgrep_absolute_path(filename)
+                local path = _P.get_ripgrep_absolute_path(filename, cwd)
 
                 table.insert(entries, {
                     filename = path,

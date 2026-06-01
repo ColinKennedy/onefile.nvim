@@ -144,7 +144,10 @@ local function _move_current_file(options)
 
     local ok, error_message = pcall(function()
         vim.api.nvim_buf_call(buffer, function()
-            vim.cmd("silent keepalt saveas! " .. vim.fn.fnameescape(target))
+            require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+                vim.api.nvim_buf_set_name(buffer, target)
+                vim.cmd("silent! keepalt write!")
+            end)
         end)
     end)
 

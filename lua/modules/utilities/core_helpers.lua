@@ -1647,6 +1647,7 @@ end
 function _P.run_ripgrep(command, options)
     options = options or {}
     local cwd = vim.fn.getcwd()
+    local display_root = options.display_root or cwd
 
     if _CURRENT_RIPGREP_COMMAND then
         _CURRENT_RIPGREP_COMMAND = nil
@@ -1712,7 +1713,7 @@ function _P.run_ripgrep(command, options)
 
                 table.insert(entries, {
                     filename = path,
-                    module = _P.get_ripgrep_display_path(path, options.display_root),
+                    module = _P.get_ripgrep_display_path(path, display_root),
                     lnum = tonumber(line),
                     col = tonumber(column),
                     text = text,

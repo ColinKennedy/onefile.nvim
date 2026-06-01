@@ -419,4 +419,95 @@ describe("ripgrep quickfix", function()
 
         vim.fn.delete(root, "rf")
     end)
+
+    it("keeps ripgrep matches when warnings were hidden from stderr", function()
+        local root = make_directory()
+        local path = vim.fs.joinpath(root, "ok.txt")
+        local notifications = {}
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.notify = function(message, level)
+            table.insert(notifications, { message = message, level = level })
+        end
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.system = function(_, options, callback)
+            callback = type(options) == "function" and options or callback
+
+            if callback then
+                vim.schedule(function()
+                    callback({
+                        code = 2,
+                        stdout = path .. ":1:1:some hit",
+                        stderr = "",
+                    })
+                end)
+            end
+
+            return {
+                pid = 123,
+                wait = function()
+                    return { code = 0, stdout = "", stderr = "" }
+                end,
+            }
+        end
+
+        core_helpers.run_ripgrep({ "something", root }, { display_root = root })
+
+        assert.True(vim.wait(1000, function()
+            return #vim.fn.getqflist() == 1
+        end))
+
+        local quickfix = vim.fn.getqflist()
+
+        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.are.same({}, notifications)
+
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("treats exit code 1 as no ripgrep matches instead of an error", function()
+        local notifications = {}
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.notify = function(message, level)
+            table.insert(notifications, { message = message, level = level })
+        end
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.system = function(_, options, callback)
+            callback = type(options) == "function" and options or callback
+
+            if callback then
+                vim.schedule(function()
+                    callback({
+                        code = 1,
+                        stdout = "",
+                        stderr = "",
+                    })
+                end)
+            end
+
+            return {
+                pid = 123,
+                wait = function()
+                    return { code = 0, stdout = "", stderr = "" }
+                end,
+            }
+        end
+
+        core_helpers.run_ripgrep({ "no-such-pattern" })
+
+        assert.True(vim.wait(1000, function()
+            return #notifications == 1
+        end))
+
+        assert.are.same({
+            {
+                message = "No ripgrep matches found.",
+                level = vim.log.levels.INFO,
+            },
+        }, notifications)
+        assert.are.same({}, vim.fn.getqflist())
+    end)
 end)

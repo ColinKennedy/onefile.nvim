@@ -1876,11 +1876,24 @@ function _P.run_ripgrep(command, options)
 
         _CURRENT_RIPGREP_COMMAND = nil
 
+        local stdout = obj.stdout or ""
         local stderr = obj.stderr or ""
 
-        if obj.code ~= 0 and not _P.is_ripgrep_filesystem_warning(stderr) then
+        if obj.code == 1 and stdout == "" then
             vim.schedule(function()
-                vim.notify("Ripgrep failed: " .. (stderr ~= "" and stderr or "<No stderr found>"), vim.log.levels.ERROR)
+                vim.fn.setqflist({}, "r", { title = vim.fn.join(commands, " "), items = {} })
+                vim.cmd("silent! cclose")
+                vim.notify("No ripgrep matches found.", vim.log.levels.INFO)
+            end)
+
+            return
+        end
+
+        if obj.code ~= 0 and stdout == "" and not _P.is_ripgrep_filesystem_warning(stderr) then
+            vim.schedule(function()
+                local fallback = string.format("<No stderr found; exit code %d>", obj.code)
+
+                vim.notify("Ripgrep failed: " .. (stderr ~= "" and stderr or fallback), vim.log.levels.ERROR)
             end)
 
             return
@@ -1889,7 +1902,7 @@ function _P.run_ripgrep(command, options)
         ---@type vim.quickfix.entry[]
         local entries = {}
 
-        for line in vim.gsplit(obj.stdout or "", "\n") do
+        for line in vim.gsplit(stdout, "\n") do
             local filename, matched_line, column, text = string.match(line, "([^:]+):(%d+):(%d+):(.*)")
             line = matched_line
 

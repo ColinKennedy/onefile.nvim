@@ -98,21 +98,30 @@ describe("modules.plugins.winbar", function()
     end)
 
     it("detects Tree-sitter class and function scope kinds", function()
-        assert.equal("class", winbar.get_treesitter_scope_kind({
-            type = function()
-                return "class_definition"
-            end,
-        }))
-        assert.equal("function", winbar.get_treesitter_scope_kind({
-            type = function()
-                return "function_definition"
-            end,
-        }))
-        assert.equal("function", winbar.get_treesitter_scope_kind({
-            type = function()
-                return "method_declaration"
-            end,
-        }))
+        assert.equal(
+            "class",
+            winbar.get_treesitter_scope_kind({
+                type = function()
+                    return "class_definition"
+                end,
+            })
+        )
+        assert.equal(
+            "function",
+            winbar.get_treesitter_scope_kind({
+                type = function()
+                    return "function_definition"
+                end,
+            })
+        )
+        assert.equal(
+            "function",
+            winbar.get_treesitter_scope_kind({
+                type = function()
+                    return "method_declaration"
+                end,
+            })
+        )
     end)
 
     it("keeps unmatched bracket text while removing matched bracket contents", function()

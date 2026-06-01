@@ -97,6 +97,33 @@ describe("modules.plugins.winbar", function()
         core_helpers.IS_NERDFONT_ALLOWED = original_is_nerdfont_allowed
     end)
 
+    it("finds fallback functions with multi-line signatures", function()
+        local core_helpers = require("modules.utilities.core_helpers")
+        local original_is_nerdfont_allowed = core_helpers.IS_NERDFONT_ALLOWED
+        core_helpers.IS_NERDFONT_ALLOWED = false
+
+        local buffer = make_buffer({
+            "# Some comments",
+            "@another.line(",
+            "    args = 10",
+            ")",
+            "def get_something(",
+            "    some: str,",
+            "    text: str",
+            ") -> blah:",
+            '    """Something."""',
+        })
+
+        vim.bo[buffer].filetype = ""
+        vim.api.nvim_win_set_cursor(0, { 9, 0 })
+
+        assert.are.same({
+            "FF get_something",
+        }, winbar.get_indentation_scope_names(buffer, 9))
+
+        core_helpers.IS_NERDFONT_ALLOWED = original_is_nerdfont_allowed
+    end)
+
     it("detects Tree-sitter class and function scope kinds", function()
         assert.equal(
             "class",

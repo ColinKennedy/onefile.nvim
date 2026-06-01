@@ -721,7 +721,9 @@ function M.load_quickfix(arguments)
             end
 
             vim.fn.setqflist(M.to_quickfix(repository), "r")
-            vim.cmd.copen()
+            require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+                vim.cmd.copen()
+            end)
         end
 
         if arguments or not repository_state or repository_state.stale then

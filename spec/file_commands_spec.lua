@@ -37,12 +37,14 @@ end
 ---
 ---@param path string The file path to edit.
 local function edit_file(path)
-    local buffer = vim.api.nvim_create_buf(true, false)
+    require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+        local buffer = vim.api.nvim_create_buf(true, false)
 
-    vim.api.nvim_buf_set_name(buffer, path)
-    vim.api.nvim_buf_set_lines(buffer, 0, -1, false, vim.fn.readfile(path))
-    vim.bo[buffer].modified = false
-    vim.api.nvim_set_current_buf(buffer)
+        vim.api.nvim_buf_set_name(buffer, path)
+        vim.api.nvim_buf_set_lines(buffer, 0, -1, false, vim.fn.readfile(path))
+        vim.bo[buffer].modified = false
+        vim.api.nvim_set_current_buf(buffer)
+    end)
 end
 
 --- Create a real terminal buffer for command tests.
@@ -83,9 +85,24 @@ local function capture_notifications(callback)
     return notifications
 end
 
+--- Force-remove buffers left behind by earlier specs.
+local function clear_buffers()
+    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_valid(buffer) then
+            pcall(vim.api.nvim_buf_delete, buffer, { force = true })
+        end
+    end
+
+    vim.cmd.enew({ bang = true })
+end
+
 describe("file commands", function()
+    before_each(function()
+        clear_buffers()
+    end)
+
     after_each(function()
-        vim.cmd.enew({ bang = true })
+        clear_buffers()
     end)
 
     it("deletes hidden non-terminal buffers with BufferOnly", function()
@@ -168,9 +185,12 @@ describe("file commands", function()
         run_git(root, { "init" })
         vim.cmd.cd(nested)
 
-        vim.cmd.Gcd()
+        local notifications = capture_notifications(function()
+            vim.cmd.Gcd()
+        end)
 
         assert.equal(vim.fs.normalize(root), vim.fs.normalize(vim.fn.getcwd()))
+        assert.equal(vim.log.levels.INFO, notifications[1].level)
         vim.cmd.cd(original_cwd)
         vim.fn.delete(root, "rf")
     end)
@@ -227,7 +247,7 @@ describe("file commands", function()
         write_file(path, "hello\n")
         edit_file(path)
 
-        vim.cmd.Move("after.txt")
+        vim.cmd("silent Move after.txt")
 
         assert.equal(0, vim.fn.filereadable(path))
         assert.equal(1, vim.fn.filereadable(target))
@@ -244,7 +264,7 @@ describe("file commands", function()
         write_file(path, "hello\n")
         edit_file(path)
 
-        vim.cmd.Move("../after.txt")
+        vim.cmd("silent Move ../after.txt")
 
         assert.equal(0, vim.fn.filereadable(path))
         assert.equal(1, vim.fn.filereadable(target))
@@ -259,7 +279,7 @@ describe("file commands", function()
         write_file(path, "hello\n")
         edit_file(path)
 
-        vim.cmd.Move(target)
+        vim.cmd("silent Move " .. vim.fn.fnameescape(target))
 
         assert.equal(0, vim.fn.filereadable(path))
         assert.equal(1, vim.fn.filereadable(target))
@@ -294,7 +314,7 @@ describe("file commands", function()
         write_file(target, "occupied\n")
         edit_file(path)
 
-        vim.cmd("Move! after.txt")
+        vim.cmd("silent Move! after.txt")
 
         assert.equal(0, vim.fn.filereadable(path))
         assert.equal(1, vim.fn.filereadable(target))
@@ -311,7 +331,7 @@ describe("file commands", function()
         edit_file(path)
         vim.api.nvim_buf_set_lines(0, 0, -1, false, { "unsaved" })
 
-        vim.cmd.Move("after.txt")
+        vim.cmd("silent Move after.txt")
 
         assert.equal(0, vim.fn.filereadable(path))
         assert.are.same({ "unsaved" }, vim.fn.readfile(target))

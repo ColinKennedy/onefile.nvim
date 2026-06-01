@@ -1886,7 +1886,9 @@ function _P.run_ripgrep(command, options)
             local title = _P.get_elided_right_text(full_title, _MAXIMUM_QUICK_FIX_LENGTH)
 
             vim.fn.setqflist({}, " ", { title = title, items = entries })
-            vim.cmd.copen()
+            M.with_file_messages_suppressed(function()
+                vim.cmd.copen()
+            end)
         end)
     end)
 

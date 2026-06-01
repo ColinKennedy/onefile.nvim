@@ -397,7 +397,9 @@ function M.show_bookmarks()
     if vim.tbl_isempty(quickfix_entries) then
         vim.cmd.cclose()
     else
-        vim.cmd.copen()
+        require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+            vim.cmd.copen()
+        end)
     end
 end
 

@@ -25,6 +25,22 @@ _P.extra_compilers = {
     end,
 }
 
+--- Run a command and return its output lines.
+---
+---@param command string[] The argv-style command to run.
+---@return string[] # The command output lines.
+function _P.systemlist(command)
+    return vim.fn.systemlist(command)
+end
+
+--- Run a command and return its output text.
+---
+---@param command string[] The argv-style command to run.
+---@return string # The command output.
+function _P.system(command)
+    return vim.fn.system(command)
+end
+
 --- Parse a command string into argv without asking a shell to evaluate it.
 ---
 ---@param text string The raw command text.
@@ -233,11 +249,11 @@ end
 ---
 ---@param pane string The tmux pane id.
 function _P.clamp_tmux_display_height(pane)
-    local height_text = vim.fn.systemlist({ "tmux", "display-message", "-p", "-t", pane, "#{pane_height}" })[1]
+    local height_text = _P.systemlist({ "tmux", "display-message", "-p", "-t", pane, "#{pane_height}" })[1]
     local height = tonumber(height_text)
 
     if height and height > _MAXIMUM_TMUX_DISPLAY_HEIGHT then
-        vim.fn.system({ "tmux", "resize-pane", "-t", pane, "-y", tostring(_MAXIMUM_TMUX_DISPLAY_HEIGHT) })
+        _P.system({ "tmux", "resize-pane", "-t", pane, "-y", tostring(_MAXIMUM_TMUX_DISPLAY_HEIGHT) })
     end
 end
 
@@ -251,7 +267,7 @@ function _P.open_tmux_display()
         return nil
     end
 
-    local pane = vim.fn.systemlist({ "tmux", "split-window", "-P", "-F", "#{pane_id}", "cat" })[1]
+    local pane = _P.systemlist({ "tmux", "split-window", "-P", "-F", "#{pane_id}", "cat" })[1]
 
     if vim.v.shell_error ~= 0 or not pane or pane == "" then
         return nil
@@ -262,12 +278,12 @@ function _P.open_tmux_display()
     return {
         write = function(lines)
             for _, line in ipairs(lines) do
-                vim.fn.system({ "tmux", "send-keys", "-t", pane, "-l", line })
-                vim.fn.system({ "tmux", "send-keys", "-t", pane, "Enter" })
+                _P.system({ "tmux", "send-keys", "-t", pane, "-l", line })
+                _P.system({ "tmux", "send-keys", "-t", pane, "Enter" })
             end
         end,
         close = function()
-            vim.fn.system({ "tmux", "kill-pane", "-t", pane })
+            _P.system({ "tmux", "kill-pane", "-t", pane })
         end,
     }
 end
@@ -361,7 +377,9 @@ function _P.finish(options, lines, code)
         return
     end
 
-    vim.cmd("silent copen")
+    require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+        vim.cmd("silent copen")
+    end)
 
     if options.jump_first and first_valid_index then
         require("modules.utilities.core_helpers").with_file_messages_suppressed(function()

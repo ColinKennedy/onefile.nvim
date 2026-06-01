@@ -94,4 +94,48 @@ describe("ripgrep quickfix", function()
         assert.matches("^lua/modules/features/core_editor_setup.lua|867 col 62|", lines[1])
         assert.matches("^lua/modules/utilities/core_helpers.lua|1308 col 25|", lines[2])
     end)
+
+    it("does not call getcwd from the async ripgrep callback", function()
+        local original_cwd = vim.fn.getcwd()
+        local root = make_directory()
+        local path = vim.fs.joinpath(root, "relative.lua")
+        local callback_
+        local original_getcwd = vim.fn.getcwd
+
+        vim.cmd.tcd(root)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.system = function(_, options, callback)
+            callback_ = type(options) == "function" and options or callback
+
+            return {
+                pid = 123,
+                wait = function()
+                    return { code = 0, stdout = "", stderr = "" }
+                end,
+            }
+        end
+
+        core_helpers.run_ripgrep({ "needle" }, { display_root = root })
+
+        rawset(vim.fn, "getcwd", function()
+            error("getcwd must not run from the ripgrep callback")
+        end)
+        assert(callback_)({
+            code = 0,
+            stdout = "relative.lua:1:1:needle",
+            stderr = "",
+        })
+        rawset(vim.fn, "getcwd", original_getcwd)
+
+        assert.True(vim.wait(1000, function()
+            return #vim.fn.getqflist() == 1
+        end))
+
+        local quickfix = vim.fn.getqflist()
+
+        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        vim.cmd.tcd(original_cwd)
+        vim.fn.delete(root, "rf")
+    end)
 end)

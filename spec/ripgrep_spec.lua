@@ -11,6 +11,19 @@ local function make_directory()
     return root
 end
 
+--- Run a Git command inside `root`.
+---
+---@param root string The Git repository root.
+---@param arguments string[] The Git command arguments.
+local function run_git(root, arguments)
+    local command = { "git", "-C", root }
+    vim.list_extend(command, arguments)
+
+    local result = vim.system(command, { text = true }):wait()
+
+    assert.equal(0, result.code, result.stderr)
+end
+
 describe("ripgrep quickfix", function()
     local original_system
     local original_exists_command
@@ -135,6 +148,110 @@ describe("ripgrep quickfix", function()
         local quickfix = vim.fn.getqflist()
 
         assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        vim.cmd.tcd(original_cwd)
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("displays Rg quickfix paths relative to the command cwd by default", function()
+        local original_cwd = vim.fn.getcwd()
+        local root = make_directory()
+        local path = vim.fs.joinpath(root, "lua", "modules", "utilities", "core_helpers.lua")
+
+        assert.equal(1, vim.fn.mkdir(vim.fs.dirname(path), "p"))
+        vim.cmd.tcd(root)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.system = function(_, options, callback)
+            callback = type(options) == "function" and options or callback
+
+            if callback then
+                vim.schedule(function()
+                    callback({
+                        code = 0,
+                        stdout = path .. ":907:65:some hit",
+                        stderr = "",
+                    })
+                end)
+            end
+
+            return {
+                pid = 123,
+                wait = function()
+                    return { code = 0, stdout = "", stderr = "" }
+                end,
+            }
+        end
+
+        core_helpers.run_ripgrep_command({ args = "something" })
+
+        assert.True(vim.wait(1000, function()
+            return #vim.fn.getqflist() == 1
+        end))
+
+        local quickfix = vim.fn.getqflist()
+        local quickfix_window = vim.fn.getqflist({ winid = true }).winid
+        local quickfix_buffer = vim.api.nvim_win_get_buf(quickfix_window)
+        local lines = vim.api.nvim_buf_get_lines(quickfix_buffer, 0, -1, false)
+
+        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal("lua/modules/utilities/core_helpers.lua", quickfix[1].module)
+        assert.matches("^lua/modules/utilities/core_helpers.lua|907 col 65|", lines[1])
+
+        vim.cmd.tcd(original_cwd)
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("displays Rrg quickfix paths relative to the Git repository root", function()
+        local original_cwd = vim.fn.getcwd()
+        local root = make_directory()
+        local nested = vim.fs.joinpath(root, "lua", "modules")
+        local path = vim.fs.joinpath(root, "lua", "modules", "utilities", "core_helpers.lua")
+
+        assert.equal(1, vim.fn.mkdir(vim.fs.dirname(path), "p"))
+        run_git(root, { "init" })
+        vim.cmd.tcd(nested)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.system = function(command, options, callback)
+            if command[1] == "git" then
+                return original_system(command, options, callback)
+            end
+
+            callback = type(options) == "function" and options or callback
+
+            if callback then
+                vim.schedule(function()
+                    callback({
+                        code = 0,
+                        stdout = path .. ":907:65:some hit",
+                        stderr = "",
+                    })
+                end)
+            end
+
+            return {
+                pid = 123,
+                wait = function()
+                    return { code = 0, stdout = "", stderr = "" }
+                end,
+            }
+        end
+
+        vim.cmd.Rrg("something")
+
+        assert.True(vim.wait(1000, function()
+            return #vim.fn.getqflist() == 1
+        end))
+
+        local quickfix = vim.fn.getqflist()
+        local quickfix_window = vim.fn.getqflist({ winid = true }).winid
+        local quickfix_buffer = vim.api.nvim_win_get_buf(quickfix_window)
+        local lines = vim.api.nvim_buf_get_lines(quickfix_buffer, 0, -1, false)
+
+        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal("lua/modules/utilities/core_helpers.lua", quickfix[1].module)
+        assert.matches("^lua/modules/utilities/core_helpers.lua|907 col 65|", lines[1])
+
         vim.cmd.tcd(original_cwd)
         vim.fn.delete(root, "rf")
     end)

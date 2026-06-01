@@ -579,6 +579,37 @@ function _P.simplify_typed_context_text(text)
     return cleaned
 end
 
+--- Check whether `text` looks like the end of a multi-line definition header.
+---
+---@param text string The raw context line.
+---@return boolean # Whether the line begins with a closing bracket.
+function _P.is_multiline_definition_close(text)
+    return _P.clean_indent_context_text(text):match("^[%)%]%}]") ~= nil
+end
+
+--- Find the opening definition for a multi-line context closing line.
+---
+---@param buffer integer The buffer to inspect.
+---@param row integer The 1-or-more closing-line row.
+---@param indent integer The closing line indentation level.
+---@param tabstop integer The buffer tabstop used for indentation columns.
+---@return string? # The matching opening definition line, if found.
+function _P.find_multiline_definition_start(buffer, row, indent, tabstop)
+    for index = row - 1, 1, -1 do
+        local line = vim.api.nvim_buf_get_lines(buffer, index - 1, index, false)[1] or ""
+
+        if line:match("%S") and _P.get_line_indent(line, tabstop) == indent then
+            local _, kind = _P.strip_context_definition_marker(_P.simplify_context_text(line))
+
+            if kind then
+                return line
+            end
+        end
+    end
+
+    return nil
+end
+
 --- Get the indentation level of `text`.
 ---
 ---@param text string The line text to inspect.
@@ -644,6 +675,10 @@ function _P.get_indentation_scope_names(buffer, row)
             local indent = _P.get_line_indent(line, tabstop)
 
             if indent < maximum_indent then
+                if _P.is_multiline_definition_close(line) then
+                    line = _P.find_multiline_definition_start(buffer, index, indent, tabstop) or line
+                end
+
                 local name = _P.simplify_typed_context_text(line)
 
                 if name ~= "" then

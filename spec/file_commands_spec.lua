@@ -75,20 +75,6 @@ local function make_terminal_buffer()
     return buffer
 end
 
---- Create a real terminal buffer for command tests.
----
----@return integer # The terminal buffer.
-local function make_terminal_buffer()
-    local original = vim.api.nvim_get_current_buf()
-    local buffer = vim.api.nvim_create_buf(true, true)
-
-    vim.api.nvim_set_current_buf(buffer)
-    vim.api.nvim_open_term(buffer, {})
-    vim.api.nvim_set_current_buf(original)
-
-    return buffer
-end
-
 --- Capture vim.notify calls while `callback` runs.
 ---
 ---@param callback fun(): nil The function to run.
@@ -201,7 +187,7 @@ describe("file commands", function()
     it("describes BufferOnly as window-aware only", function()
         local command = vim.api.nvim_get_commands({ builtin = false }).BufferOnly
 
-        assert.equal(":only, but window-aware", rawget(command, "desc") or command.definition)
+        assert.equal(":only, but window-aware", command.definition)
     end)
 
     it("changes directory to the Git repository root with Gcd", function()
@@ -219,109 +205,6 @@ describe("file commands", function()
 
         assert.equal(vim.fs.normalize(root), vim.fs.normalize(vim.fn.getcwd()))
         assert.equal(vim.log.levels.INFO, notifications[1].level)
-        vim.cmd.cd(original_cwd)
-        vim.fn.delete(root, "rf")
-    end)
-
-    it("notifies when Gcd is used outside of a Git repository", function()
-        local original_cwd = vim.fn.getcwd()
-        local root = make_directory()
-
-        vim.cmd.cd(root)
-
-        local notifications = capture_notifications(function()
-            vim.cmd.Gcd()
-        end)
-
-        assert.equal(vim.log.levels.ERROR, notifications[1].level)
-        assert.matches("No Git repository root", notifications[1].message)
-        vim.cmd.cd(original_cwd)
-        vim.fn.delete(root, "rf")
-    end)
-
-    it("deletes hidden non-terminal buffers with BufferOnly", function()
-        local current = vim.api.nvim_create_buf(true, true)
-        local hidden = vim.api.nvim_create_buf(true, true)
-        local terminal = make_terminal_buffer()
-        vim.api.nvim_set_current_buf(current)
-
-        vim.cmd.BufferOnly()
-
-        assert.True(vim.api.nvim_buf_is_valid(current))
-        assert.False(vim.api.nvim_buf_is_valid(hidden))
-        assert.True(vim.api.nvim_buf_is_valid(terminal))
-        vim.api.nvim_buf_delete(terminal, { force = true })
-    end)
-
-    it("deletes hidden terminal buffers with BufferOnly all", function()
-        local current = vim.api.nvim_create_buf(true, true)
-        local terminal = make_terminal_buffer()
-        vim.api.nvim_set_current_buf(current)
-
-        vim.cmd("BufferOnly --all")
-
-        assert.True(vim.api.nvim_buf_is_valid(current))
-        assert.False(vim.api.nvim_buf_is_valid(terminal))
-    end)
-
-    it("closes non-terminal windows and deletes their buffers with BufferOnly", function()
-        local current = vim.api.nvim_create_buf(true, true)
-        local sibling = vim.api.nvim_create_buf(true, true)
-        local hidden = vim.api.nvim_create_buf(true, true)
-
-        vim.api.nvim_set_current_buf(current)
-        vim.cmd.vsplit()
-        local sibling_window = vim.api.nvim_get_current_win()
-        vim.api.nvim_win_set_buf(sibling_window, sibling)
-        vim.cmd.wincmd("p")
-
-        vim.cmd.BufferOnly()
-
-        assert.True(vim.api.nvim_buf_is_valid(current))
-        assert.False(vim.api.nvim_buf_is_valid(sibling))
-        assert.False(vim.api.nvim_buf_is_valid(hidden))
-        assert.False(vim.api.nvim_win_is_valid(sibling_window))
-        assert.equal(current, vim.api.nvim_get_current_buf())
-    end)
-
-    it("keeps terminal windows and buffers with BufferOnly", function()
-        local current = vim.api.nvim_create_buf(true, true)
-        local terminal = make_terminal_buffer()
-
-        vim.api.nvim_set_current_buf(current)
-        vim.cmd.vsplit()
-        local terminal_window = vim.api.nvim_get_current_win()
-        vim.api.nvim_win_set_buf(terminal_window, terminal)
-        vim.cmd.wincmd("p")
-
-        vim.cmd.BufferOnly()
-
-        assert.True(vim.api.nvim_buf_is_valid(current))
-        assert.True(vim.api.nvim_buf_is_valid(terminal))
-        assert.True(vim.api.nvim_win_is_valid(terminal_window))
-
-        vim.api.nvim_win_close(terminal_window, true)
-        vim.api.nvim_buf_delete(terminal, { force = true })
-    end)
-
-    it("describes BufferOnly as window-aware only", function()
-        local command = vim.api.nvim_get_commands({ builtin = false }).BufferOnly
-
-        assert.equal(":only, but window-aware", command.definition)
-    end)
-
-    it("changes directory to the Git repository root with Gcd", function()
-        local original_cwd = vim.fn.getcwd()
-        local root = make_directory()
-        local nested = vim.fs.joinpath(root, "nested", "child")
-
-        assert.equal(1, vim.fn.mkdir(nested, "p"))
-        run_git(root, { "init" })
-        vim.cmd.cd(nested)
-
-        vim.cmd.Gcd()
-
-        assert.equal(vim.fs.normalize(root), vim.fs.normalize(vim.fn.getcwd()))
         vim.cmd.cd(original_cwd)
         vim.fn.delete(root, "rf")
     end)

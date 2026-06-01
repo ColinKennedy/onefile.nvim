@@ -482,7 +482,9 @@ function _P.finish(options, lines, code)
         return
     end
 
-    vim.cmd("silent copen")
+    require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+        vim.cmd("silent copen")
+    end)
 
     if options.jump_first and first_valid_index then
         require("modules.utilities.core_helpers").with_file_messages_suppressed(function()

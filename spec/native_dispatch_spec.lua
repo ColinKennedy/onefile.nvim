@@ -35,11 +35,8 @@ describe("native dispatch", function()
     local original_system
     ---@type fun(cmd: string | string[], input: string?): string[]
     local original_systemlist
-    ---@type fun(command: string[]): string
     local original_dispatch_system
-    ---@type fun(command: string[]): string[]
     local original_dispatch_systemlist
-    ---@type {message: string, level: integer?}[]
     local notifications
 
     before_each(function()

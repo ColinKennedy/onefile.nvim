@@ -979,7 +979,7 @@ function _P.load_quickfix(arguments)
                 return
             end
 
-            vim.fn.setqflist({}, "r", { items = _P.to_quickfix(repository), title = title })
+            vim.fn.setqflist(M.to_quickfix(repository), "r")
             require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
                 vim.cmd.copen()
             end)

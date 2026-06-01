@@ -1814,6 +1814,28 @@ function _P.get_ripgrep_display_path(path, display_root)
     return relative or _P.cleanup_path(path)
 end
 
+--- Check whether ripgrep stderr only contains filesystem access warnings.
+---
+---@param stderr string The stderr text printed by ripgrep.
+---@return boolean # Whether stderr only has `rg: path: ... (os error N)` warnings.
+function _P.is_ripgrep_filesystem_warning(stderr)
+    local saw_warning = false
+
+    for line in vim.gsplit(stderr, "\n") do
+        line = vim.trim(line)
+
+        if line ~= "" then
+            if not line:match("^rg: .+:%s+.*%(os error %d+%)$") then
+                return false
+            end
+
+            saw_warning = true
+        end
+    end
+
+    return saw_warning
+end
+
 --- Run raw ripgrep `command`.
 ---
 ---@param command string[] A raw ripgrep command to run.
@@ -1831,11 +1853,12 @@ function _P.run_ripgrep(command, options)
         return
     end
 
-    ---@type table<string, fun()>
+    ---@type string[]
     local commands = {
         M._RIPGREP_EXECUTABLE,
         "--vimgrep", -- Format: file:line:column:match
         "--smart-case",
+        "--no-messages",
         unpack(command),
     }
 
@@ -1853,9 +1876,11 @@ function _P.run_ripgrep(command, options)
 
         _CURRENT_RIPGREP_COMMAND = nil
 
-        if obj.code ~= 0 then
+        local stderr = obj.stderr or ""
+
+        if obj.code ~= 0 and not _P.is_ripgrep_filesystem_warning(stderr) then
             vim.schedule(function()
-                vim.notify("Ripgrep failed: " .. (obj.stderr or "<No stderr found>"), vim.log.levels.ERROR)
+                vim.notify("Ripgrep failed: " .. (stderr ~= "" and stderr or "<No stderr found>"), vim.log.levels.ERROR)
             end)
 
             return

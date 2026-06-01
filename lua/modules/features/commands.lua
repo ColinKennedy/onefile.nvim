@@ -273,13 +273,12 @@ end
 ---
 ---@param directory string The path on-disk to start searching from within.
 ---@param options {fargs: string[]} User-provided arguments to add to the `rg` command.
----
 local function _run_rg(directory, options)
     ---@type string[]
-    local command = { "Rg" }
+    local command = {}
     vim.list_extend(command, options.fargs)
     table.insert(command, directory)
-    vim.cmd(vim.fn.join(command, " "))
+    require("modules.utilities.core_helpers").run_ripgrep(command, { display_root = directory })
 end
 
 vim.api.nvim_create_user_command("Crg", function(options)

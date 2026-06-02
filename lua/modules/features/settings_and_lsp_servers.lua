@@ -27,7 +27,15 @@ local temporary_directory = os.getenv("HOME") or os.getenv("APPDATA")
 vim.opt.undodir = temporary_directory .. "/.vim/undodir"
 vim.api.nvim_create_autocmd("BufWritePost", {
     pattern = "*",
-    command = "execute 'wundo ' . escape(undofile(expand('%')),'% ')",
+    callback = function(event)
+        local name = vim.api.nvim_buf_get_name(event.buf)
+
+        if name == "" or vim.bo[event.buf].buftype ~= "" then
+            return
+        end
+
+        vim.cmd("wundo " .. vim.fn.fnameescape(vim.fn.undofile(name)))
+    end,
 })
 
 vim.opt.cmdheight = 2

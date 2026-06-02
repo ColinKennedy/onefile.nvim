@@ -115,7 +115,7 @@ function M.get_treesitter_docstring_ranges(buffer)
 
     local ok_parser, parser = pcall(vim.treesitter.get_parser, buffer, "python")
 
-    if not ok_parser then
+    if not ok_parser or not parser then
         return nil
     end
 
@@ -125,9 +125,8 @@ function M.get_treesitter_docstring_ranges(buffer)
         return nil
     end
 
-    parser:parse()
-
-    local tree = parser:trees()[1]
+    local trees = parser:parse()
+    local tree = trees and trees[1]
 
     if not tree then
         return nil
@@ -427,6 +426,17 @@ vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "BufWritePost" }, {
         end
 
         M.schedule_refresh(event.buf, 500)
+    end,
+})
+
+vim.api.nvim_create_autocmd("FileChangedShellPost", {
+    group = _AUGROUP,
+    callback = function(event)
+        if vim.bo[event.buf].filetype ~= "python" then
+            return
+        end
+
+        M.refresh(event.buf)
     end,
 })
 

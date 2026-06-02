@@ -1,5 +1,7 @@
 local python_docstring_folds = require("modules.features.python_docstring_folds")
 
+local _ORIGINAL_REFRESH = python_docstring_folds.refresh
+local _ORIGINAL_SCHEDULE_REFRESH = python_docstring_folds.schedule_refresh
 ---@param ranges _my.python_docstring_folds.Range[]
 ---@return integer[][]
 local function simplify(ranges)
@@ -12,9 +14,56 @@ local function simplify(ranges)
     return result
 end
 
+---@param filetype string
+---@return integer
+local function prepare_buffer(filetype)
+    local buffer = vim.api.nvim_create_buf(false, true)
+
+    vim.api.nvim_set_current_buf(buffer)
+    vim.bo[buffer].filetype = filetype
+
+    return buffer
+end
+
+---@param event string
+---@param buffer integer
+local function execute_buffer_autocmd(event, buffer)
+    vim.api.nvim_exec_autocmds(event, { buffer = buffer })
+end
+
 describe("python docstring folds", function()
     after_each(function()
+        python_docstring_folds.refresh = _ORIGINAL_REFRESH
+        python_docstring_folds.schedule_refresh = _ORIGINAL_SCHEDULE_REFRESH
         vim.cmd.enew({ bang = true })
+    end)
+    it("refreshes immediately after Neovim reloads an externally changed Python file", function()
+        local buffer = prepare_buffer("python")
+        local refreshed = 0
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        python_docstring_folds.refresh = function(refreshed_buffer)
+            refreshed = refreshed + 1
+            assert.equal(buffer, refreshed_buffer)
+        end
+
+        execute_buffer_autocmd("FileChangedShellPost", buffer)
+
+        assert.equal(1, refreshed)
+    end)
+
+    it("does not refresh docstring folds for external changes in non-Python buffers", function()
+        local buffer = prepare_buffer("lua")
+        local refreshed = 0
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        python_docstring_folds.refresh = function()
+            refreshed = refreshed + 1
+        end
+
+        execute_buffer_autocmd("FileChangedShellPost", buffer)
+
+        assert.equal(0, refreshed)
     end)
 
     it("finds strict module, class, function, and async function docstrings without tree-sitter", function()
@@ -130,6 +179,76 @@ describe("python docstring folds", function()
         vim.v.foldstart = 2
         vim.v.foldend = 6
 
-        assert.equal("    <ASDASDSDADS.....................................................[5 lines]>", python_docstring_folds.foldtext())
+        assert.equal(
+            "    <ASDASDSDADS.·····················································[5 lines]>",
+            python_docstring_folds.foldtext()
+        )
+    end)
+
+    it("debounces repeated Python text-change refreshes", function()
+        local buffer = prepare_buffer("python")
+        local refreshed = 0
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        python_docstring_folds.refresh = function(refreshed_buffer)
+            refreshed = refreshed + 1
+            assert.equal(buffer, refreshed_buffer)
+        end
+
+        python_docstring_folds.schedule_refresh(buffer, 20)
+        python_docstring_folds.schedule_refresh(buffer, 20)
+        python_docstring_folds.schedule_refresh(buffer, 20)
+
+        vim.wait(100)
+
+        assert.equal(1, refreshed)
+    end)
+
+    it("updates cached fold levels after an externally changed Python buffer is reloaded", function()
+        local buffer = prepare_buffer("python")
+
+        vim.api.nvim_buf_set_lines(buffer, 0, -1, false, {
+            '"""',
+            "Module docs.",
+            '"""',
+            "",
+            "value = 1",
+        })
+
+        python_docstring_folds.refresh(buffer)
+
+        assert.equal(1, python_docstring_folds.foldexpr(1))
+
+        vim.api.nvim_buf_set_lines(buffer, 0, -1, false, {
+            "value = 1",
+        })
+
+        execute_buffer_autocmd("FileChangedShellPost", buffer)
+
+        assert.equal(0, python_docstring_folds.foldexpr(1))
+    end)
+
+    it("schedules debounced refreshes only for Python text changes", function()
+        local python_buffer = prepare_buffer("python")
+        local lua_buffer = prepare_buffer("lua")
+        local scheduled = {}
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        python_docstring_folds.schedule_refresh = function(buffer, delay)
+            table.insert(scheduled, { buffer = buffer, delay = delay })
+        end
+
+        execute_buffer_autocmd("TextChanged", lua_buffer)
+        execute_buffer_autocmd("TextChangedI", lua_buffer)
+        execute_buffer_autocmd("BufWritePost", lua_buffer)
+        execute_buffer_autocmd("TextChanged", python_buffer)
+        execute_buffer_autocmd("TextChangedI", python_buffer)
+        execute_buffer_autocmd("BufWritePost", python_buffer)
+
+        assert.are.same({
+            { buffer = python_buffer, delay = 500 },
+            { buffer = python_buffer, delay = 500 },
+            { buffer = python_buffer, delay = 500 },
+        }, scheduled)
     end)
 end)

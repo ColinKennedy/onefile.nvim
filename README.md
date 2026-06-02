@@ -51,7 +51,7 @@ can be opened with `:OpenLogPath`.
 
 ## Testing
 ```sh
-eval $(luarocks path --lua-version 5.1 --bin)
+eval "$(luarocks path --lua-version 5.1 --bin)"
 make test
 # or
 busted .

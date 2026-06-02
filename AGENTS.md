@@ -12,7 +12,7 @@ Keep the configuration self-contained. Do not introduce plugin-manager assumptio
 
 - `init.lua`: main Neovim configuration and implementation code.
 - `spec/keymap_spec.lua`: Busted specs for keymaps, operators, and buffer-editing behavior.
-- `.busted`: Busted configuration. Tests run through `nvim -u init.lua -U NONE -N -i NONE -l`.
+- `.busted`: Busted configuration. Tests run through `nvim --cmd 'set runtimepath^=.' -u init.lua -U NONE -N -i NONE -l`.
 - `Makefile`: canonical local task entry points.
 - `README.md`: installation and test instructions.
 - `TODO.md`: user-maintained backlog and behavior notes.
@@ -29,8 +29,8 @@ Ignore untracked files when deriving repository facts or task guidance unless th
 Run commands from the repository root: `~/repositories/personal/.config/noplugins`.
 
 ```sh
+eval "$(luarocks path --lua-version 5.1 --bin)"
 make test
-eval $(luarocks path --lua-version 5.1 --bin)
 make luacheck
 make check-stylua
 make stylua
@@ -38,12 +38,12 @@ make llscheck
 make download-dependencies
 ```
 
-Before running `make luacheck` or `make llscheck`, you must run `eval $(luarocks path --lua-version 5.1 --bin)` in the same shell so the LuaRocks-installed `luacheck` and `llscheck` executables are in `PATH`.
+Before running Lua tooling such as `make test`, `make luacheck`, or `make llscheck`, run `eval "$(luarocks path --lua-version 5.1 --bin)"` in the same shell so LuaRocks-installed executables and Lua modules are in `PATH` / `LUA_PATH`. Keep the command substitution quoted; the unquoted form can make Bash interpret semicolon-separated Lua paths incorrectly.
 
 The README also documents this test setup:
 
 ```sh
-eval $(luarocks path --lua-version 5.1 --bin)
+eval "$(luarocks path --lua-version 5.1 --bin)"
 make test
 # or
 busted .
@@ -88,13 +88,15 @@ For behavior changes in `init.lua`, prefer adding or updating focused specs in `
 Before handing work back, run the smallest useful verification for the task. Typical checks are:
 
 ```sh
-eval $(luarocks path --lua-version 5.1 --bin)
+eval "$(luarocks path --lua-version 5.1 --bin)"
 make test
 make luacheck
 make check-stylua
 ```
 
-Run `eval $(luarocks path --lua-version 5.1 --bin)` first, then `make llscheck` when changing annotations, public helper shapes, or language-server-sensitive code, if the required tooling is available.
+When you run `make test`, successful test output should be quiet progress markers only. Do not leave incidental Neovim/autocmd messages, expected-error traces, notifications, or other diagnostic noise in passing test output; either fix the source of the noise or explicitly silence it in the test when the noise is intentional.
+
+Run `eval "$(luarocks path --lua-version 5.1 --bin)"` first, then `make llscheck` when changing annotations, public helper shapes, or language-server-sensitive code, if the required tooling is available.
 
 ## Installation / Manual Use
 

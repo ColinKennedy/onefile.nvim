@@ -18,4 +18,16 @@ describe("settings and LSP servers", function()
         assert.is_table(configured.lua_ls.root_markers)
         assert.are.same({ "ty", "lua_ls" }, enabled)
     end)
+
+    it("does not write undo files for unnamed buffers", function()
+        local buffer = vim.api.nvim_create_buf(false, true)
+
+        vim.api.nvim_set_current_buf(buffer)
+
+        local ok, message = pcall(function()
+            vim.api.nvim_exec_autocmds("BufWritePost", { buffer = buffer })
+        end)
+
+        assert(ok, message)
+    end)
 end)

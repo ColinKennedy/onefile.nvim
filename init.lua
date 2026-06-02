@@ -1,6 +1,7 @@
 require("modules.utilities.core_helpers")
 require("modules.features.help_search")
 require("modules.features.python_equal_sign")
+require("modules.features.python_docstring_folds")
 require("modules.features.core_editor_setup")
 require("modules.features.filetype_settings")
 require("modules.features.base_keymaps")

@@ -3,7 +3,6 @@
 local core_helpers = require("modules.utilities.core_helpers")
 
 local M = {}
-local _P = {}
 
 ---@class _my.python_docstring_folds.Range
 ---@field first integer 1-indexed start line.
@@ -19,14 +18,6 @@ local _FOLD_RANGES_BY_BUFFER = {}
 local _REFRESH_TIMERS = {}
 
 local _FOLD_TEXT_WIDTH = 80
-
----@type table<string, boolean>
-local _ALLOWED_FILETYPES = {
-    python = true,
-}
-
-local _FOLDEXPR = "v:lua.require'modules.features.python_docstring_folds'.foldexpr(v:lnum)"
-local _FOLDTEXT = "v:lua.require'modules.features.python_docstring_folds'.foldtext()"
 
 local _AUGROUP = vim.api.nvim_create_augroup("my.python.docstring.folds", { clear = true })
 
@@ -96,70 +87,6 @@ local function _restore_open_ranges(ranges, open_ranges)
     end
 end
 
----@return boolean
-local function _is_insert_like_mode()
-    local mode = vim.api.nvim_get_mode().mode
-
-    return mode:sub(1, 1) == "i" or mode:sub(1, 1) == "R"
-end
-
----@class _my.python_docstring_folds.Options
----@field filetypes string[]?
-
----@param options _my.python_docstring_folds.Options?
-function _P.setup(options)
-    if not options or not options.filetypes then
-        return
-    end
-
-    _ALLOWED_FILETYPES = {}
-
-    for _, filetype in ipairs(options.filetypes) do
-        _ALLOWED_FILETYPES[filetype] = true
-    end
-end
-
----@param buffer integer
----@return boolean
-function _P.is_enabled_filetype(buffer)
-    return _ALLOWED_FILETYPES[vim.bo[buffer].filetype] == true
-end
-
-local function _install_for_current_window()
-    vim.wo.foldmethod = "expr"
-    vim.wo.foldexpr = _FOLDEXPR
-    vim.wo.foldlevel = 0
-    vim.wo.foldtext = _FOLDTEXT
-    vim.wo.foldenable = true
-end
-
-local function _uninstall_from_current_window()
-    vim.wo.foldmethod = "manual"
-    vim.wo.foldexpr = "0"
-    vim.wo.foldtext = "foldtext()"
-    vim.wo.foldenable = false
-end
-
----@param buffer integer?
----@param should_refresh boolean?
-function _P.apply_to_current_window(buffer, should_refresh)
-    buffer = buffer or vim.api.nvim_get_current_buf()
-
-    if not vim.api.nvim_buf_is_valid(buffer) then
-        return
-    end
-
-    if _P.is_enabled_filetype(buffer) then
-        _install_for_current_window()
-
-        if should_refresh then
-            M._refresh(buffer)
-        end
-    else
-        _uninstall_from_current_window()
-    end
-end
-
 ---@param first integer
 ---@param last integer
 ---@return _my.python_docstring_folds.Range?
@@ -181,14 +108,14 @@ end
 
 ---@param buffer integer
 ---@return _my.python_docstring_folds.Range[]?
-function _P.get_treesitter_docstring_ranges(buffer)
+function M.get_treesitter_docstring_ranges(buffer)
     if not core_helpers.has_treesitter_parser("python") then
         return nil
     end
 
     local ok_parser, parser = pcall(vim.treesitter.get_parser, buffer, "python")
 
-    if not ok_parser or not parser then
+    if not ok_parser then
         return nil
     end
 
@@ -198,8 +125,9 @@ function _P.get_treesitter_docstring_ranges(buffer)
         return nil
     end
 
-    local trees = parser:parse()
-    local tree = trees and trees[1]
+    parser:parse()
+
+    local tree = parser:trees()[1]
 
     if not tree then
         return nil
@@ -330,7 +258,7 @@ end
 
 ---@param lines string[]
 ---@return _my.python_docstring_folds.Range[]
-function M._get_fallback_docstring_ranges(lines)
+function M.get_fallback_docstring_ranges(lines)
     ---@type _my.python_docstring_folds.Range[]
     local ranges = {}
 
@@ -366,46 +294,37 @@ end
 
 ---@param buffer integer
 ---@return _my.python_docstring_folds.Range[]
-function _P.get_docstring_ranges(buffer)
-    local ranges = _P.get_treesitter_docstring_ranges(buffer)
+function M.get_docstring_ranges(buffer)
+    local ranges = M.get_treesitter_docstring_ranges(buffer)
 
     if ranges then
         return ranges
     end
 
-    return M._get_fallback_docstring_ranges(vim.api.nvim_buf_get_lines(buffer, 0, -1, false))
+    return M.get_fallback_docstring_ranges(vim.api.nvim_buf_get_lines(buffer, 0, -1, false))
 end
 
 ---@param buffer integer?
-function M._refresh(buffer)
+function M.refresh(buffer)
     buffer = buffer or vim.api.nvim_get_current_buf()
 
-    if not vim.api.nvim_buf_is_valid(buffer) or not _P.is_enabled_filetype(buffer) then
+    if not vim.api.nvim_buf_is_valid(buffer) or vim.bo[buffer].filetype ~= "python" then
         return
     end
 
     vim.api.nvim_buf_call(buffer, function()
         local previous_ranges = _FOLD_RANGES_BY_BUFFER[buffer] or {}
         local open_ranges = _get_open_ranges(previous_ranges)
-        local view = vim.fn.winsaveview()
-        local cursor = vim.api.nvim_win_get_cursor(0)
 
-        _save_ranges_to_cache(buffer, _P.get_docstring_ranges(buffer))
-
-        if _is_insert_like_mode() then
-            return
-        end
-
+        _save_ranges_to_cache(buffer, M.get_docstring_ranges(buffer))
         vim.cmd("silent! normal! zx")
         _restore_open_ranges(_FOLD_RANGES_BY_BUFFER[buffer] or {}, open_ranges)
-        pcall(vim.api.nvim_win_set_cursor, 0, cursor)
-        vim.fn.winrestview(view)
     end)
 end
 
 ---@param buffer integer?
 ---@param delay integer?
-function M._schedule_refresh(buffer, delay)
+function M.schedule_refresh(buffer, delay)
     buffer = buffer or vim.api.nvim_get_current_buf()
     delay = delay or 500
 
@@ -415,28 +334,19 @@ function M._schedule_refresh(buffer, delay)
         _REFRESH_TIMERS[buffer] = vim.uv.new_timer()
     end
 
-    _REFRESH_TIMERS[buffer]:start(
-        delay,
-        0,
-        vim.schedule_wrap(function()
-            if _REFRESH_TIMERS[buffer] then
-                _REFRESH_TIMERS[buffer]:stop()
-            end
+    _REFRESH_TIMERS[buffer]:start(delay, 0, vim.schedule_wrap(function()
+        if _REFRESH_TIMERS[buffer] then
+            _REFRESH_TIMERS[buffer]:stop()
+        end
 
-            M._refresh(buffer)
-        end)
-    )
+        M.refresh(buffer)
+    end))
 end
 
 ---@param lnum integer
 ---@return integer
 function M.foldexpr(lnum)
     local buffer = vim.api.nvim_get_current_buf()
-
-    if not _P.is_enabled_filetype(buffer) then
-        return 0
-    end
-
     local lines = _FOLD_LINES_BY_BUFFER[buffer]
 
     if not lines then
@@ -454,7 +364,7 @@ end
 ---@param first_line integer
 ---@param last_line integer
 ---@return string
-function M._get_summary(buffer, first_line, last_line)
+function M.get_summary(buffer, first_line, last_line)
     local lines = vim.api.nvim_buf_get_lines(buffer, first_line - 1, last_line, false)
 
     for _, line in ipairs(lines) do
@@ -482,11 +392,6 @@ end
 ---@return string
 function M.foldtext()
     local buffer = vim.api.nvim_get_current_buf()
-
-    if not _P.is_enabled_filetype(buffer) then
-        return vim.fn.foldtext()
-    end
-
     local first_line = vim.v.foldstart
     local last_line = vim.v.foldend
     local line_count = last_line - first_line + 1
@@ -494,7 +399,7 @@ function M.foldtext()
     local suffix = string.format("[%d lines]>", line_count)
     local prefix = indent .. "<"
     local summary_width = math.max(1, _FOLD_TEXT_WIDTH - #prefix - #suffix - 1)
-    local summary = _truncate(M._get_summary(buffer, first_line, last_line), summary_width)
+    local summary = _truncate(M.get_summary(buffer, first_line, last_line), summary_width)
     local dot_count = math.max(1, _FOLD_TEXT_WIDTH - #prefix - #summary - #suffix)
 
     return prefix .. summary .. string.rep("·", dot_count) .. suffix
@@ -502,38 +407,26 @@ end
 
 vim.api.nvim_create_autocmd("FileType", {
     group = _AUGROUP,
-    pattern = "*",
+    pattern = "python",
     callback = function(event)
-        _P.apply_to_current_window(event.buf, true)
+        vim.wo.foldmethod = "expr"
+        vim.wo.foldexpr = "v:lua.require'modules.features.python_docstring_folds'.foldexpr(v:lnum)"
+        vim.wo.foldlevel = 0
+        vim.wo.foldtext = "v:lua.require'modules.features.python_docstring_folds'.foldtext()"
+        vim.wo.foldenable = true
+
+        M.refresh(event.buf)
     end,
 })
 
-vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
+vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "BufWritePost" }, {
     group = _AUGROUP,
     callback = function(event)
-        _P.apply_to_current_window(event.buf)
-    end,
-})
-
-vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "InsertLeave", "BufWritePost" }, {
-    group = _AUGROUP,
-    callback = function(event)
-        if not _P.is_enabled_filetype(event.buf) then
+        if vim.bo[event.buf].filetype ~= "python" then
             return
         end
 
-        M._schedule_refresh(event.buf, 500)
-    end,
-})
-
-vim.api.nvim_create_autocmd("FileChangedShellPost", {
-    group = _AUGROUP,
-    callback = function(event)
-        if not _P.is_enabled_filetype(event.buf) then
-            return
-        end
-
-        M._refresh(event.buf)
+        M.schedule_refresh(event.buf, 500)
     end,
 })
 

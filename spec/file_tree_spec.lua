@@ -47,6 +47,41 @@ local function names(rows)
     return output
 end
 
+local function buffer_text(buffer)
+    return table.concat(vim.api.nvim_buf_get_lines(buffer, 0, -1, false), "\n")
+end
+
+local function wait_for(predicate)
+    assert.True(vim.wait(1000, predicate, 20))
+end
+
+local function get_stale_file_tree_window()
+    for _, window in ipairs(vim.api.nvim_list_wins()) do
+        local buffer = vim.api.nvim_win_get_buf(window)
+
+        local is_stale_tree = vim.bo[buffer].filetype ~= "filetree"
+            and vim.startswith(vim.api.nvim_buf_get_name(buffer), "filetree://")
+
+        if is_stale_tree then
+            return window
+        end
+    end
+
+    return nil
+end
+
+local function get_file_tree_window()
+    for _, window in ipairs(vim.api.nvim_list_wins()) do
+        local buffer = vim.api.nvim_win_get_buf(window)
+
+        if vim.bo[buffer].filetype == "filetree" then
+            return window
+        end
+    end
+
+    return nil
+end
+
 local function close_file_tree_windows()
     for _, window in ipairs(vim.api.nvim_list_wins()) do
         local buffer = vim.api.nvim_win_get_buf(window)
@@ -232,5 +267,173 @@ describe("file tree", function()
 
         assert.is_function(mapping.callback)
         assert.equal("Toggle/Show the [f]ile tree.", mapping.desc)
+    end)
+
+    it("refreshes when a visible root file is deleted externally", function()
+        local root = make_repository()
+
+        file_tree.open(root)
+
+        local buffer = vim.api.nvim_get_current_buf()
+
+        assert.is_not_nil(buffer_text(buffer):match("notes%.md"))
+        assert.equal(0, vim.fn.delete(vim.fs.joinpath(root, "notes.md")))
+
+        wait_for(function()
+            return buffer_text(buffer):match("notes%.md") == nil
+        end)
+
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("refreshes when a file inside an expanded nested directory is deleted externally", function()
+        local root = make_repository()
+        local nested_file = vim.fs.joinpath(root, "src", "package", "util.py")
+
+        write_text(nested_file, "print('util')\n")
+        run_git(root, { "add", "src/package/util.py" })
+        file_tree.open(root)
+
+        local buffer = vim.api.nvim_get_current_buf()
+
+        file_tree.expand_all()
+
+        assert.is_not_nil(buffer_text(buffer):match("util%.py"))
+        assert.equal(0, vim.fn.delete(nested_file))
+
+        wait_for(function()
+            return buffer_text(buffer):match("util%.py") == nil
+        end)
+
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("serializes the root, linked source buffer, show-all setting, and expanded directories", function()
+        local root = make_repository()
+        local source_name = vim.fs.joinpath(root, "notes.md")
+
+        core_helpers.with_file_messages_suppressed(function()
+            vim.cmd.edit(vim.fn.fnameescape(source_name))
+        end)
+
+        file_tree.open(root)
+        file_tree.expand()
+        file_tree.toggle_show_all()
+
+        local entries = file_tree.get_session_entries()
+
+        assert.equal(1, #entries)
+        assert.equal(vim.fs.normalize(root), entries[1].root)
+        assert.equal(vim.fs.normalize(source_name), vim.fs.normalize(entries[1].source_name))
+        assert.True(entries[1].show_all)
+        assert.True(vim.tbl_contains(entries[1].expanded, vim.fs.normalize(vim.fs.joinpath(root, "src"))))
+        assert.is_not_nil(file_tree.serialize_session_restore():match("modules%.plugins%.file_tree"))
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("restores file tree sessions with expanded directories and the linked source window", function()
+        local root = make_repository()
+        local source_name = vim.fs.joinpath(root, "notes.md")
+
+        core_helpers.with_file_messages_suppressed(function()
+            vim.cmd.edit(vim.fn.fnameescape(source_name))
+        end)
+
+        local source_window = vim.api.nvim_get_current_win()
+
+        file_tree.restore_session({
+            {
+                expanded = { vim.fs.normalize(root), vim.fs.normalize(vim.fs.joinpath(root, "src")) },
+                root = vim.fs.normalize(root),
+                show_all = true,
+                source_name = source_name,
+            },
+        })
+
+        local tree_window = get_file_tree_window()
+
+        assert.is_not_nil(tree_window)
+        ---@cast tree_window integer
+        assert.equal(source_window, vim.api.nvim_get_current_win())
+
+        local tree_buffer = vim.api.nvim_win_get_buf(tree_window)
+        local text = buffer_text(tree_buffer)
+
+        assert.is_not_nil(text:match("main%.py"))
+        assert.is_not_nil(text:match("ignored%.log"))
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("restores non-empty file trees from stale buffers created by mksession", function()
+        local root = make_repository()
+        local source_name = vim.fs.joinpath(root, "notes.md")
+
+        core_helpers.with_file_messages_suppressed(function()
+            vim.cmd.edit(vim.fn.fnameescape(source_name))
+        end)
+
+        local source_window = vim.api.nvim_get_current_win()
+
+        vim.cmd.vsplit()
+
+        local stale_buffer = vim.api.nvim_create_buf(false, true)
+
+        vim.api.nvim_buf_set_name(stale_buffer, "filetree://" .. vim.fs.normalize(root))
+        vim.api.nvim_win_set_buf(0, stale_buffer)
+        vim.api.nvim_set_current_win(source_window)
+
+        assert.equal("", vim.bo[stale_buffer].filetype)
+        assert.are.same({
+            {
+                expanded = { vim.fs.normalize(root) },
+                root = vim.fs.normalize(root),
+                show_all = false,
+                source_window = get_stale_file_tree_window(),
+            },
+        }, file_tree.get_stale_session_entries())
+
+        file_tree.restore_stale_session_windows()
+
+        local tree_window = assert(get_file_tree_window())
+        local tree_buffer = vim.api.nvim_win_get_buf(tree_window)
+        local text = buffer_text(tree_buffer)
+
+        assert.equal("filetree", vim.bo[tree_buffer].filetype)
+        assert.is_nil(get_stale_file_tree_window())
+        assert.is_not_nil(text:match("src/"))
+        assert.is_not_nil(text:match("notes%.md"))
+        assert.is_not_nil(text:match("%.gitignore"))
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("restores stale file trees on SessionLoadPost with filetype and non-empty contents", function()
+        local root = make_repository()
+
+        vim.cmd.vsplit()
+
+        local stale_buffer = vim.api.nvim_create_buf(false, true)
+
+        vim.api.nvim_buf_set_name(stale_buffer, "filetree://" .. vim.fs.normalize(root))
+        vim.api.nvim_win_set_buf(0, stale_buffer)
+        vim.api.nvim_exec_autocmds("SessionLoadPost", { modeline = false })
+
+        wait_for(function()
+            local tree_window = get_file_tree_window()
+
+            if tree_window == nil then
+                return false
+            end
+
+            local tree_buffer = vim.api.nvim_win_get_buf(tree_window)
+
+            return vim.bo[tree_buffer].filetype == "filetree" and buffer_text(tree_buffer):match("notes%.md") ~= nil
+        end)
+
+        local tree_window = assert(get_file_tree_window())
+        local tree_buffer = vim.api.nvim_win_get_buf(tree_window)
+
+        assert.equal("filetree", vim.bo[tree_buffer].filetype)
+        assert.is_not_nil(buffer_text(tree_buffer):match("src/"))
+        vim.fn.delete(root, "rf")
     end)
 end)

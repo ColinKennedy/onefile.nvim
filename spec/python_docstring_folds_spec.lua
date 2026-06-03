@@ -36,6 +36,9 @@ describe("python docstring folds", function()
         python_docstring_folds.refresh = _ORIGINAL_REFRESH
         python_docstring_folds.schedule_refresh = _ORIGINAL_SCHEDULE_REFRESH
         vim.cmd.enew({ bang = true })
+        vim.wo.foldmethod = "manual"
+        vim.wo.foldexpr = "0"
+        vim.wo.foldtext = "foldtext()"
     end)
     it("refreshes immediately after Neovim reloads an externally changed Python file", function()
         local buffer = prepare_buffer("python")
@@ -183,6 +186,20 @@ describe("python docstring folds", function()
             "    <ASDASDSDADS.·····················································[5 lines]>",
             python_docstring_folds.foldtext()
         )
+    end)
+
+    it("does not install foldexpr or foldtext for Lua buffers", function()
+        local buffer = prepare_buffer("lua")
+
+        vim.wo.foldmethod = "manual"
+        vim.wo.foldexpr = "0"
+        vim.wo.foldtext = "foldtext()"
+
+        execute_buffer_autocmd("FileType", buffer)
+
+        assert.equal("manual", vim.wo.foldmethod)
+        assert.is_false(vim.wo.foldexpr == "v:lua.require'modules.features.python_docstring_folds'.foldexpr(v:lnum)")
+        assert.is_false(vim.wo.foldtext == "v:lua.require'modules.features.python_docstring_folds'.foldtext()")
     end)
 
     it("debounces repeated Python text-change refreshes", function()

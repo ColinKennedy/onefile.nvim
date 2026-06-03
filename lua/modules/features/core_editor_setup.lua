@@ -1876,6 +1876,21 @@ function M.toggle_quickfix()
     end
 end
 
+--- Switch to the QuickFix window, if it is open.
+---
+---@return boolean # If an open quickfix window was focused, return `true`.
+function M.focus_quickfix()
+    for _, window in ipairs(vim.fn.getwininfo()) do
+        if window.quickfix == 1 and window.winid then
+            vim.api.nvim_set_current_win(window.winid)
+
+            return true
+        end
+    end
+
+    return false
+end
+
 --- Write `data` to `filename`.
 ---
 ---@param filename string The file on-disk to write to.

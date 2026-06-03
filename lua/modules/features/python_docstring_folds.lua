@@ -87,6 +87,13 @@ local function _restore_open_ranges(ranges, open_ranges)
     end
 end
 
+---@return boolean
+local function _is_insert_like_mode()
+    local mode = vim.api.nvim_get_mode().mode
+
+    return mode:sub(1, 1) == "i" or mode:sub(1, 1) == "R"
+end
+
 ---@param first integer
 ---@param last integer
 ---@return _my.python_docstring_folds.Range?
@@ -314,10 +321,19 @@ function M.refresh(buffer)
     vim.api.nvim_buf_call(buffer, function()
         local previous_ranges = _FOLD_RANGES_BY_BUFFER[buffer] or {}
         local open_ranges = _get_open_ranges(previous_ranges)
+        local view = vim.fn.winsaveview()
+        local cursor = vim.api.nvim_win_get_cursor(0)
 
         _save_ranges_to_cache(buffer, M.get_docstring_ranges(buffer))
+
+        if _is_insert_like_mode() then
+            return
+        end
+
         vim.cmd("silent! normal! zx")
         _restore_open_ranges(_FOLD_RANGES_BY_BUFFER[buffer] or {}, open_ranges)
+        pcall(vim.api.nvim_win_set_cursor, 0, cursor)
+        vim.fn.winrestview(view)
     end)
 end
 
@@ -418,7 +434,7 @@ vim.api.nvim_create_autocmd("FileType", {
     end,
 })
 
-vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "BufWritePost" }, {
+vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "InsertLeave", "BufWritePost" }, {
     group = _AUGROUP,
     callback = function(event)
         if vim.bo[event.buf].filetype ~= "python" then

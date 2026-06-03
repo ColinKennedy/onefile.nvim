@@ -228,6 +228,32 @@ describe("python docstring folds", function()
         assert.equal(0, python_docstring_folds.foldexpr(1))
     end)
 
+    it("does not move the cursor while refreshing during insert mode", function()
+        local get_mode = vim.api.nvim_get_mode
+        local buffer = prepare_buffer("python")
+
+        vim.api.nvim_buf_set_lines(buffer, 0, -1, false, {
+            "value = {",
+            '    "A": "A",',
+            "}",
+        })
+        vim.api.nvim_win_set_cursor(0, { 2, 4 })
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        rawset(vim.api, "nvim_get_mode", function()
+            return { mode = "i", blocking = false }
+        end)
+
+        local ok, message = pcall(function()
+            python_docstring_folds.refresh(buffer)
+        end)
+
+        rawset(vim.api, "nvim_get_mode", get_mode)
+
+        assert(ok, message)
+        assert.are.same({ 2, 4 }, vim.api.nvim_win_get_cursor(0))
+    end)
+
     it("schedules debounced refreshes only for Python text changes", function()
         local python_buffer = prepare_buffer("python")
         local lua_buffer = prepare_buffer("lua")
@@ -240,12 +266,15 @@ describe("python docstring folds", function()
 
         execute_buffer_autocmd("TextChanged", lua_buffer)
         execute_buffer_autocmd("TextChangedI", lua_buffer)
+        execute_buffer_autocmd("InsertLeave", lua_buffer)
         execute_buffer_autocmd("BufWritePost", lua_buffer)
         execute_buffer_autocmd("TextChanged", python_buffer)
         execute_buffer_autocmd("TextChangedI", python_buffer)
+        execute_buffer_autocmd("InsertLeave", python_buffer)
         execute_buffer_autocmd("BufWritePost", python_buffer)
 
         assert.are.same({
+            { buffer = python_buffer, delay = 500 },
             { buffer = python_buffer, delay = 500 },
             { buffer = python_buffer, delay = 500 },
             { buffer = python_buffer, delay = 500 },

@@ -89,10 +89,65 @@ local function _is_neovim_command(command)
     return name == "nvim" or name == "nvim.exe" or name == "neovim" or name == "neovim.exe"
 end
 
+--- Parse a command string into argv without asking a shell to evaluate it.
+---
+---@param text string The raw command text.
+---@return string[] # Parsed command arguments.
+function _P.parse_argv(text)
+    ---@type string[]
+    local arguments = {}
+    ---@type string[]
+    local current = {}
+    ---@type string?
+    local quote = nil
+    local escaping = false
+
+    local index = 1
+
+    while index <= #text do
+        local character = text:sub(index, index)
+        local next_character = text:sub(index + 1, index + 1)
+
+        if escaping then
+            table.insert(current, character)
+            escaping = false
+        elseif character == "\\" and (next_character == "\\" or next_character == '"' or next_character == "'") then
+            escaping = true
+        elseif quote ~= nil then
+            if character == quote then
+                quote = nil
+            else
+                table.insert(current, character)
+            end
+        elseif character == '"' or character == "'" then
+            quote = character
+        elseif character:match("%s") then
+            if #current > 0 then
+                table.insert(arguments, table.concat(current))
+                current = {}
+            end
+        else
+            table.insert(current, character)
+        end
+
+        index = index + 1
+    end
+
+    if escaping then
+        table.insert(current, "\\")
+    end
+
+    if #current > 0 then
+        table.insert(arguments, table.concat(current))
+    end
+
+    return arguments
+end
+
 --- Get the shell command to use for toggleterminal buffers.
 ---
 ---@return string
-local function _get_default_shell_command()
+function _P.get_default_shell_command()
     if _DEFAULT_SHELL_COMMAND then
         return _DEFAULT_SHELL_COMMAND
     end
@@ -118,6 +173,25 @@ local function _get_default_shell_command()
     _DEFAULT_SHELL_COMMAND = shell
 
     return _DEFAULT_SHELL_COMMAND
+end
+
+--- Get the shell argv to use for toggleterminal buffers.
+---
+---@return string[] # The argv-style shell command.
+function _P.get_default_shell_argv()
+    local command = _P.get_default_shell_command()
+
+    if vim.fn.executable(command) == 1 then
+        return { command }
+    end
+
+    local argv = _P.parse_argv(command)
+
+    if #argv == 0 then
+        return { _is_windows() and (os.getenv("ComSpec") or "cmd.exe") or (os.getenv("SHELL") or "sh") }
+    end
+
+    return argv
 end
 
 --- Suggest a new terminal name, starting with `name`, that is unique.
@@ -258,7 +332,8 @@ end
 local function _create_terminal(buffer)
     if not buffer then
         local terminal = require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
-            local command = _get_default_shell_command()
+            local command = _P.get_default_shell_command()
+            local argv = _P.get_default_shell_argv()
             local terminal_name = _suggest_name("term://" .. command)
 
             buffer = vim.api.nvim_create_buf(false, true)
@@ -268,11 +343,11 @@ local function _create_terminal(buffer)
             vim.api.nvim_buf_set_name(buffer, terminal_name)
             _initialize_terminal_buffer(buffer)
 
-            local job = vim.fn.jobstart(command, { term = true })
+            local job = vim.fn.jobstart(argv, { term = true })
 
             if job <= 0 then
                 vim.api.nvim_buf_delete(buffer, { force = true })
-                error(string.format('Failed to start terminal shell "%s".', command), 0)
+                error(string.format('Failed to start terminal shell "%s".', table.concat(argv, " ")), 0)
             end
 
             vim.api.nvim_buf_set_name(buffer, terminal_name)

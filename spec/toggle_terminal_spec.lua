@@ -1,3 +1,5 @@
+local toggle_terminal_module = require("modules.plugins.toggle_terminal")
+
 --- Press the normal-mode toggle-terminal mapping and wait for queued work.
 ---
 local function press_toggle_terminal()
@@ -33,6 +35,18 @@ describe("modules.plugins.toggle_terminal", function()
     after_each(function()
         pcall(vim.cmd.stopinsert)
         vim.o.showmode = showmode
+    end)
+
+    it("parses terminal shell commands without asking a shell to evaluate them", function()
+        assert.are.same({ "pwsh.exe" }, toggle_terminal_module._P.parse_argv("pwsh.exe"))
+        assert.are.same(
+            { "C:\\Program Files\\PowerShell\\7\\pwsh.exe", "-NoLogo" },
+            toggle_terminal_module._P.parse_argv([["C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo]])
+        )
+        assert.are.same(
+            { "C:\\Tools\\pwsh.exe" },
+            toggle_terminal_module._P.parse_argv([[C:\Tools\pwsh.exe]])
+        )
     end)
 
     it("does not enter insert mode for a terminal buffer unless that buffer is current", function()

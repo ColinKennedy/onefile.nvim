@@ -8,6 +8,8 @@ M._P = _P
 local _FILETYPE = "filetree"
 local _BUFFER_PREFIX = "filetree://"
 local _SIDEBAR_WIDTH = 32
+local _WATCH_DEBOUNCE_MS = 80
+local _GROUP = vim.api.nvim_create_augroup("my.file_tree", { clear = true })
 local _HIGHLIGHT_NAMESPACE = vim.api.nvim_create_namespace("my.file_tree")
 local _STATE_BY_BUFFER = {}
 
@@ -27,6 +29,15 @@ local _STATE_BY_BUFFER = {}
 ---@field show_all boolean Whether ignored/non-Git-visible files are shown.
 ---@field expanded table<string, boolean> Expanded directory paths.
 ---@field rows _my.file_tree.Entry[] Visible rows.
+---@field watchers table<string, uv.uv_fs_event_t> Active directory watchers.
+---@field refresh_timer uv.uv_timer_t? Debounced filesystem refresh timer.
+
+---@class _my.file_tree.SessionEntry
+---@field root string Absolute tree root.
+---@field source_name string? Buffer name for the linked source window.
+---@field expanded string[] Expanded directory paths.
+---@field show_all boolean Whether ignored/non-Git-visible files are shown.
+---@field source_window integer? Window to use when restoring from a stale session buffer.
 
 ---@return boolean
 local function _is_nerdfont_allowed()
@@ -149,7 +160,17 @@ function _P.get_child_entries(directory, depth, show_all, visible)
     ---@type _my.file_tree.Entry[]
     local entries = {}
 
-    for name, type_ in vim.fs.dir(directory) do
+    if not _is_directory(directory) then
+        return entries
+    end
+
+    local ok, iterator = pcall(vim.fs.dir, directory)
+
+    if not ok or iterator == nil then
+        return entries
+    end
+
+    for name, type_ in iterator do
         local path = _normalize(vim.fs.joinpath(directory, name))
 
         if _should_include(path, visible, show_all) then
@@ -214,8 +235,104 @@ local function _is_file_tree_window(window)
     return vim.api.nvim_win_is_valid(window) and _is_file_tree_buffer(vim.api.nvim_win_get_buf(window))
 end
 
+---@type fun(state: _my.file_tree.State)
+local _render
+
+---@type fun(state: _my.file_tree.State)
+local _sync_watchers
+
+---@param handle uv.uv_handle_t?
+local function _close_handle(handle)
+    if handle == nil or handle:is_closing() then
+        return
+    end
+
+    handle:close()
+end
+
 ---@param state _my.file_tree.State
-local function _render(state)
+local function _stop_refresh_timer(state)
+    if state.refresh_timer == nil then
+        return
+    end
+
+    state.refresh_timer:stop()
+    _close_handle(state.refresh_timer)
+    state.refresh_timer = nil
+end
+
+---@param state _my.file_tree.State
+local function _stop_watchers(state)
+    _stop_refresh_timer(state)
+
+    for watcher_path, watcher in pairs(state.watchers) do
+        watcher:stop()
+        _close_handle(watcher)
+        state.watchers[watcher_path] = nil
+    end
+end
+
+---@param state _my.file_tree.State
+local function _schedule_refresh(state)
+    if not vim.api.nvim_buf_is_valid(state.buffer) then
+        _stop_watchers(state)
+        _STATE_BY_BUFFER[state.buffer] = nil
+
+        return
+    end
+
+    if state.refresh_timer == nil then
+        state.refresh_timer = vim.uv.new_timer()
+    end
+
+    state.refresh_timer:stop()
+    state.refresh_timer:start(_WATCH_DEBOUNCE_MS, 0, function()
+        vim.schedule(function()
+            if not vim.api.nvim_buf_is_valid(state.buffer) then
+                _stop_watchers(state)
+                _STATE_BY_BUFFER[state.buffer] = nil
+
+                return
+            end
+
+            _render(state)
+        end)
+    end)
+end
+
+---@param state _my.file_tree.State
+---@param watched_path string
+local function _watch_directory(state, watched_path)
+    if state.watchers[watched_path] ~= nil or not _is_directory(watched_path) then
+        return
+    end
+
+    local watcher = vim.uv.new_fs_event()
+
+    if watcher == nil then
+        return
+    end
+
+    local ok = watcher:start(watched_path, {}, function(error_)
+        if error_ ~= nil then
+            return
+        end
+
+        vim.schedule(function()
+            _schedule_refresh(state)
+        end)
+    end)
+
+    if not ok then
+        _close_handle(watcher)
+
+        return
+    end
+
+    state.watchers[watched_path] = watcher
+end
+
+function _render(state)
     state.rows = _P.build_rows(state.root, state.show_all, state.expanded)
 
     ---@type string[]
@@ -247,6 +364,33 @@ local function _render(state)
     end
 
     vim.bo[state.buffer].modifiable = false
+
+    _sync_watchers(state)
+end
+
+function _sync_watchers(state)
+    ---@type table<string, boolean>
+    local wanted = {
+        [state.root] = true,
+    }
+
+    for _, entry in ipairs(state.rows) do
+        if entry.kind == "directory" then
+            wanted[entry.path] = true
+        end
+    end
+
+    for watched_path, watcher in pairs(state.watchers) do
+        if not wanted[watched_path] or not _is_directory(watched_path) then
+            watcher:stop()
+            _close_handle(watcher)
+            state.watchers[watched_path] = nil
+        end
+    end
+
+    for watched_path in pairs(wanted) do
+        _watch_directory(state, watched_path)
+    end
 end
 
 ---@param buffer integer?
@@ -269,6 +413,12 @@ end
 ---@return boolean
 local function _can_focus_window(window)
     return window ~= 0 and vim.api.nvim_win_is_valid(window)
+end
+
+---@param window integer
+---@return boolean
+local function _is_regular_source_window(window)
+    return _can_focus_window(window) and not _is_file_tree_window(window)
 end
 
 ---@param state _my.file_tree.State
@@ -471,6 +621,7 @@ function M.open(root)
         rows = {},
         show_all = false,
         source_window = source_window,
+        watchers = {},
         window = 0,
     }
 
@@ -488,8 +639,188 @@ function M.close()
     local state = _get_state()
 
     if state and _can_focus_window(state.window) then
+        _stop_watchers(state)
         vim.api.nvim_win_close(state.window, true)
     end
+end
+
+---@param source_name string
+---@return integer?
+local function _find_visible_source_window(source_name)
+    local target = vim.fn.fnamemodify(source_name, ":p")
+
+    for _, window in ipairs(vim.api.nvim_list_wins()) do
+        if _is_regular_source_window(window) then
+            local candidate = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(window)), ":p")
+
+            if candidate == target then
+                return window
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Close stale file tree windows restored by `:mksession`.
+local function _close_visible_file_tree_windows()
+    for _, window in ipairs(vim.api.nvim_list_wins()) do
+        local buffer = vim.api.nvim_win_get_buf(window)
+
+        if _is_file_tree_buffer(buffer) or vim.startswith(vim.api.nvim_buf_get_name(buffer), _BUFFER_PREFIX) then
+            local state = _STATE_BY_BUFFER[buffer]
+
+            if state ~= nil then
+                _stop_watchers(state)
+            end
+
+            pcall(vim.api.nvim_win_close, window, true)
+            pcall(vim.api.nvim_buf_delete, buffer, { force = true })
+            _STATE_BY_BUFFER[buffer] = nil
+        end
+    end
+end
+
+---@return _my.file_tree.SessionEntry[]
+function M.get_session_entries()
+    ---@type _my.file_tree.SessionEntry[]
+    local entries = {}
+
+    for buffer, state in pairs(_STATE_BY_BUFFER) do
+        if vim.api.nvim_buf_is_valid(buffer) and _can_focus_window(state.window) then
+            ---@type string[]
+            local expanded = vim.tbl_keys(state.expanded)
+
+            table.sort(expanded)
+            table.insert(entries, {
+                expanded = expanded,
+                root = state.root,
+                show_all = state.show_all,
+                source_name = _is_regular_source_window(state.source_window)
+                        and vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(state.source_window))
+                    or nil,
+            })
+        end
+    end
+
+    table.sort(entries, function(left, right)
+        return left.root < right.root
+    end)
+
+    return entries
+end
+
+---@return _my.file_tree.SessionEntry[]
+function M.get_stale_session_entries()
+    ---@type _my.file_tree.SessionEntry[]
+    local entries = {}
+    ---@type table<string, boolean>
+    local seen = {}
+
+    for _, window in ipairs(vim.api.nvim_list_wins()) do
+        local buffer = vim.api.nvim_win_get_buf(window)
+        local name = vim.api.nvim_buf_get_name(buffer)
+
+        if vim.bo[buffer].filetype ~= _FILETYPE and vim.startswith(name, _BUFFER_PREFIX) then
+            local root = _normalize(name:sub(#_BUFFER_PREFIX + 1))
+
+            if root ~= "" and not seen[root] then
+                table.insert(entries, {
+                    expanded = { root },
+                    root = root,
+                    show_all = false,
+                    source_window = window,
+                })
+                seen[root] = true
+            end
+        end
+    end
+
+    table.sort(entries, function(left, right)
+        return left.root < right.root
+    end)
+
+    return entries
+end
+
+---@param entries _my.file_tree.SessionEntry[]
+function M.restore_session(entries)
+    local previous_window = vim.api.nvim_get_current_win()
+
+    _close_visible_file_tree_windows()
+
+    for _, entry in ipairs(entries) do
+        if type(entry.root) == "string" and _is_directory(entry.root) then
+            local source_window = nil
+
+            if type(entry.source_name) == "string" then
+                source_window = _find_visible_source_window(entry.source_name)
+            end
+
+            if source_window == nil and type(entry.source_window) == "number" then
+                source_window = entry.source_window
+            end
+
+            if source_window == nil and _is_regular_source_window(previous_window) then
+                source_window = previous_window
+            end
+
+            if not _can_focus_window(source_window or 0) then
+                source_window = vim.api.nvim_get_current_win()
+            end
+
+            if source_window ~= nil then
+                vim.api.nvim_set_current_win(source_window)
+            end
+
+            M.open(entry.root)
+
+            local state = _get_state()
+
+            if state ~= nil then
+                state.source_window = source_window or state.source_window
+                state.show_all = entry.show_all == true
+                state.expanded = {}
+
+                if type(entry.expanded) == "table" then
+                    for _, expanded_path in ipairs(entry.expanded) do
+                        if type(expanded_path) == "string" then
+                            state.expanded[_normalize(expanded_path)] = true
+                        end
+                    end
+                end
+
+                state.expanded[state.root] = true
+                _render(state)
+            end
+        end
+    end
+
+    if _can_focus_window(previous_window) then
+        vim.api.nvim_set_current_win(previous_window)
+    end
+end
+
+---@return string
+function M.serialize_session_restore()
+    local entries = M.get_session_entries()
+
+    if #entries == 0 then
+        return ""
+    end
+
+    return 'require("modules.plugins.file_tree").restore_session(' .. vim.inspect(entries) .. ")"
+end
+
+--- Reopen file trees from stale `filetree://` windows created by `:mksession`.
+function M.restore_stale_session_windows()
+    local entries = M.get_stale_session_entries()
+
+    if #entries == 0 then
+        return
+    end
+
+    M.restore_session(entries)
 end
 
 --- Toggle a file tree for the current working directory.
@@ -512,9 +843,39 @@ function M.toggle()
 end
 
 vim.api.nvim_create_autocmd("BufWipeout", {
-    group = vim.api.nvim_create_augroup("my.file_tree", { clear = true }),
+    group = _GROUP,
     callback = function(event)
+        local state = _STATE_BY_BUFFER[event.buf]
+
+        if state ~= nil then
+            _stop_watchers(state)
+        end
+
         _STATE_BY_BUFFER[event.buf] = nil
+    end,
+})
+
+local core_editor_setup = require("modules.features.core_editor_setup")
+
+core_editor_setup._SESSION_MANAGER:register_session_write_pre_callback(".file_tree.lua", function()
+    return M.serialize_session_restore()
+end)
+
+vim.api.nvim_create_autocmd("SessionLoadPost", {
+    group = _GROUP,
+    desc = "Restore file trees from session-created buffers.",
+    callback = function()
+        vim.schedule(M.restore_stale_session_windows)
+    end,
+})
+
+vim.api.nvim_create_autocmd("VimEnter", {
+    group = _GROUP,
+    desc = "Restore file trees after startup session loading.",
+    callback = function()
+        if vim.v.this_session ~= "" then
+            vim.schedule(M.restore_stale_session_windows)
+        end
     end,
 })
 

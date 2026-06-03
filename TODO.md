@@ -1,7 +1,5 @@
 - `:Git diff` isn't showing anything. Fix
 
-- A <M-S-{1,2,3,4,5}> for grapple
-
 - Add a native file-tree plugin
  - nested folders, hjkl mappings to expand and collapse
  - icons for file types
@@ -14,7 +12,6 @@
 - Once that neovim remote PR is merged, add that to my git commit / git rebase
   editor command so that I don't get nested Neovims anymore.
 `<space>`W
-`<space>`q
 
 - Add Cli-based mark support
  - Async-update whenever the file is changed

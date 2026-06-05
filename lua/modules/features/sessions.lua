@@ -36,7 +36,7 @@ local _P = {}
 local function _get_git_branch(root)
     local core_helpers = require("modules.utilities.core_helpers")
     local result = vim.system({
-        core_helpers.GIT_EXECUTABLE,
+        core_helpers._GIT_EXECUTABLE,
         "-C",
         root,
         "rev-parse",
@@ -57,11 +57,6 @@ local function _get_git_branch(root)
     return branch
 end
 
---- Get the branch-specific session file to write for `reference_path`.
----
----@param reference_path string The file or directory to search for a project root from.
----@return string? # The session file path, if a project root and branch were found.
----
 function _P.get_session_branch_path(reference_path)
     local core_helpers = require("modules.utilities.core_helpers")
     local root = core_helpers.get_nearest_project_root(reference_path)

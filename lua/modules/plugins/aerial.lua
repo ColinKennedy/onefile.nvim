@@ -45,6 +45,7 @@ local _SIDEBAR_WIDTH = 30
 local _FALLBACK_HIGHLIGHT_MAX_LINES = 500
 local _TREESITTER_REFRESH_DEBOUNCE_MS = 120
 local _FALLBACK_REFRESH_DEBOUNCE_MS = 350
+local _EMPTY_MESSAGE = "Nothing found. Define a class or function."
 local _AERIAL_FILETYPE = "aerial"
 local _AERIAL_BUFFER_PREFIX = "aerial://"
 local _FILE_TREE_FILETYPE = "filetree"

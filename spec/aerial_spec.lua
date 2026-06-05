@@ -455,7 +455,7 @@ describe("modules.plugins.aerial", function()
             "",
         })
 
-        aerial._toggle()
+        aerial.toggle()
         local aerial_buffer = vim.api.nvim_get_current_buf()
 
         assert.are.same({ "Nothing found. Define a class or function." }, get_lines(aerial_buffer))

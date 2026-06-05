@@ -33,6 +33,30 @@ local _P = {}
 ---@param reference_path string The path on-disk to search for a git / VCS root.
 ---@return string? # The recommended Session.vim save location, if any.
 ---
+local function _get_git_branch(root)
+    local core_helpers = require("modules.utilities.core_helpers")
+    local result = vim.system({
+        core_helpers._GIT_EXECUTABLE,
+        "-C",
+        root,
+        "rev-parse",
+        "--abbrev-ref",
+        "HEAD",
+    }, { text = true }):wait()
+
+    if result.code ~= 0 then
+        return nil
+    end
+
+    local branch = vim.split(result.stdout or "", "\n", { plain = true })[1]
+
+    if branch == "" then
+        return nil
+    end
+
+    return branch
+end
+
 function _P.get_session_branch_path(reference_path)
     local core_helpers = require("modules.utilities.core_helpers")
     local root = core_helpers.get_nearest_project_root(reference_path)
@@ -46,7 +70,7 @@ function _P.get_session_branch_path(reference_path)
         return nil
     end
 
-    local branch = require("modules.features.core_editor_setup").get_git_branch_safe()
+    local branch = _get_git_branch(root)
 
     if not branch then
         vim.notify(string.format('Cannot save "%s" project. No branch was found.', root), vim.log.levels.ERROR)

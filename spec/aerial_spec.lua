@@ -439,6 +439,19 @@ describe("modules.plugins.aerial", function()
         assert.are.same({ "  CC class Widget1", "    FF def __init__" }, get_lines(aerial_buffer))
     end)
 
+    it("shows a Comment-highlighted empty message when no symbols are found", function()
+        make_source_buffer({
+            "# just a comment",
+            "",
+        })
+
+        aerial.toggle()
+        local aerial_buffer = vim.api.nvim_get_current_buf()
+
+        assert.are.same({ "Nothing found. Define a class or function." }, get_lines(aerial_buffer))
+        assert.is_true(vim.tbl_contains(get_inspected_extmark_groups(aerial_buffer, 0, 0), "Comment"))
+    end)
+
     it("restores an aerial sidebar for a visible session source window", function()
         local source_path = vim.fn.tempname() .. ".lua"
 

@@ -1599,6 +1599,31 @@ local function write_file(path, contents)
     handler:close()
 end
 
+---@param root string Repository root to inspect.
+---@return string? # The active Git branch, if one can be found.
+local function _get_git_branch(root)
+    local result = vim.system({
+        core_helpers._GIT_EXECUTABLE,
+        "-C",
+        root,
+        "rev-parse",
+        "--abbrev-ref",
+        "HEAD",
+    }, { text = true }):wait()
+
+    if result.code ~= 0 then
+        return nil
+    end
+
+    local branch = vim.split(result.stdout or "", "\n", { plain = true })[1]
+
+    if branch == "" then
+        return nil
+    end
+
+    return branch
+end
+
 --- Find the "branch-aware" internal session path associated with `name`.
 ---
 ---@param name string Some unique file name to search within for a path.
@@ -1606,7 +1631,7 @@ end
 ---@return string # The found path. Usually it's `{VCS}/.sessions/{git branch name}/{name}`.
 ---
 function _P.get_branch_path(name, root)
-    local branch = M.get_git_branch_safe(root)
+    local branch = _get_git_branch(root)
 
     if not branch then
         error(string.format('Cannot save "%s" project. No branch was found.', root))

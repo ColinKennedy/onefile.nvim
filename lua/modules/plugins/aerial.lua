@@ -45,6 +45,8 @@ local _FALLBACK_HIGHLIGHT_MAX_LINES = 500
 local _REFRESH_DEBOUNCE_MS = 120
 local _AERIAL_FILETYPE = "aerial"
 local _AERIAL_BUFFER_PREFIX = "aerial://"
+local _FILE_TREE_FILETYPE = "filetree"
+local _FILE_TREE_BUFFER_PREFIX = "filetree://"
 ---@type table<integer, _my.aerial.State>
 local _STATE_BY_SOURCE_BUFFER = {}
 ---@type table<integer, _my.aerial.State>
@@ -1380,7 +1382,17 @@ end
 ---@param window integer The window to inspect.
 ---@return boolean # If this is a regular, non-floating window, return `true`.
 local function _is_regular_source_window(window)
-    return vim.api.nvim_win_is_valid(window) and vim.api.nvim_win_get_config(window).relative == ""
+    if not vim.api.nvim_win_is_valid(window) or vim.api.nvim_win_get_config(window).relative ~= "" then
+        return false
+    end
+
+    local buffer = vim.api.nvim_win_get_buf(window)
+    local name = vim.api.nvim_buf_get_name(buffer)
+
+    return vim.bo[buffer].filetype ~= _AERIAL_FILETYPE
+        and vim.bo[buffer].filetype ~= _FILE_TREE_FILETYPE
+        and not vim.startswith(name, _AERIAL_BUFFER_PREFIX)
+        and not vim.startswith(name, _FILE_TREE_BUFFER_PREFIX)
 end
 
 --- Update active-row highlighting for the current source window.
@@ -1513,6 +1525,13 @@ end
 ---@param entries _my.aerial.SessionEntry[] The session sidebars to restore.
 function M.restore_session(entries)
     local previous_window = vim.api.nvim_get_current_win()
+    local stale_entries = M.get_stale_session_entries()
+
+    -- The placeholders in the freshly sourced Session.vim describe the
+    -- current layout. Prefer them over a sidecar that may be older.
+    if #stale_entries > 0 then
+        entries = stale_entries
+    end
 
     _close_visible_aerial_windows()
 
@@ -1612,10 +1631,29 @@ function M.setup()
             local state = _STATE_BY_SOURCE_BUFFER[event.buf]
 
             if state ~= nil then
+                _STATE_BY_SOURCE_BUFFER[event.buf] = nil
+
+                if
+                    vim.api.nvim_win_is_valid(state.source_window)
+                    and _is_regular_source_window(state.source_window)
+                then
+                    local replacement_buffer = vim.api.nvim_win_get_buf(state.source_window)
+
+                    if replacement_buffer ~= event.buf and vim.api.nvim_buf_is_valid(replacement_buffer) then
+                        state.source_buffer = replacement_buffer
+                        _STATE_BY_SOURCE_BUFFER[replacement_buffer] = state
+                        _SOURCE_BUFFER_BY_AERIAL_BUFFER[state.aerial_buffer] = replacement_buffer
+                        vim.b[state.aerial_buffer].aerial_source_buffer = replacement_buffer
+                        _rename_aerial_buffer(state.aerial_buffer, replacement_buffer)
+                        M.refresh_source_buffer(replacement_buffer)
+
+                        return
+                    end
+                end
+
                 _stop_refresh_timer(state)
                 _SOURCE_BUFFER_BY_AERIAL_BUFFER[state.aerial_buffer] = nil
                 _STATE_BY_AERIAL_BUFFER[state.aerial_buffer] = nil
-                _STATE_BY_SOURCE_BUFFER[event.buf] = nil
             end
         end,
     })

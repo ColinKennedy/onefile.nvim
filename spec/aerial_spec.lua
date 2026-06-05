@@ -504,6 +504,38 @@ describe("modules.plugins.aerial", function()
         os.remove(source_path)
     end)
 
+    it("prefers the current mksession placeholder over an older sidecar source", function()
+        local old_source_path = vim.fn.tempname() .. ".vim"
+        local current_source_path = vim.fn.tempname() .. ".py"
+
+        vim.fn.writefile({ "set number" }, old_source_path)
+        vim.fn.writefile({
+            "def thing():",
+            "    return 1",
+        }, current_source_path)
+        vim.cmd("silent edit " .. vim.fn.fnameescape(current_source_path))
+
+        local source_window = vim.api.nvim_get_current_win()
+
+        vim.cmd.vsplit()
+        local stale_buffer = vim.api.nvim_create_buf(false, true)
+
+        vim.api.nvim_buf_set_name(stale_buffer, "aerial://" .. current_source_path)
+        vim.api.nvim_win_set_buf(0, stale_buffer)
+        vim.api.nvim_set_current_win(source_window)
+
+        aerial.restore_session({ { source_name = old_source_path } })
+
+        local aerial_window = assert(find_aerial_window())
+        local aerial_buffer = vim.api.nvim_win_get_buf(aerial_window)
+
+        assert.equal("aerial", vim.bo[aerial_buffer].filetype)
+        assert.is_truthy(table.concat(get_lines(aerial_buffer), "\n"):find("thing", 1, true))
+
+        os.remove(old_source_path)
+        os.remove(current_source_path)
+    end)
+
     it("serializes aerial restore code for session sidecars", function()
         local source_path = vim.fn.tempname() .. ".lua"
 
@@ -521,6 +553,60 @@ describe("modules.plugins.aerial", function()
         assert.is_truthy(code:find(source_path, 1, true))
 
         os.remove(source_path)
+    end)
+
+    it("serializes the followed buffer after a restored aerial source is replaced", function()
+        local first_path = vim.fn.tempname() .. ".md"
+        local second_path = vim.fn.tempname() .. ".py"
+
+        vim.fn.writefile({
+            "# Todo",
+            "",
+            "- item",
+        }, first_path)
+        vim.fn.writefile({
+            "def thing():",
+            "    return 1",
+        }, second_path)
+        vim.cmd("silent edit " .. vim.fn.fnameescape(first_path))
+
+        local source_window = vim.api.nvim_get_current_win()
+
+        aerial.restore_session({ { source_name = first_path } })
+        local first_aerial_window = assert(find_aerial_window())
+
+        vim.api.nvim_set_current_win(first_aerial_window)
+        assert.equal(source_window, aerial.get_current_source_window())
+
+        local first_buffer = vim.api.nvim_win_get_buf(source_window)
+
+        vim.api.nvim_set_current_win(source_window)
+        vim.cmd("silent edit " .. vim.fn.fnameescape(second_path))
+        pcall(vim.api.nvim_buf_delete, first_buffer, { force = true })
+
+        local followed_aerial_window = assert(find_aerial_window())
+        local followed_aerial_buffer = vim.api.nvim_win_get_buf(followed_aerial_window)
+
+        assert.is_truthy(table.concat(get_lines(followed_aerial_buffer), "\n"):find("thing", 1, true))
+
+        local code = aerial.serialize_session_restore()
+
+        assert.is_truthy(code:find(second_path, 1, true))
+        assert.is_nil(code:find(first_path, 1, true))
+
+        aerial.close_all()
+        vim.cmd("silent edit " .. vim.fn.fnameescape(second_path))
+        vim.api.nvim_set_current_win(source_window)
+        loadstring(code)()
+
+        local aerial_window = assert(find_aerial_window())
+        local aerial_buffer = vim.api.nvim_win_get_buf(aerial_window)
+
+        assert.equal("aerial", vim.bo[aerial_buffer].filetype)
+        assert.is_truthy(table.concat(get_lines(aerial_buffer), "\n"):find("thing", 1, true))
+
+        os.remove(first_path)
+        os.remove(second_path)
     end)
 
     it("copies source text highlight groups into fallback aerial rows", function()

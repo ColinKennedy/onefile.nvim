@@ -45,7 +45,6 @@ local _SIDEBAR_WIDTH = 30
 local _FALLBACK_HIGHLIGHT_MAX_LINES = 500
 local _TREESITTER_REFRESH_DEBOUNCE_MS = 120
 local _FALLBACK_REFRESH_DEBOUNCE_MS = 350
-local _EMPTY_MESSAGE = "Nothing found. Define a class or function."
 local _AERIAL_FILETYPE = "aerial"
 local _AERIAL_BUFFER_PREFIX = "aerial://"
 local _FILE_TREE_FILETYPE = "filetree"
@@ -1121,6 +1120,26 @@ function M._get_refresh_debounce_ms(source_buffer)
     return _FALLBACK_REFRESH_DEBOUNCE_MS
 end
 
+--- Get the refresh debounce delay for `source_buffer`.
+---
+---@param source_buffer integer The source buffer whose outline will be refreshed.
+---@return integer # The debounce delay in milliseconds.
+function M.get_refresh_debounce_ms(source_buffer)
+    local core_helpers = require("modules.utilities.core_helpers")
+    local filetype = vim.bo[source_buffer].filetype
+    local language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
+
+    if
+        language ~= ""
+        and _get_treesitter_query(language) ~= nil
+        and _has_treesitter_parser(source_buffer, language)
+    then
+        return _TREESITTER_REFRESH_DEBOUNCE_MS
+    end
+
+    return _FALLBACK_REFRESH_DEBOUNCE_MS
+end
+
 --- Debounce an outline refresh for a changed source buffer.
 ---
 ---@param source_buffer integer The source buffer to refresh later.
@@ -1141,7 +1160,7 @@ function _P.schedule_refresh_source_buffer(source_buffer)
         state.refresh_timer:stop()
     end
 
-    state.refresh_timer:start(M._get_refresh_debounce_ms(source_buffer), 0, function()
+    state.refresh_timer:start(M.get_refresh_debounce_ms(source_buffer), 0, function()
         vim.schedule(function()
             local current = _STATE_BY_SOURCE_BUFFER[source_buffer]
 

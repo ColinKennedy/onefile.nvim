@@ -822,7 +822,7 @@ describe("modules.plugins.aerial", function()
 
         vim.bo[source_buffer].filetype = ""
 
-        assert.equal(350, aerial._get_refresh_debounce_ms(source_buffer))
+        assert.equal(750, aerial.get_refresh_debounce_ms(source_buffer))
     end)
 
     it("follows the original source window when it switches buffers", function()

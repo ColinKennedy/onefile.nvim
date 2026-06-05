@@ -1,3 +1,4 @@
+local aerial = require("modules.plugins.aerial")
 local core_helpers = require("modules.utilities.core_helpers")
 local file_tree = require("modules.plugins.file_tree")
 
@@ -21,9 +22,8 @@ local function write_text(path, text)
 end
 
 local function make_repository()
-    local root = vim.fn.tempname()
+    local root = assert(vim.uv.fs_mkdtemp(vim.fs.joinpath(vim.uv.os_tmpdir(), "file-tree-spec-XXXXXX")))
 
-    assert.equal(1, vim.fn.mkdir(root, "p"))
     run_git(root, { "init" })
     run_git(root, { "config", "user.email", "test@example.com" })
     run_git(root, { "config", "user.name", "Test User" })
@@ -33,6 +33,7 @@ local function make_repository()
     write_text(vim.fs.joinpath(root, "notes.md"), "# Notes\n")
     write_text(vim.fs.joinpath(root, "ignored.log"), "ignored\n")
     run_git(root, { "add", ".gitignore", "src/main.py" })
+    run_git(root, { "commit", "-m", "Initial commit" })
 
     return root
 end
@@ -82,12 +83,26 @@ local function get_file_tree_window()
     return nil
 end
 
-local function close_file_tree_windows()
+---@return integer?
+local function get_aerial_window()
     for _, window in ipairs(vim.api.nvim_list_wins()) do
         local buffer = vim.api.nvim_win_get_buf(window)
 
-        if vim.bo[buffer].filetype == "filetree" then
-            vim.api.nvim_win_close(window, true)
+        if vim.bo[buffer].filetype == "aerial" then
+            return window
+        end
+    end
+
+    return nil
+end
+
+local function close_file_tree_windows()
+    for _, window in ipairs(vim.api.nvim_list_wins()) do
+        local buffer = vim.api.nvim_win_get_buf(window)
+        local name = vim.api.nvim_buf_get_name(buffer)
+
+        if vim.bo[buffer].filetype == "filetree" or vim.startswith(name, "filetree://") then
+            pcall(vim.api.nvim_win_close, window, true)
         end
     end
 end
@@ -103,6 +118,7 @@ describe("file tree", function()
 
     after_each(function()
         core_helpers.IS_NERDFONT_ALLOWED = original_nerdfont_allowed
+        aerial.close_all()
         close_file_tree_windows()
         vim.cmd.enew({ bang = true })
     end)
@@ -328,6 +344,7 @@ describe("file tree", function()
         assert.True(entries[1].show_all)
         assert.True(vim.tbl_contains(entries[1].expanded, vim.fs.normalize(vim.fs.joinpath(root, "src"))))
         assert.is_not_nil(file_tree.serialize_session_restore():match("modules%.plugins%.file_tree"))
+        assert.equal("", file_tree.serialize_session_restore(root .. "-other"))
         vim.fn.delete(root, "rf")
     end)
 
@@ -436,4 +453,117 @@ describe("file tree", function()
         assert.is_not_nil(buffer_text(tree_buffer):match("src/"))
         vim.fn.delete(root, "rf")
     end)
+
+    it("reloads Sessionx sidecars with a non-empty file tree for the saved project", function()
+        local root = make_repository()
+        local session = vim.fs.joinpath(root, "Session.vim")
+        local original_cwd = vim.fn.getcwd(-1, -1)
+        local branch = vim.trim(run_git(root, { "branch", "--show-current" }))
+        local sidecar = vim.fs.joinpath(root, ".sessions", branch, ".file_tree.lua")
+
+        local ok, error_ = pcall(function()
+            vim.cmd.tcd(vim.fn.fnameescape(root))
+            file_tree.open(root)
+
+            vim.cmd("mksession! " .. vim.fn.fnameescape(session))
+
+            assert.equal(1, vim.fn.filereadable(sidecar))
+
+            local sidecar_text = table.concat(vim.fn.readfile(sidecar), "\n")
+
+            assert.is_not_nil(sidecar_text:match(vim.pesc(vim.fs.normalize(root))))
+            assert.is_nil(sidecar_text:match("/tmp/nvim"))
+
+            close_file_tree_windows()
+            assert.is_nil(get_file_tree_window())
+
+            vim.cmd.source(vim.fn.fnameescape(sidecar))
+
+            local tree_window = assert(get_file_tree_window())
+            local tree_buffer = vim.api.nvim_win_get_buf(tree_window)
+            local text = buffer_text(tree_buffer)
+
+            assert.equal("filetree", vim.bo[tree_buffer].filetype)
+            assert.is_not_nil(text:match("src/"))
+            assert.is_not_nil(text:match("notes%.md"))
+        end)
+
+        vim.cmd.tcd(vim.fn.fnameescape(original_cwd))
+        vim.fn.delete(root, "rf")
+
+        if not ok then
+            error(error_)
+        end
+    end)
+
+    it("reloads three-window aerial and file tree sessions for different focused files", function()
+        local root = make_repository()
+        local session = vim.fs.joinpath(root, "Session.vim")
+        local original_cwd = vim.fn.getcwd(-1, -1)
+        local branch = vim.trim(run_git(root, { "branch", "--show-current" }))
+        local sessionx = vim.fs.joinpath(root, ".sessions", branch, "Sessionx.vim")
+        local aerial_sidecar = vim.fs.joinpath(root, ".sessions", branch, ".aerial.lua")
+        local tree_sidecar = vim.fs.joinpath(root, ".sessions", branch, ".file_tree.lua")
+        local source_paths = {
+            vim.fs.joinpath(root, "src", "main.py"),
+            vim.fs.joinpath(root, "notes.md"),
+            vim.fs.joinpath(root, ".gitignore"),
+        }
+
+        write_text(source_paths[1], "def main():\n    return 1\n")
+
+        local ok, error_ = pcall(function()
+            vim.cmd.tcd(vim.fn.fnameescape(root))
+
+            for _, source_path in ipairs(source_paths) do
+                aerial.close_all()
+                close_file_tree_windows()
+                vim.cmd("silent! only")
+                vim.cmd("silent edit " .. vim.fn.fnameescape(source_path))
+                local source_window = vim.api.nvim_get_current_win()
+
+                aerial.open_for_window(source_window, false)
+                vim.api.nvim_set_current_win(source_window)
+                file_tree.open(root)
+                vim.api.nvim_set_current_win(source_window)
+
+                assert.equal(3, #vim.api.nvim_list_wins())
+                assert.is_not_nil(get_aerial_window())
+                assert.is_not_nil(get_file_tree_window())
+
+                vim.cmd("mksession! " .. vim.fn.fnameescape(session))
+
+                assert.equal(1, vim.fn.filereadable(sessionx))
+                assert.equal(1, vim.fn.filereadable(aerial_sidecar))
+                assert.equal(1, vim.fn.filereadable(tree_sidecar))
+                assert.is_not_nil(table.concat(vim.fn.readfile(aerial_sidecar), "\n"):find(source_path, 1, true))
+                assert.is_not_nil(table.concat(vim.fn.readfile(tree_sidecar), "\n"):find(source_path, 1, true))
+
+                aerial.close_all()
+                close_file_tree_windows()
+                vim.cmd("silent! only")
+                vim.cmd("silent source " .. vim.fn.fnameescape(session))
+
+                local restored_aerial_window = assert(get_aerial_window())
+                local restored_tree_window = assert(get_file_tree_window())
+                local tree_buffer = vim.api.nvim_win_get_buf(restored_tree_window)
+
+                assert.equal(3, #vim.api.nvim_list_wins())
+                assert.equal("aerial", vim.bo[vim.api.nvim_win_get_buf(restored_aerial_window)].filetype)
+                assert.equal("filetree", vim.bo[tree_buffer].filetype)
+                assert.is_not_nil(buffer_text(tree_buffer):match("src/"))
+                assert.is_not_nil(buffer_text(tree_buffer):match("notes%.md"))
+            end
+        end)
+
+        vim.cmd.tcd(vim.fn.fnameescape(original_cwd))
+        aerial.close_all()
+        close_file_tree_windows()
+        vim.fn.delete(root, "rf")
+
+        if not ok then
+            error(error_)
+        end
+    end)
+
 end)

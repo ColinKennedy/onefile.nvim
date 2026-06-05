@@ -44,6 +44,7 @@ local _SIDEBAR_WIDTH = 30
 local _FALLBACK_HIGHLIGHT_MAX_LINES = 500
 local _TREESITTER_REFRESH_DEBOUNCE_MS = 120
 local _FALLBACK_REFRESH_DEBOUNCE_MS = 350
+local _EMPTY_MESSAGE = "Nothing found. Define a class or function."
 local _AERIAL_FILETYPE = "aerial"
 local _AERIAL_BUFFER_PREFIX = "aerial://"
 local _FILE_TREE_FILETYPE = "filetree"
@@ -1007,10 +1008,23 @@ local function _set_aerial_lines(state)
         table.insert(lines, row.text)
     end
 
+    if vim.tbl_isempty(lines) then
+        table.insert(lines, _EMPTY_MESSAGE)
+    end
+
     vim.bo[state.aerial_buffer].modifiable = true
     vim.api.nvim_buf_set_lines(state.aerial_buffer, 0, -1, false, lines)
     vim.bo[state.aerial_buffer].modifiable = false
     vim.api.nvim_buf_clear_namespace(state.aerial_buffer, _SOURCE_HIGHLIGHT_NAMESPACE, 0, -1)
+
+    if vim.tbl_isempty(state.rows) then
+        vim.api.nvim_buf_set_extmark(state.aerial_buffer, _SOURCE_HIGHLIGHT_NAMESPACE, 0, 0, {
+            end_col = #_EMPTY_MESSAGE,
+            hl_group = "Comment",
+        })
+
+        return
+    end
 
     for row_index, row in ipairs(state.rows) do
         for _, segment in ipairs(row.symbol.highlights or {}) do

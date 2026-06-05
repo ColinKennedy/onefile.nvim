@@ -566,4 +566,58 @@ describe("file tree", function()
         end
     end)
 
+
+    it("saves the active session without errors when the file tree window is focused", function()
+        require("modules.features.sessions")
+
+        local root = make_repository()
+        local session = vim.fs.joinpath(root, "Session.vim")
+        local original_cwd = vim.fn.getcwd(-1, -1)
+        local original_notify = vim.notify
+        local notifications = {}
+        local branch = vim.trim(run_git(root, { "branch", "--show-current" }))
+        local branch_session = vim.fs.joinpath(root, ".sessions", branch, "Session.vim")
+
+        local ok, error_ = pcall(function()
+            vim.notify = function(message, level, options)
+                table.insert(notifications, tostring(message))
+                return original_notify(message, level, options)
+            end
+
+            vim.cmd.tcd(vim.fn.fnameescape(root))
+            vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "src", "main.py")))
+            local source_window = vim.api.nvim_get_current_win()
+
+            file_tree.open(root)
+            local tree_window = assert(get_file_tree_window())
+
+            vim.api.nvim_set_current_win(source_window)
+            vim.cmd("mksession! " .. vim.fn.fnameescape(session))
+            vim.api.nvim_set_current_win(tree_window)
+
+            local leave_ok, leave_error = pcall(function()
+                vim.api.nvim_exec_autocmds("VimLeavePre", {})
+            end)
+
+            assert.True(leave_ok, leave_error)
+            assert.equal(1, vim.fn.filereadable(branch_session))
+
+            for _, message in ipairs(notifications) do
+                assert.is_nil(message:find("Cannot save", 1, true))
+                assert.is_nil(message:find("No VCS root", 1, true))
+                assert.is_nil(message:find("No branch", 1, true))
+            end
+        end)
+
+        vim.notify = original_notify
+        vim.cmd.tcd(vim.fn.fnameescape(original_cwd))
+        aerial.close_all()
+        close_file_tree_windows()
+        vim.fn.delete(root, "rf")
+
+        if not ok then
+            error(error_)
+        end
+    end)
+
 end)

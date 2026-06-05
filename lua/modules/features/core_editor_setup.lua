@@ -2025,7 +2025,7 @@ local function _get_git_branch_reference_path()
 
     local path = vim.api.nvim_buf_get_name(buffer)
 
-    if path == "" then
+    if path == "" or path:find("://", 1, true) then
         return vim.fn.getcwd()
     end
 

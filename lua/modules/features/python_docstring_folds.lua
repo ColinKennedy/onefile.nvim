@@ -19,6 +19,14 @@ local _REFRESH_TIMERS = {}
 
 local _FOLD_TEXT_WIDTH = 80
 
+---@type table<string, boolean>
+local _ALLOWED_FILETYPES = {
+    python = true,
+}
+
+local _FOLDEXPR = "v:lua.require'modules.features.python_docstring_folds'.foldexpr(v:lnum)"
+local _FOLDTEXT = "v:lua.require'modules.features.python_docstring_folds'.foldtext()"
+
 local _AUGROUP = vim.api.nvim_create_augroup("my.python.docstring.folds", { clear = true })
 
 local _PYTHON_DOCSTRING_QUERY = [[
@@ -92,6 +100,63 @@ local function _is_insert_like_mode()
     local mode = vim.api.nvim_get_mode().mode
 
     return mode:sub(1, 1) == "i" or mode:sub(1, 1) == "R"
+end
+
+---@class _my.python_docstring_folds.Options
+---@field filetypes string[]?
+
+---@param options _my.python_docstring_folds.Options?
+function M.setup(options)
+    if not options or not options.filetypes then
+        return
+    end
+
+    _ALLOWED_FILETYPES = {}
+
+    for _, filetype in ipairs(options.filetypes) do
+        _ALLOWED_FILETYPES[filetype] = true
+    end
+end
+
+---@param buffer integer
+---@return boolean
+function M.is_enabled_filetype(buffer)
+    return _ALLOWED_FILETYPES[vim.bo[buffer].filetype] == true
+end
+
+local function _install_for_current_window()
+    vim.wo.foldmethod = "expr"
+    vim.wo.foldexpr = _FOLDEXPR
+    vim.wo.foldlevel = 0
+    vim.wo.foldtext = _FOLDTEXT
+    vim.wo.foldenable = true
+end
+
+local function _uninstall_from_current_window()
+    vim.wo.foldmethod = "manual"
+    vim.wo.foldexpr = "0"
+    vim.wo.foldtext = "foldtext()"
+    vim.wo.foldenable = false
+end
+
+---@param buffer integer?
+---@param should_refresh boolean?
+function M.apply_to_current_window(buffer, should_refresh)
+    buffer = buffer or vim.api.nvim_get_current_buf()
+
+    if not vim.api.nvim_buf_is_valid(buffer) then
+        return
+    end
+
+    if M.is_enabled_filetype(buffer) then
+        _install_for_current_window()
+
+        if should_refresh then
+            M.refresh(buffer)
+        end
+    else
+        _uninstall_from_current_window()
+    end
 end
 
 ---@param first integer
@@ -314,7 +379,7 @@ end
 function M.refresh(buffer)
     buffer = buffer or vim.api.nvim_get_current_buf()
 
-    if not vim.api.nvim_buf_is_valid(buffer) or vim.bo[buffer].filetype ~= "python" then
+    if not vim.api.nvim_buf_is_valid(buffer) or not M.is_enabled_filetype(buffer) then
         return
     end
 
@@ -362,6 +427,11 @@ end
 ---@return integer
 function M.foldexpr(lnum)
     local buffer = vim.api.nvim_get_current_buf()
+
+    if not M.is_enabled_filetype(buffer) then
+        return 0
+    end
+
     local lines = _FOLD_LINES_BY_BUFFER[buffer]
 
     if not lines then
@@ -407,6 +477,11 @@ end
 ---@return string
 function M.foldtext()
     local buffer = vim.api.nvim_get_current_buf()
+
+    if not M.is_enabled_filetype(buffer) then
+        return vim.fn.foldtext()
+    end
+
     local first_line = vim.v.foldstart
     local last_line = vim.v.foldend
     local line_count = last_line - first_line + 1
@@ -422,22 +497,23 @@ end
 
 vim.api.nvim_create_autocmd("FileType", {
     group = _AUGROUP,
-    pattern = "python",
+    pattern = "*",
     callback = function(event)
-        vim.wo.foldmethod = "expr"
-        vim.wo.foldexpr = "v:lua.require'modules.features.python_docstring_folds'.foldexpr(v:lnum)"
-        vim.wo.foldlevel = 0
-        vim.wo.foldtext = "v:lua.require'modules.features.python_docstring_folds'.foldtext()"
-        vim.wo.foldenable = true
+        M.apply_to_current_window(event.buf, true)
+    end,
+})
 
-        M.refresh(event.buf)
+vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
+    group = _AUGROUP,
+    callback = function(event)
+        M.apply_to_current_window(event.buf)
     end,
 })
 
 vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "InsertLeave", "BufWritePost" }, {
     group = _AUGROUP,
     callback = function(event)
-        if vim.bo[event.buf].filetype ~= "python" then
+        if not M.is_enabled_filetype(event.buf) then
             return
         end
 
@@ -448,7 +524,7 @@ vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "InsertLeave", "Buf
 vim.api.nvim_create_autocmd("FileChangedShellPost", {
     group = _AUGROUP,
     callback = function(event)
-        if vim.bo[event.buf].filetype ~= "python" then
+        if not M.is_enabled_filetype(event.buf) then
             return
         end
 

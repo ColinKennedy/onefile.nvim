@@ -202,6 +202,26 @@ describe("python docstring folds", function()
         assert.is_false(vim.wo.foldtext == "v:lua.require'modules.features.python_docstring_folds'.foldtext()")
     end)
 
+    it("removes its foldexpr and foldtext after switching from Python to a non-Python buffer", function()
+        local python_buffer = prepare_buffer("python")
+
+        execute_buffer_autocmd("FileType", python_buffer)
+        assert.equal("expr", vim.wo.foldmethod)
+        assert.equal("v:lua.require'modules.features.python_docstring_folds'.foldexpr(v:lnum)", vim.wo.foldexpr)
+        assert.equal("v:lua.require'modules.features.python_docstring_folds'.foldtext()", vim.wo.foldtext)
+
+        local busted_buffer = prepare_buffer("lua")
+
+        vim.api.nvim_buf_set_name(busted_buffer, vim.fn.tempname() .. "/.busted")
+        execute_buffer_autocmd("BufEnter", busted_buffer)
+
+        assert.equal("manual", vim.wo.foldmethod)
+        assert.equal("0", vim.wo.foldexpr)
+        assert.equal("foldtext()", vim.wo.foldtext)
+        assert.False(vim.wo.foldenable)
+        assert.equal(0, python_docstring_folds.foldexpr(1))
+    end)
+
     it("debounces repeated Python text-change refreshes", function()
         local buffer = prepare_buffer("python")
         local refreshed = 0

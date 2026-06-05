@@ -1575,7 +1575,7 @@ end
 ---@param entries _my.aerial.SessionEntry[] The session sidebars to restore.
 function M.restore_session(entries)
     local previous_window = vim.api.nvim_get_current_win()
-    local stale_entries = M._get_stale_session_entries()
+    local stale_entries = M.get_stale_session_entries()
 
     -- The placeholders in the freshly sourced Session.vim describe the
     -- current layout. Prefer them over a sidecar that may be older.
@@ -1702,7 +1702,7 @@ function _P.setup()
                         _SOURCE_BUFFER_BY_AERIAL_BUFFER[state.aerial_buffer] = replacement_buffer
                         vim.b[state.aerial_buffer].aerial_source_buffer = replacement_buffer
                         _rename_aerial_buffer(state.aerial_buffer, replacement_buffer)
-                        _P.refresh_source_buffer(replacement_buffer)
+                        M.refresh_source_buffer(replacement_buffer)
 
                         return
                     end

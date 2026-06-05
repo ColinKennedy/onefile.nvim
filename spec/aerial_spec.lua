@@ -538,8 +538,6 @@ describe("modules.plugins.aerial", function()
             "def thing():",
             "    return 1",
         }, current_source_path)
-        old_source_path = vim.uv.fs_realpath(old_source_path) or old_source_path
-        current_source_path = vim.uv.fs_realpath(current_source_path) or current_source_path
         vim.cmd("silent edit " .. vim.fn.fnameescape(current_source_path))
 
         local source_window = vim.api.nvim_get_current_win()
@@ -595,8 +593,6 @@ describe("modules.plugins.aerial", function()
             "def thing():",
             "    return 1",
         }, second_path)
-        first_path = vim.uv.fs_realpath(first_path) or first_path
-        second_path = vim.uv.fs_realpath(second_path) or second_path
         vim.cmd("silent edit " .. vim.fn.fnameescape(first_path))
 
         local source_window = vim.api.nvim_get_current_win()
@@ -618,12 +614,12 @@ describe("modules.plugins.aerial", function()
 
         assert.is_truthy(table.concat(get_lines(followed_aerial_buffer), "\n"):find("thing", 1, true))
 
-        local code = aerial._serialize_session_restore()
+        local code = aerial.serialize_session_restore()
 
-        assert.is_truthy(to_forward_slashes(code):find(to_forward_slashes(second_path), 1, true))
-        assert.is_nil(to_forward_slashes(code):find(to_forward_slashes(first_path), 1, true))
+        assert.is_truthy(code:find(second_path, 1, true))
+        assert.is_nil(code:find(first_path, 1, true))
 
-        aerial._close_all()
+        aerial.close_all()
         vim.cmd("silent edit " .. vim.fn.fnameescape(second_path))
         vim.api.nvim_set_current_win(source_window)
         loadstring(code)()

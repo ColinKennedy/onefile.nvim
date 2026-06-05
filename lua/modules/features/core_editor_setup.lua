@@ -1619,7 +1619,7 @@ end
 ---@return string? # The active Git branch, if one can be found.
 local function _get_git_branch(root)
     local result = vim.system({
-        core_helpers.GIT_EXECUTABLE,
+        core_helpers._GIT_EXECUTABLE,
         "-C",
         root,
         "rev-parse",

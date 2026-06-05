@@ -7,6 +7,8 @@ M._P = _P
 
 local _FILETYPE = "filetree"
 local _BUFFER_PREFIX = "filetree://"
+local _AERIAL_FILETYPE = "aerial"
+local _AERIAL_BUFFER_PREFIX = "aerial://"
 local _SIDEBAR_WIDTH = 32
 local _WATCH_DEBOUNCE_MS = 80
 local _GROUP = vim.api.nvim_create_augroup("my.file_tree", { clear = true })
@@ -226,7 +228,17 @@ end
 ---@param buffer integer
 ---@return boolean
 local function _is_file_tree_buffer(buffer)
-    return vim.bo[buffer].filetype == _FILETYPE
+    return vim.bo[buffer].filetype == _FILETYPE or vim.startswith(vim.api.nvim_buf_get_name(buffer), _BUFFER_PREFIX)
+end
+
+---@param buffer integer
+---@return boolean
+local function _is_sidebar_buffer(buffer)
+    local name = vim.api.nvim_buf_get_name(buffer)
+
+    return _is_file_tree_buffer(buffer)
+        or vim.bo[buffer].filetype == _AERIAL_FILETYPE
+        or vim.startswith(name, _AERIAL_BUFFER_PREFIX)
 end
 
 ---@param window integer
@@ -415,10 +427,22 @@ local function _can_focus_window(window)
     return window ~= 0 and vim.api.nvim_win_is_valid(window)
 end
 
+---@param path string
+---@param root string
+---@return boolean
+local function _is_at_or_under(path, root)
+    path = _normalize(path)
+    root = _normalize(root)
+
+    return path == root or vim.startswith(path, root .. "/")
+end
+
 ---@param window integer
 ---@return boolean
 local function _is_regular_source_window(window)
-    return _can_focus_window(window) and not _is_file_tree_window(window)
+    return _can_focus_window(window)
+        and vim.api.nvim_win_get_config(window).relative == ""
+        and not _is_sidebar_buffer(vim.api.nvim_win_get_buf(window))
 end
 
 ---@param state _my.file_tree.State
@@ -662,6 +686,17 @@ local function _find_visible_source_window(source_name)
     return nil
 end
 
+---@return integer?
+local function _find_any_visible_source_window()
+    for _, window in ipairs(vim.api.nvim_list_wins()) do
+        if _is_regular_source_window(window) then
+            return window
+        end
+    end
+
+    return nil
+end
+
 --- Close stale file tree windows restored by `:mksession`.
 local function _close_visible_file_tree_windows()
     for _, window in ipairs(vim.api.nvim_list_wins()) do
@@ -681,13 +716,16 @@ local function _close_visible_file_tree_windows()
     end
 end
 
+---@param session_root string? Only include trees under this session root.
 ---@return _my.file_tree.SessionEntry[]
-function M.get_session_entries()
+function M.get_session_entries(session_root)
     ---@type _my.file_tree.SessionEntry[]
     local entries = {}
 
     for buffer, state in pairs(_STATE_BY_BUFFER) do
-        if vim.api.nvim_buf_is_valid(buffer) and _can_focus_window(state.window) then
+        local include_state = session_root == nil or _is_at_or_under(state.root, session_root)
+
+        if include_state and vim.api.nvim_buf_is_valid(buffer) and _can_focus_window(state.window) then
             ---@type string[]
             local expanded = vim.tbl_keys(state.expanded)
 
@@ -765,11 +803,11 @@ function M.restore_session(entries)
                 source_window = previous_window
             end
 
-            if not _can_focus_window(source_window or 0) then
-                source_window = vim.api.nvim_get_current_win()
+            if source_window == nil then
+                source_window = _find_any_visible_source_window()
             end
 
-            if source_window ~= nil then
+            if source_window ~= nil and _can_focus_window(source_window) then
                 vim.api.nvim_set_current_win(source_window)
             end
 
@@ -801,9 +839,10 @@ function M.restore_session(entries)
     end
 end
 
+---@param session_root string? Only include trees under this session root.
 ---@return string
-function M.serialize_session_restore()
-    local entries = M.get_session_entries()
+function M.serialize_session_restore(session_root)
+    local entries = M.get_session_entries(session_root)
 
     if #entries == 0 then
         return ""
@@ -858,7 +897,13 @@ vim.api.nvim_create_autocmd("BufWipeout", {
 local core_editor_setup = require("modules.features.core_editor_setup")
 
 core_editor_setup._SESSION_MANAGER:register_session_write_pre_callback(".file_tree.lua", function()
-    return M.serialize_session_restore()
+    local root = require("modules.utilities.core_helpers").get_nearest_project_root(vim.fn.getcwd())
+
+    if root == nil then
+        return ""
+    end
+
+    return M.serialize_session_restore(root)
 end)
 
 vim.api.nvim_create_autocmd("SessionLoadPost", {

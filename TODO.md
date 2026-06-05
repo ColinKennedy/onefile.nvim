@@ -1,12 +1,5 @@
 - `:Git diff` isn't showing anything. Fix
 
-- Add a native file-tree plugin
- - nested folders, hjkl mappings to expand and collapse
- - icons for file types
- - show modified files
- - a mapping to toggle-filter to show only git-modified files
- - use it to take the place of netrw
-
 - Fix CI/CD later - https://github.com/ColinKennedy/onefile.nvim/actions/runs/26374509626/job/77632334991
 
 - Once that neovim remote PR is merged, add that to my git commit / git rebase

@@ -134,6 +134,21 @@ function M.configure_lsp_servers(config_lsp, enable_lsp)
     end
 end
 
-M.configure_lsp_servers()
+--- Check if Neovim is running the Busted test harness.
+---
+---@return boolean # If this process is running Busted, return `true`.
+function M.is_running_busted()
+    local arguments = _G.arg or {}
+
+    return tostring(arguments[0] or ""):match("busted") ~= nil
+end
+
+---@type boolean
+M.auto_configured_lsp_servers = false
+
+if not M.is_running_busted() then
+    M.auto_configured_lsp_servers = true
+    M.configure_lsp_servers()
+end
 
 return M

@@ -43,10 +43,7 @@ describe("modules.plugins.toggle_terminal", function()
             { "C:\\Program Files\\PowerShell\\7\\pwsh.exe", "-NoLogo" },
             toggle_terminal_module._P.parse_argv([["C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo]])
         )
-        assert.are.same(
-            { "C:\\Tools\\pwsh.exe" },
-            toggle_terminal_module._P.parse_argv([[C:\Tools\pwsh.exe]])
-        )
+        assert.are.same({ "C:\\Tools\\pwsh.exe" }, toggle_terminal_module._P.parse_argv([[C:\Tools\pwsh.exe]]))
     end)
 
     it("does not enter insert mode for a terminal buffer unless that buffer is current", function()

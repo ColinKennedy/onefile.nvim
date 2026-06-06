@@ -566,7 +566,6 @@ describe("file tree", function()
         end
     end)
 
-
     it("saves the active session without errors when the file tree window is focused", function()
         require("modules.features.sessions")
 
@@ -628,5 +627,4 @@ describe("file tree", function()
             error(error_)
         end
     end)
-
 end)

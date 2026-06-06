@@ -596,30 +596,45 @@ end
 local function _set_keymaps(buffer)
     local options = { buffer = buffer, nowait = true, silent = true }
 
-    vim.keymap.set("n", "h", M.collapse, vim.tbl_extend("force", options, {
-        desc = "Collapse directory.",
-    }))
-    vim.keymap.set("n", "l", M.expand, vim.tbl_extend("force", options, {
-        desc = "Expand directory.",
-    }))
+    vim.keymap.set(
+        "n",
+        "h",
+        M.collapse,
+        vim.tbl_extend("force", options, {
+            desc = "Collapse directory.",
+        })
+    )
+    vim.keymap.set(
+        "n",
+        "l",
+        M.expand,
+        vim.tbl_extend("force", options, {
+            desc = "Expand directory.",
+        })
+    )
     vim.keymap.set(
         "n",
         "H",
         M.collapse_all,
         vim.tbl_extend("force", options, { desc = "Collapse directory recursively." })
     )
+    vim.keymap.set("n", "L", M.expand_all, vim.tbl_extend("force", options, { desc = "Expand directory recursively." }))
     vim.keymap.set(
         "n",
-        "L",
-        M.expand_all,
-        vim.tbl_extend("force", options, { desc = "Expand directory recursively." })
+        "<CR>",
+        M.open_entry,
+        vim.tbl_extend("force", options, {
+            desc = "Open file tree entry.",
+        })
     )
-    vim.keymap.set("n", "<CR>", M.open_entry, vim.tbl_extend("force", options, {
-        desc = "Open file tree entry.",
-    }))
-    vim.keymap.set("n", "<leader>sa", M.toggle_show_all, vim.tbl_extend("force", options, {
-        desc = "Toggle showing all file tree entries.",
-    }))
+    vim.keymap.set(
+        "n",
+        "<leader>sa",
+        M.toggle_show_all,
+        vim.tbl_extend("force", options, {
+            desc = "Toggle showing all file tree entries.",
+        })
+    )
     vim.keymap.set("n", "q", M.close, vim.tbl_extend("force", options, { desc = "Close file tree." }))
 end
 
@@ -734,9 +749,9 @@ function M.get_session_entries(session_root)
                 expanded = expanded,
                 root = state.root,
                 show_all = state.show_all,
-                source_name = _is_regular_source_window(state.source_window)
-                        and vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(state.source_window))
-                    or nil,
+                source_name = _is_regular_source_window(state.source_window) and vim.api.nvim_buf_get_name(
+                    vim.api.nvim_win_get_buf(state.source_window)
+                ) or nil,
             })
         end
     end

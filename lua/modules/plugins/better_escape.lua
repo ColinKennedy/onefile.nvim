@@ -166,7 +166,9 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
             _TIMER:stop()
         end
 
-        _TIMER:close()
+        if not _TIMER:is_closing() then
+            _TIMER:close()
+        end
     end,
     desc = "Close the better-escape timer.",
     group = _AUGROUP,

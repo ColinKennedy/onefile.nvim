@@ -589,10 +589,16 @@ describe("file tree", function()
             local source_window = vim.api.nvim_get_current_win()
 
             file_tree.open(root)
-            local tree_window = assert(get_file_tree_window())
+            assert(get_file_tree_window())
 
             vim.api.nvim_set_current_win(source_window)
             vim.cmd("mksession! " .. vim.fn.fnameescape(session))
+
+            close_file_tree_windows()
+            vim.cmd("silent! only")
+            vim.cmd("silent source " .. vim.fn.fnameescape(session))
+
+            local tree_window = assert(get_file_tree_window())
             vim.api.nvim_set_current_win(tree_window)
 
             local leave_ok, leave_error = pcall(function()
@@ -610,6 +616,7 @@ describe("file tree", function()
         end)
 
         vim.notify = original_notify
+        vim.cmd([[let v:this_session = ""]])
         vim.cmd.tcd(vim.fn.fnameescape(original_cwd))
         aerial.close_all()
         close_file_tree_windows()

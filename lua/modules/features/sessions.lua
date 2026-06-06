@@ -30,7 +30,7 @@ local _P = {}
 
 --- Find the location on-disk where we should save a Sesssion.vim file.
 ---
----@param reference_path string The path on-disk to search for a git / VCS root.
+---@param root string The path on-disk to search for a git / VCS root.
 ---@return string? # The recommended Session.vim save location, if any.
 ---
 local function _get_git_branch(root)

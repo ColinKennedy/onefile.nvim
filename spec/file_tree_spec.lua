@@ -579,6 +579,7 @@ describe("file tree", function()
         local branch_session = vim.fs.joinpath(root, ".sessions", branch, "Session.vim")
 
         local ok, error_ = pcall(function()
+            ---@diagnostic disable-next-line: duplicate-set-field
             vim.notify = function(message, level, options)
                 table.insert(notifications, tostring(message))
                 return original_notify(message, level, options)
@@ -605,7 +606,8 @@ describe("file tree", function()
                 vim.api.nvim_exec_autocmds("VimLeavePre", {})
             end)
 
-            assert.True(leave_ok, leave_error)
+            assert.True(leave_ok)
+            assert.is_nil(leave_error)
             assert.equal(1, vim.fn.filereadable(branch_session))
 
             for _, message in ipairs(notifications) do

@@ -414,13 +414,17 @@ function M.schedule_refresh(buffer, delay)
         _REFRESH_TIMERS[buffer] = vim.uv.new_timer()
     end
 
-    _REFRESH_TIMERS[buffer]:start(delay, 0, vim.schedule_wrap(function()
-        if _REFRESH_TIMERS[buffer] then
-            _REFRESH_TIMERS[buffer]:stop()
-        end
+    _REFRESH_TIMERS[buffer]:start(
+        delay,
+        0,
+        vim.schedule_wrap(function()
+            if _REFRESH_TIMERS[buffer] then
+                _REFRESH_TIMERS[buffer]:stop()
+            end
 
-        M.refresh(buffer)
-    end))
+            M.refresh(buffer)
+        end)
+    )
 end
 
 ---@param lnum integer

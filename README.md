@@ -40,16 +40,33 @@ NVIM_APPNAME=noplugins nvim
 
 
 ## Environment Variables
-- `VIM_LOG_LEVEL` - Sets the minimum `vim.notify` level shown by Neovim. It
+- `NEOVIM_LOG_LEVEL` - Sets the minimum `vim.notify` level shown by Neovim. It
   defaults to `2`, which hides `DEBUG` notifications unless you opt in with
   a lower value.
 
-- `VIM_ENABLE_NOTIFY_LOGGING` - Enables notification logging when set to
+- `NEOVIM_ENABLE_NOTIFY_LOGGING` - Enables notification logging when set to
   a non-zero value. When enabled, notifications are appended to a temporary log
   file that can be opened with `:OpenLogPath`.
 
-- `NEOVIM_AI_QUESTION_RESPONSE_COMMAND` - Used to ask an AI and get its
-  response for a specific buffer
+- `NEOVIM_AI_QUESTION_RESPONSE_COMMAND` - Overrides the command used by
+  `<leader>aa` to turn AI questions plus your rough answers into a formatted
+  response. The command receives the prompt on stdin. When unset, Neovim uses
+  `claude -p`.
+
+- `NEOVIM_GIT_EXECUTABLE_PATH` - Overrides the `git` executable used by Git
+  helpers.
+
+- `NEOVIM_RIPGREP_EXECUTABLE_PATH` - Overrides the `rg` executable used by
+  project/file search helpers.
+
+- `NEOVIM_SESSIONS_DIRECTORY_NAME` - Overrides the per-project session
+  directory name. It defaults to `.sessions`.
+
+- `NEOVIM_SHELL_COMMAND` - Overrides Neovim's `shell` option when making new
+  terminal buffers.
+
+- `NEOVIM_VAULTS_DIRECTORY` - Overrides the root directory used to discover
+  Obsidian vaults. It defaults to `~/vaults`.
 
 
 ## Testing

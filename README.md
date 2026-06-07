@@ -40,13 +40,16 @@ NVIM_APPNAME=noplugins nvim
 
 
 ## Environment Variables
-`VIM_LOG_LEVEL` sets the minimum `vim.notify` level shown by Neovim. It
-defaults to `2`, which hides `DEBUG` notifications unless you opt in with
-a lower value.
+- `VIM_LOG_LEVEL` - Sets the minimum `vim.notify` level shown by Neovim. It
+  defaults to `2`, which hides `DEBUG` notifications unless you opt in with
+  a lower value.
 
-`VIM_ENABLE_NOTIFY_LOGGING` enables notification logging when set to a non-zero
-value. When enabled, notifications are appended to a temporary log file that
-can be opened with `:OpenLogPath`.
+- `VIM_ENABLE_NOTIFY_LOGGING` - Enables notification logging when set to
+  a non-zero value. When enabled, notifications are appended to a temporary log
+  file that can be opened with `:OpenLogPath`.
+
+- `NEOVIM_AI_QUESTION_RESPONSE_COMMAND` - Used to ask an AI and get its
+  response for a specific buffer
 
 
 ## Testing

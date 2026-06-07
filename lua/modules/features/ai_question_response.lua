@@ -14,6 +14,8 @@ M.answer_links_by_buf = {}
 
 M.command_environment_variable = "NEOVIM_AI_QUESTION_RESPONSE_COMMAND"
 
+M.answer_sheet_hint = "<!-- This is the answer sheet, write your responses here-->"
+
 local INSTRUCTION = table.concat({
     "Here is a structured list of questions from an AI and an unstructured,",
     "stream-of-consciousness response from me. There could be many questions",
@@ -30,6 +32,24 @@ local INSTRUCTION = table.concat({
 ---@return string
 function M.get_buffer_text(buffer)
     return table.concat(vim.api.nvim_buf_get_lines(buffer, 0, -1, false), "\n")
+end
+
+---Get answer lines without the answer-sheet hint.
+---
+---@param buffer integer
+---@return string
+function M.get_answer_text(buffer)
+    local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+
+    if lines[1] == M.answer_sheet_hint then
+        table.remove(lines, 1)
+    end
+
+    if lines[1] == "" then
+        table.remove(lines, 1)
+    end
+
+    return table.concat(lines, "\n")
 end
 
 ---Create the prompt sent to the formatter process.
@@ -64,6 +84,22 @@ function M.get_formatter_command()
     return { "claude", "-p" }
 end
 
+---Check whether the fallback formatter is available.
+---
+---@return boolean # If the fallback formatter is available, return `true`.
+function M.is_fallback_formatter_available()
+    return vim.fn.executable("claude") == 1
+end
+
+---Return whether the configured formatter can be started.
+---
+---@return boolean
+function M.can_start_formatter()
+    local command = vim.env[M.command_environment_variable]
+
+    return command ~= nil and command ~= "" or M.is_fallback_formatter_available()
+end
+
 ---Start an answer scratch buffer for the current buffer.
 ---
 ---@return integer # The answer buffer number.
@@ -84,8 +120,11 @@ function M.start()
     vim.bo[answer_buf].swapfile = false
     vim.bo[answer_buf].filetype = "markdown"
     vim.api.nvim_buf_set_name(answer_buf, "AI Question Responses")
+    vim.api.nvim_buf_set_lines(answer_buf, 0, -1, false, { M.answer_sheet_hint, "" })
 
     vim.cmd.tabnew()
+    vim.api.nvim_set_current_buf(source_buf)
+    vim.cmd.vsplit()
     vim.api.nvim_set_current_buf(answer_buf)
 
     return answer_buf
@@ -122,7 +161,12 @@ function M.submit(answer_buf)
         return false
     end
 
-    local answers = M.get_buffer_text(answer_buf)
+    if not M.can_start_formatter() then
+        vim.notify("Cannot format answers because `claude -p` is not available.", vim.log.levels.ERROR)
+        return false
+    end
+
+    local answers = M.get_answer_text(answer_buf)
     local questions = M.get_buffer_text(link.source_buf)
     local prompt = M.build_prompt(questions, answers)
     local command = M.get_formatter_command()

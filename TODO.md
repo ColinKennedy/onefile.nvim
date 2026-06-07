@@ -1,5 +1,34 @@
 - `:Git diff` isn't showing anything. Fix
 
+- Add an error-check if the fallback AI, `claude -p`, is not accessible. Abort early
+
+
+
+- change the env vars to be neovim-ish
+- Also document any env vars that aren't documented
+````
+- `VIM_LOG_LEVEL` - Sets the minimum `vim.notify` level shown by Neovim. It
+  defaults to `2`, which hides `DEBUG` notifications unless you opt in with
+  a lower value.
+
+- `VIM_ENABLE_NOTIFY_LOGGING` - Enables notification logging when set to
+  a non-zero value. When enabled, notifications are appended to a temporary log
+````
+
+
+takes the current buffer as-text, stores it somewhere,
+  and then makes a new buffer (probably as a new tab). And then I can type
+  whatever I want there (speech to text) and then press the mapping again to
+  merge the original text with that buffer's text
+ - Useful for when I have a lot of tickets to go through, in the grill-me step
+ - Under the hood, use a temporary file with the merged text + `claude -p 'Read the instructions in @C:\tmp\that\file.txt and respond'`
+ - Probably the storage shoudl be a variable that is tab-number aware. Like a `table<integer, str>`, the key is the tab and the str is the original text
+
+
+
+
+- A text object for comment blocks. e.g. `yic`
+
 - Fix CI/CD later - https://github.com/ColinKennedy/onefile.nvim/actions/runs/26374509626/job/77632334991
 
 - Once that neovim remote PR is merged, add that to my git commit / git rebase

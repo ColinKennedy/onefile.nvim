@@ -4,8 +4,8 @@ local _P = {}
 
 local _ORIGINAL_VIM_NOTIFY = vim.notify
 
-_P.ENABLE_NOTIFY_LOGGING_VARIABLE = "VIM_ENABLE_NOTIFY_LOGGING"
-_P.MINIMUM_LOG_LEVEL = tonumber(os.getenv("VIM_LOG_LEVEL") or "2") or vim.log.levels.INFO
+_P.ENABLE_NOTIFY_LOGGING_VARIABLE = "NEOVIM_ENABLE_NOTIFY_LOGGING"
+_P.MINIMUM_LOG_LEVEL = tonumber(os.getenv("NEOVIM_LOG_LEVEL") or "2") or vim.log.levels.INFO
 _P.TEMPORARY_LOG_PATH = nil
 
 ---@param level integer? Some raw log value.

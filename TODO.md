@@ -1,7 +1,4 @@
 - `:Git diff` isn't showing anything. Fix
-
-- A text object for comment blocks. e.g. `yic`
-
 - Fix CI/CD later - https://github.com/ColinKennedy/onefile.nvim/actions/runs/26374509626/job/77632334991
 
 - Once that neovim remote PR is merged, add that to my git commit / git rebase

@@ -2,6 +2,7 @@ local indent_text_objects = require("modules.plugins.indent_text_objects")
 local line_text_object = require("modules.plugins.line_text_object")
 local subvariable_text_object = require("modules.plugins.subvariable_text_object")
 local argument_text_object = require("modules.plugins.argument_text_object")
+local comment_text_object = require("modules.plugins.comment_text_object")
 
 ---@class _my.test.ObjectCase
 ---@field after string
@@ -345,5 +346,83 @@ describe("line text object", function()
         assert.equal(1, visual_start[3])
         assert.equal(2, cursor[1])
         assert.equal(3, cursor[2])
+    end)
+end)
+
+describe("comment block text object", function()
+    after_each(function()
+        vim.cmd.enew({ bang = true })
+    end)
+
+    --- Create a scratch buffer whose comment leader is `#`.
+    ---
+    ---@param lines string[] Initial buffer lines.
+    ---@param cursor_line integer The 1-or-more cursor line.
+    ---@return integer # The created buffer.
+    local function make_comment_buffer(lines, cursor_line)
+        local buffer = make_buffer(lines, cursor_line)
+        vim.bo[buffer].commentstring = "# %s"
+
+        return buffer
+    end
+
+    it("expands to the contiguous block above and below the cursor", function()
+        local buffer = make_comment_buffer({
+            "code before",
+            "# first",
+            "# second",
+            "# third",
+            "code after",
+        }, 3)
+
+        local range = comment_text_object.get_range(buffer, 3)
+
+        assert.are.same({ start_line = 2, end_line = 4 }, range)
+    end)
+
+    it("returns nil when the cursor is not on a comment line", function()
+        local buffer = make_comment_buffer({ "code", "# comment" }, 1)
+
+        assert.is_nil(comment_text_object.get_range(buffer, 1))
+    end)
+
+    it("stops the block at blank lines", function()
+        local buffer = make_comment_buffer({
+            "# top",
+            "",
+            "# middle",
+            "# bottom",
+        }, 3)
+
+        local range = comment_text_object.get_range(buffer, 3)
+
+        assert.are.same({ start_line = 3, end_line = 4 }, range)
+    end)
+
+    it("deletes the whole comment block linewise with dic", function()
+        make_comment_buffer({
+            "code before",
+            "# first",
+            "# second",
+            "# third",
+            "code after",
+        }, 3)
+
+        press("dic")
+
+        assert.are.same({ "code before", "code after" }, get_lines())
+    end)
+
+    it("yanks the whole comment block linewise with yic", function()
+        make_comment_buffer({
+            "# first",
+            "# second",
+            "code",
+        }, 1)
+
+        press("yic")
+
+        assert.equal("V", vim.fn.getregtype('"'))
+        assert.equal("# first\n# second\n", vim.fn.getreg('"'))
     end)
 end)

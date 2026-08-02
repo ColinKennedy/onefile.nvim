@@ -375,7 +375,7 @@ describe("comment block text object", function()
             "code after",
         }, 3)
 
-        local range = comment_text_object._get_range(buffer, 3)
+        local range = comment_text_object.get_range(buffer, 3)
 
         assert.are.same({ start_line = 2, end_line = 4 }, range)
     end)
@@ -383,7 +383,7 @@ describe("comment block text object", function()
     it("returns nil when the cursor is not on a comment line", function()
         local buffer = make_comment_buffer({ "code", "# comment" }, 1)
 
-        assert.is_nil(comment_text_object._get_range(buffer, 1))
+        assert.is_nil(comment_text_object.get_range(buffer, 1))
     end)
 
     it("stops the block at blank lines", function()
@@ -394,7 +394,7 @@ describe("comment block text object", function()
             "# bottom",
         }, 3)
 
-        local range = comment_text_object._get_range(buffer, 3)
+        local range = comment_text_object.get_range(buffer, 3)
 
         assert.are.same({ start_line = 3, end_line = 4 }, range)
     end)

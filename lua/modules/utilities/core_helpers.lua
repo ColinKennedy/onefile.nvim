@@ -1644,64 +1644,24 @@ function M.reset_bookmark(mark, buffer)
     end
 end
 
---- Resize the current window `distance` along `direction`.
+--- Grow or shrink the current window along one axis.
 ---
----@param direction _my.window.Direction top/down/left/right movement of the current window.
----@param distance integer How far to resize the window.
+--- This is a dumb executor: the caller decides the axis and the signed amount.
+--- `"height"` runs `:resize` (which resizes the whole row of the current window)
+--- and `"width"` runs `:vertical resize` (which resizes the current window and
+--- its horizontal neighbour). A positive `amount` grows the current window, a
+--- negative one shrinks it.
 ---
-function M.resize_window(direction, distance)
-    local edges = _P.get_window_edges()
+---@param axis "height" | "width" Which dimension to change.
+---@param amount integer Signed rows/columns to resize by (`+` grows, `-` shrinks).
+---
+function M.resize_window(axis, amount)
+    local argument = (amount >= 0 and "+" or "") .. amount
 
-    if not edges then
-        return
-    end
-
-    local sign = "+"
-
-    if direction == "up" then
-        if vim.tbl_contains(edges, "top") and vim.tbl_contains(edges, "bottom") then
-            -- NOTE: There is no split that we can resize in this direction. Stop early.
-            return
-        end
-
-        if vim.tbl_contains(edges, "top") then
-            sign = "-"
-        end
-
-        vim.cmd.resize(sign .. distance)
-    elseif direction == "down" then
-        if vim.tbl_contains(edges, "top") and vim.tbl_contains(edges, "bottom") then
-            -- NOTE: There is no split that we can resize in this direction. Stop early.
-            return
-        end
-
-        if vim.tbl_contains(edges, "bottom") then
-            sign = "-"
-        end
-
-        vim.cmd.resize(sign .. distance)
-    elseif direction == "left" then
-        if vim.tbl_contains(edges, "left") and vim.tbl_contains(edges, "right") then
-            -- NOTE: There is no split that we can resize in this direction. Stop early.
-            return
-        end
-
-        if vim.tbl_contains(edges, "left") then
-            sign = "-"
-        end
-
-        vim.cmd(string.format("vertical resize %s%s", sign, distance))
-    elseif direction == "right" then
-        if vim.tbl_contains(edges, "left") and vim.tbl_contains(edges, "right") then
-            -- NOTE: There is no split that we can resize in this direction. Stop early.
-            return
-        end
-
-        if vim.tbl_contains(edges, "right") then
-            sign = "-"
-        end
-
-        vim.cmd(string.format("vertical resize %s%s", sign, distance))
+    if axis == "height" then
+        vim.cmd.resize(argument)
+    else
+        vim.cmd("vertical resize " .. argument)
     end
 end
 

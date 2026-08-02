@@ -38,6 +38,17 @@ Now run it with
 NVIM_APPNAME=noplugins nvim
 ```
 
+## Creating An Inlined init.lua
+To create a single init.lua that has everything in it, run this:
+
+```sh
+python ./.github/workflows/inline_init.py --input ./init.lua --output ./inline_init.lua
+# e.g.
+python ./.github/workflows/inline_init.py --input ./init.lua --output /mnt/c/Users/korinkite/AppData/Local/noplugins/init.lua
+```
+
+Then you can run it with `nvim -u inline_init.lua`
+
 
 ## Environment Variables
 - `NEOVIM_LOG_LEVEL` - Sets the minimum `vim.notify` level shown by Neovim. It

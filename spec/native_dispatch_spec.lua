@@ -573,7 +573,7 @@ describe("native dispatch", function()
             return 1
         end
 
-        native_dispatch._run({
+        native_dispatch.run({
             command = { "make" },
             raw_command = "make",
             display = "always",

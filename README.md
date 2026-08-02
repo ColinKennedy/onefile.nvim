@@ -87,3 +87,10 @@ make test
 # or
 busted .
 ```
+
+# Tutorial
+## Running Formatted Tests
+```vim
+:Dispatch --display=on_error --jump-first --compiler=vimgrep <command goes here>
+:Dispatch --display=on_error --jump-first --compiler=vimgrep make luacheck ARGUMENTS=--no-color
+```

@@ -91,10 +91,6 @@ busted .
 # Tutorial
 ## Running Formatted Tests
 ```vim
-:Dispatch --compiler=vimgrep <command goes here>
-:Dispatch --compiler=vimgrep make luacheck ARGUMENTS=--no-color
+:Dispatch --display=on_error --jump-first --compiler=vimgrep <command goes here>
+:Dispatch --display=on_error --jump-first --compiler=vimgrep make luacheck ARGUMENTS=--no-color
 ```
-
-`:Dispatch` implies `--display=on_error --jump-first`. Use `:DispatchOutput`
-(same flags, but implying `--display=always --no-jump-first`) to watch a
-command's output while it runs.

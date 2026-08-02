@@ -205,22 +205,6 @@ local function _is_on_directional_edge(direction)
 end
 
 ---@param direction "h" | "j" | "k" | "l"
----@return boolean
-local function _is_on_tmux_resize_edge(direction)
-    local edges = _get_current_window_edges()
-
-    if not edges then
-        return false
-    end
-
-    if direction == "j" or direction == "k" then
-        return vim.tbl_contains(edges, "bottom")
-    end
-
-    return vim.tbl_contains(edges, "right")
-end
-
----@param direction "h" | "j" | "k" | "l"
 ---@return integer
 local function _get_resize_dimension(direction)
     if direction == "j" or direction == "k" then
@@ -249,12 +233,12 @@ function _P.resize(direction)
     local core_helpers = require("modules.utilities.core_helpers")
     local details = _DIRECTIONS[direction]
 
-    if core_helpers.in_tmux() and _is_on_tmux_resize_edge(direction) then
-        _run_tmux_pane_command(direction, "resize-pane")
-
-        return
-    end
-
+    -- NOTE: Always try to resize within Neovim first. Only when the Neovim
+    -- window cannot change (there is no adjacent split to resize against) do we
+    -- fall back to resizing the surrounding tmux pane. Short-circuiting to tmux
+    -- whenever the window merely touches the screen edge is wrong: a bottom-most
+    -- split in a vertical stack touches the bottom edge but can still be resized
+    -- by adjusting the split above it.
     local before = _get_resize_dimension(direction)
 
     core_helpers.resize_window(details.resize_direction, details.resize_amount)

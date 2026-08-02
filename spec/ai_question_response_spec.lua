@@ -21,10 +21,12 @@ describe("AI question response formatter", function()
         notifications = {}
         ai_question_response.original_buffers_by_tab = {}
         ai_question_response.answer_links_by_buf = {}
+        ---@diagnostic disable-next-line: duplicate-set-field
         vim.notify = function(message, level)
             table.insert(notifications, { message = message, level = level })
         end
         vim.env[ai_question_response.command_environment_variable] = nil
+        ---@diagnostic disable-next-line: duplicate-set-field
         vim.fn.executable = function(command)
             return command == "claude" and 1 or original_executable(command)
         end
@@ -78,6 +80,7 @@ describe("AI question response formatter", function()
         local captured_command
         local captured_stdin
 
+        ---@diagnostic disable-next-line: duplicate-set-field
         vim.system = function(command, options, callback)
             if options and options.stdin then
                 captured_command = command
@@ -103,20 +106,20 @@ describe("AI question response formatter", function()
         assert.matches("1. What changed?", captured_stdin, 1, true)
         assert.matches("My unstructured response:", captured_stdin, 1, true)
         assert.matches("fixed it", captured_stdin, 1, true)
+        ---@diagnostic disable-next-line: undefined-field
         assert.not_matches(ai_question_response.answer_sheet_hint, captured_stdin, 1, true)
-        assert.same(
-            { "1. What changed?", "", "   I fixed it." },
-            vim.api.nvim_buf_get_lines(source_buf, 0, -1, false)
-        )
+        assert.same({ "1. What changed?", "", "   I fixed it." }, vim.api.nvim_buf_get_lines(source_buf, 0, -1, false))
         assert.equal(1, vim.fn.tabpagenr("$"))
         assert.equal("Formatting succeeded.", notifications[#notifications].message)
     end)
 
     it("aborts early when the fallback formatter is not available", function()
         local called = false
+        ---@diagnostic disable-next-line: duplicate-set-field
         vim.fn.executable = function()
             return 0
         end
+        ---@diagnostic disable-next-line: duplicate-set-field
         vim.system = function()
             called = true
             return {}

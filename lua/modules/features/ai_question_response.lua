@@ -174,7 +174,9 @@ function M.submit(answer_buf)
     M.answer_links_by_buf[answer_buf] = nil
 
     if vim.api.nvim_get_current_buf() == answer_buf then
-        pcall(vim.cmd, "tabclose!")
+        pcall(function()
+            vim.cmd("tabclose!")
+        end)
     end
 
     vim.notify("Formatting with AI, please wait.", vim.log.levels.INFO)

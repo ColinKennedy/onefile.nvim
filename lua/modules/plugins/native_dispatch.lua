@@ -388,6 +388,48 @@ function _P.finish(options, lines, code)
     end
 end
 
+--- Restore a saved window layout once Neovim settles at its original height.
+---
+--- A tmux display pane resizes Neovim asynchronously: opening it shrinks the
+--- host pane and closing it grows the host pane back a moment later, each firing
+--- a delayed `VimResized`. Re-applying the layout immediately would fight the
+--- pending resize and leave the windows worse than before, so when Neovim is
+--- still shrunk we wait for the resize back to `total_lines` before restoring.
+---
+---@param layout string A `vim.fn.winrestcmd()` snapshot.
+---@param total_lines integer `vim.o.lines` captured before the display opened.
+function _P.restore_window_layout(layout, total_lines)
+    if not layout or layout == "" then
+        return
+    end
+
+    -- Already back at the original height (the in-editor split fallback, or the
+    -- tmux resize has already settled): restore now, no need to watch for more.
+    if vim.o.lines >= total_lines then
+        pcall(vim.cmd, layout)
+
+        return
+    end
+
+    ---@type integer?
+    local autocmd_id
+    autocmd_id = vim.api.nvim_create_autocmd("VimResized", {
+        desc = "Restore window sizes after a Dispatch display pane closes.",
+        callback = function()
+            -- Ignore the shrink events; only restore once Neovim has grown back.
+            if vim.o.lines < total_lines then
+                return
+            end
+
+            pcall(vim.cmd, layout)
+
+            if autocmd_id then
+                pcall(vim.api.nvim_del_autocmd, autocmd_id)
+            end
+        end,
+    })
+end
+
 --- Run a parsed dispatch command.
 ---
 ---@param options _my.dispatch.Options The parsed options.
@@ -396,8 +438,17 @@ function M.run(options)
     local output = {}
     ---@type _my.dispatch.Display?
     local display = nil
+    ---@type string?
+    local window_layout = nil
+    local window_total_lines = vim.o.lines
 
     if options.display == "always" then
+        -- Opening a tmux display pane shrinks Neovim's host pane, which makes
+        -- Neovim re-flow every window. Snapshot the current window sizes so the
+        -- user's splits (for example a bottom terminal) are restored to their
+        -- original heights once the display pane closes.
+        window_layout = vim.fn.winrestcmd()
+        window_total_lines = vim.o.lines
         display = _P.open_display()
     end
 
@@ -479,6 +530,10 @@ function M.run(options)
 
                 if display and options.display == "always" then
                     display.close()
+                end
+
+                if window_layout then
+                    _P.restore_window_layout(window_layout, window_total_lines)
                 end
 
                 _P.finish(options, output, code)

@@ -348,6 +348,76 @@ describe("native dispatch", function()
         }, resize_commands)
     end)
 
+    it("restores window sizes so a bottom terminal keeps its height across a dispatch", function()
+        -- Recreate the reported layout: a main window with a shorter,
+        -- terminal-like window pinned along the bottom.
+        vim.cmd("silent! only")
+        vim.cmd("botright new")
+        local terminal_window = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_height(terminal_window, 6)
+
+        local height_before = vim.api.nvim_win_get_height(terminal_window)
+
+        -- Emulate an "always" tmux display: opening the pane steals rows from
+        -- Neovim's host pane, which makes Neovim re-flow every window and shrink
+        -- the bottom terminal. This is exactly what disturbed the layout before.
+        local original_open_display = native_dispatch._P.open_display
+        rawset(native_dispatch._P, "open_display", function()
+            vim.api.nvim_win_set_height(terminal_window, 2)
+
+            return {
+                write = function() end,
+                close = function() end,
+            }
+        end)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.fn.jobstart = function(_, options)
+            options.on_exit(1, 0)
+
+            return 1
+        end
+
+        native_dispatch.run({
+            command = { "make" },
+            raw_command = "make",
+            display = "always",
+        })
+
+        vim.wait(100, function()
+            return vim.api.nvim_win_get_height(terminal_window) == height_before
+        end)
+
+        rawset(native_dispatch._P, "open_display", original_open_display)
+
+        assert.is_true(vim.api.nvim_win_is_valid(terminal_window))
+        assert.equal(height_before, vim.api.nvim_win_get_height(terminal_window))
+
+        vim.cmd("silent! only")
+    end)
+
+    it("defers window-size restoration until Neovim grows back after a tmux resize", function()
+        -- A tmux display pane resizes Neovim asynchronously, so at restore time
+        -- Neovim is still shrunk. Restoring then would fight the pending resize
+        -- and leave the layout worse, so restoration must wait for the grow-back.
+        local layout = vim.fn.winrestcmd()
+
+        native_dispatch._P.restore_window_layout(layout, vim.o.lines + 10)
+
+        ---@type boolean
+        local has_deferred_restore = false
+
+        for _, autocmd in ipairs(vim.api.nvim_get_autocmds({ event = "VimResized" })) do
+            if autocmd.desc and autocmd.desc:match("Dispatch") then
+                has_deferred_restore = true
+
+                pcall(vim.api.nvim_del_autocmd, autocmd.id)
+            end
+        end
+
+        assert.is_true(has_deferred_restore)
+    end)
+
     it("reports invalid dispatch flags", function()
         native_dispatch.dispatch(make_command_args("--display=sometimes make test"))
 

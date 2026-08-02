@@ -182,23 +182,14 @@ local function _has_adjacent_tmux_pane(direction)
     return vim.trim(output) == "0"
 end
 
---- Describe what borders the current window on `direction`'s side.
----
---- Neovim splits take priority; tmux is only consulted when there is no split,
---- so a normal grid cell never shells out to tmux.
----
----@param direction _my.tmux.DirectionKey
----@return "split" | "pane" | nil
-local function _neighbor_kind(direction)
-    if _has_split_in_direction(direction) then
-        return "split"
+---@param direction "h" | "j" | "k" | "l"
+---@return integer
+local function _get_resize_dimension(direction)
+    if direction == "j" or direction == "k" then
+        return vim.api.nvim_win_get_height(0)
     end
 
-    if _has_adjacent_tmux_pane(direction) then
-        return "pane"
-    end
-
-    return nil
+    return vim.api.nvim_win_get_width(0)
 end
 
 ---@param direction "h" | "j" | "k" | "l"
@@ -220,39 +211,13 @@ function M._resize(direction)
     local core_helpers = require("modules.utilities.core_helpers")
     local details = _DIRECTIONS[direction]
 
-    -- NOTE: Both keys on an axis act on the *same* divider. Vertically that is
-    -- the cell below when one exists (otherwise the cell above); horizontally the
-    -- cell to the right when one exists (otherwise the left). A "cell" is a
-    -- Neovim split or a tmux pane -- both are detected and handled seamlessly.
-    local vertical = direction == "j" or direction == "k"
-    local far = vertical and "j" or "l"
-    local near = vertical and "k" or "h"
-
-    local target = far
-    local kind = _neighbor_kind(far)
-
-    if not kind then
-        target = near
-        kind = _neighbor_kind(near)
-    end
-
-    if not kind then
-        -- The window fills the whole axis with no split or pane beyond it.
-        return
-    end
-
-    if kind == "pane" then
-        -- Move the shared tmux border in the key's geometric direction (j down,
-        -- k up, h left, l right); tmux moves whichever border that touches.
-        _run_tmux_pane_command(direction, "resize-pane")
-
-        return
-    end
-
-    -- Resize within Neovim. The key grows the current window when it pushes the
-    -- targeted divider away from the window and shrinks it otherwise, which
-    -- reduces to: grow when the key points at the targeted side.
-    local amount = (direction == target) and details.resize_amount or -details.resize_amount
+    -- NOTE: Always try to resize within Neovim first. Only when the Neovim
+    -- window cannot change (there is no adjacent split to resize against) do we
+    -- fall back to resizing the surrounding tmux pane. Short-circuiting to tmux
+    -- whenever the window merely touches the screen edge is wrong: a bottom-most
+    -- split in a vertical stack touches the bottom edge but can still be resized
+    -- by adjusting the split above it.
+    local before = _get_resize_dimension(direction)
 
     core_helpers.resize_window(vertical and "height" or "width", amount)
 end

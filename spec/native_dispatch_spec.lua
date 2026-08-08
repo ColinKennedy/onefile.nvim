@@ -82,17 +82,17 @@ describe("native dispatch", function()
     end)
 
     it("makes :Dispatch quiet and jump-first by default", function()
-        local original_run = native_dispatch._run
+        local original_run = native_dispatch.run
         ---@type _my.dispatch.Options?
         local captured = nil
 
-        rawset(native_dispatch, "_run", function(options)
+        rawset(native_dispatch, "run", function(options)
             captured = options
         end)
 
-        native_dispatch._dispatch(make_command_args("make luacheck"))
+        native_dispatch.dispatch(make_command_args("make luacheck"))
 
-        rawset(native_dispatch, "_run", original_run)
+        rawset(native_dispatch, "run", original_run)
 
         local options = assert(captured)
 
@@ -102,17 +102,17 @@ describe("native dispatch", function()
     end)
 
     it("lets explicit :Dispatch flags override the defaults", function()
-        local original_run = native_dispatch._run
+        local original_run = native_dispatch.run
         ---@type _my.dispatch.Options?
         local captured = nil
 
-        rawset(native_dispatch, "_run", function(options)
+        rawset(native_dispatch, "run", function(options)
             captured = options
         end)
 
-        native_dispatch._dispatch(make_command_args("--display=always --no-jump-first make luacheck"))
+        native_dispatch.dispatch(make_command_args("--display=always --no-jump-first make luacheck"))
 
-        rawset(native_dispatch, "_run", original_run)
+        rawset(native_dispatch, "run", original_run)
 
         local options = assert(captured)
 
@@ -121,17 +121,17 @@ describe("native dispatch", function()
     end)
 
     it("makes :DispatchOutput mirror output and stay put by default", function()
-        local original_run = native_dispatch._run
+        local original_run = native_dispatch.run
         ---@type _my.dispatch.Options?
         local captured = nil
 
-        rawset(native_dispatch, "_run", function(options)
+        rawset(native_dispatch, "run", function(options)
             captured = options
         end)
 
-        native_dispatch._dispatch_output(make_command_args("make luacheck"))
+        native_dispatch.dispatch_output(make_command_args("make luacheck"))
 
-        rawset(native_dispatch, "_run", original_run)
+        rawset(native_dispatch, "run", original_run)
 
         local options = assert(captured)
 

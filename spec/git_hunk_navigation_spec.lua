@@ -477,6 +477,68 @@ index 2222222..3333333 100644
         end)
     end)
 
+    it("shortens the home directory to `~` in the quickfix title", function()
+        local home = vim.fn.fnamemodify("~", ":p"):gsub("[/\\]$", "")
+
+        assert.equal(
+            vim.fs.joinpath("~", "repositories/example"),
+            git_hunk_navigation.get_quickfix_title(vim.fs.joinpath(home, "repositories/example"))
+        )
+
+        -- NOTE: The home directory itself collapses to a bare `~`.
+        assert.equal("~", git_hunk_navigation.get_quickfix_title(home))
+    end)
+
+    it("leaves a repository root outside the home directory unshortened", function()
+        -- NOTE: `:~` only rewrites paths under the home directory, so a repository
+        -- somewhere else keeps its full path rather than being mangled.
+        assert.equal("/opt/example/repository", git_hunk_navigation.get_quickfix_title("/opt/example/repository"))
+    end)
+
+    it("titles the quickfix list with the shortened repository root", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\n")
+            write_text(vim.fs.joinpath(root, "file.txt"), "one\nTWO\n")
+
+            local ok, err = pcall(function()
+                load_quickfix_from(root, root)
+
+                assert.equal(git_hunk_navigation.get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("still titles the quickfix list when the repository has no hunks", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\n")
+
+            local ok, err = pcall(function()
+                -- NOTE: A clean repository empties the list, but the title should
+                -- still say which repository was inspected.
+                load_quickfix_from(root, root)
+
+                assert.equal(0, #vim.fn.getqflist())
+                assert.equal(git_hunk_navigation.get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
     it("resolves quickfix paths from the repository root when the current directory is a subfolder", function()
         with_captured_notifications(function()
             local root = make_repo()

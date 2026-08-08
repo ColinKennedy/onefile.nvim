@@ -565,3 +565,180 @@ describe("git visual hunk selection commands", function()
         remove_tree(root)
     end)
 end)
+
+--- Close any open quickfix window, defeating the `winfixbuf` filetype setting.
+local function close_quickfix_window()
+    for _, window in ipairs(vim.api.nvim_list_wins()) do
+        if vim.bo[vim.api.nvim_win_get_buf(window)].filetype == "qf" then
+            vim.wo[window].winfixbuf = false
+            vim.api.nvim_win_close(window, true)
+        end
+    end
+end
+
+--- Populate the quickfix list with repository hunks and focus its window.
+---
+---@param root string The Git repository root.
+---@return table[] # The loaded quickfix entries.
+local function load_quickfix_hunks(root)
+    local git_hunk_navigation = require("modules.features.git_hunk_navigation")
+
+    vim.cmd("silent enew!")
+    vim.cmd("LoadGitDiff")
+    vim.wait(2000, function()
+        return git_hunk_navigation.get_repository_state(root) ~= nil and #vim.fn.getqflist() > 0
+    end)
+    vim.wait(100)
+
+    -- `:LoadGitDiff` ends in `copen`, so the quickfix window is already focused.
+    assert.equal("qf", vim.bo.filetype)
+
+    return vim.fn.getqflist()
+end
+
+describe("git hunk staging from the quickfix window", function()
+    it("stages only the hunk under the cursor row in normal mode", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\nfive\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            -- Two separate hunks: line 1 and line 5.
+            write_text(path, "ONE\ntwo\nthree\nfour\nFIVE\n")
+
+            local previous = vim.fn.getcwd()
+            vim.cmd("cd " .. vim.fn.fnameescape(root))
+
+            local items = load_quickfix_hunks(root)
+            assert.equal(2, #items)
+
+            -- Sit on the first row and run the command with no range at all.
+            vim.api.nvim_win_set_cursor(0, { 1, 0 })
+            vim.cmd("GitStageSelection")
+            vim.wait(600)
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+
+            assert.is_truthy(cached:find("+ONE", 1, true))
+            assert.is_nil(cached:find("+FIVE", 1, true))
+
+            close_quickfix_window()
+            vim.cmd("cd " .. vim.fn.fnameescape(previous))
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("stages every hunk covered by a visual row selection", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\nfive\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            write_text(path, "ONE\ntwo\nthree\nfour\nFIVE\n")
+
+            local previous = vim.fn.getcwd()
+            vim.cmd("cd " .. vim.fn.fnameescape(root))
+
+            local items = load_quickfix_hunks(root)
+            assert.equal(2, #items)
+
+            -- The visual mapping sends `:'<,'>GitStageSelection`, which arrives
+            -- as this row range.
+            vim.cmd("1,2GitStageSelection")
+            vim.wait(1200)
+
+            local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
+
+            -- NOTE: Both hunks live in one file, so this only passes because the
+            -- hunks are staged sequentially against a freshly read index.
+            assert.is_truthy(cached:find("+ONE", 1, true))
+            assert.is_truthy(cached:find("+FIVE", 1, true))
+
+            local unstaged = run_git(root, { "diff", "--unified=0", "--", "file.txt" })
+            assert.equal("", unstaged)
+
+            close_quickfix_window()
+            vim.cmd("cd " .. vim.fn.fnameescape(previous))
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("stages hunks across several files in one selection", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local first = vim.fs.joinpath(root, "alpha.txt")
+            local second = vim.fs.joinpath(root, "beta.txt")
+            write_text(first, "one\ntwo\n")
+            write_text(second, "three\nfour\n")
+            run_git(root, { "add", "." })
+            run_git(root, { "commit", "-m", "init" })
+
+            write_text(first, "ONE\ntwo\n")
+            write_text(second, "three\nFOUR\n")
+
+            local previous = vim.fn.getcwd()
+            vim.cmd("cd " .. vim.fn.fnameescape(root))
+
+            local items = load_quickfix_hunks(root)
+            assert.equal(2, #items)
+
+            vim.cmd("1,2GitStageSelection")
+            vim.wait(1200)
+
+            assert.is_truthy(
+                run_git(root, { "diff", "--cached", "--unified=0", "--", "alpha.txt" }):find("+ONE", 1, true)
+            )
+            assert.is_truthy(
+                run_git(root, { "diff", "--cached", "--unified=0", "--", "beta.txt" }):find("+FOUR", 1, true)
+            )
+
+            close_quickfix_window()
+            vim.cmd("cd " .. vim.fn.fnameescape(previous))
+        end)
+
+        remove_tree(root)
+    end)
+
+    it("leaves the working tree alone when staging from the quickfix window", function()
+        local root = make_repo()
+
+        with_captured_notifications(function()
+            local path = vim.fs.joinpath(root, "file.txt")
+            write_text(path, "one\ntwo\nthree\nfour\nfive\n")
+            run_git(root, { "add", "file.txt" })
+            run_git(root, { "commit", "-m", "init" })
+
+            write_text(path, "ONE\ntwo\nthree\nfour\nFIVE\n")
+
+            local previous = vim.fn.getcwd()
+            vim.cmd("cd " .. vim.fn.fnameescape(root))
+
+            load_quickfix_hunks(root)
+            vim.api.nvim_win_set_cursor(0, { 1, 0 })
+            vim.cmd("GitStageSelection")
+            vim.wait(600)
+
+            -- NOTE: Staging one hunk must not rewrite the file, so the other
+            -- change has to survive on disk.
+            local file = assert(io.open(path, "r"))
+            local contents = file:read("*a")
+            file:close()
+
+            assert.equal("ONE\ntwo\nthree\nfour\nFIVE\n", contents)
+
+            close_quickfix_window()
+            vim.cmd("cd " .. vim.fn.fnameescape(previous))
+        end)
+
+        remove_tree(root)
+    end)
+end)

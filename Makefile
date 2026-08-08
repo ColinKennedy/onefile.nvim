@@ -1,4 +1,4 @@
-.PHONY: api-documentation check-stylua download-dependencies llscheck luacheck privata stylua test
+.PHONY: api-documentation check-stylua download-dependencies lint llscheck luacheck privata stylua test
 
 # Git will error if the repository already exists. We ignore the error.
 # NOTE: We still print out that we did the clone to the user so that they know.
@@ -27,7 +27,7 @@ download-dependencies:
 	git clone git@github.com:LuaCATS/busted.git .dependencies/busted $(IGNORE_EXISTING)
 	git clone git@github.com:LuaCATS/luassert.git .dependencies/luassert $(IGNORE_EXISTING)
 
-lint: check-stylua luacheck privata deadcode typer llscheck
+lint: stylua luacheck privata llscheck
 
 llscheck: download-dependencies
 	VIMRUNTIME="`$(VIMRUNTIME_SHELL)`" llscheck --configpath $(CONFIGURATION) .

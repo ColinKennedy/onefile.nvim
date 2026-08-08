@@ -140,6 +140,10 @@ local function _get_action_details(action, buffer, details, callback)
     end)
 end
 
+---@class _my.git_hunks.ApplyOptions
+---@field callback fun(success: boolean, message: string?): nil? Called once the action finishes.
+---@field quiet boolean? If `true`, report nothing. The caller summarizes instead.
+
 --- Run a hunk operation using already-resolved texts and range.
 ---
 ---@param action _my.git_hunks.Action The hunk operation to run.
@@ -148,14 +152,38 @@ end
 ---@param diff string A zero-context diff for the operation.
 ---@param start_line integer The first selected line.
 ---@param end_line integer The last selected line.
-local function _apply_selection_from_details(action, buffer, data, diff, start_line, end_line)
+---@param options _my.git_hunks.ApplyOptions? Completion and reporting options.
+local function _apply_selection_from_details(action, buffer, data, diff, start_line, end_line, options)
     local git_diff = require("modules.utilities.git_diff")
+
+    options = options or {}
+    local callback = options.callback or function() end
+
+    --- Show `message` unless the caller reports failures itself.
+    ---
+    ---@param message string The failure message to show.
+    local function _report_error(message)
+        if not options.quiet then
+            _notify_error(message)
+        end
+    end
+
+    --- Show the action's success message unless the caller summarizes instead.
+    local function _report_success()
+        if not options.quiet then
+            vim.notify(data.success_message, vim.log.levels.INFO)
+        end
+    end
 
     local partial_text, selected_changes =
         git_diff.build_selection_target(data.base_text, data.target_text, diff, start_line, end_line, action == "reset")
 
     if selected_changes == 0 then
-        vim.notify("No Git hunk lines were selected.", vim.log.levels.INFO)
+        if not options.quiet then
+            vim.notify("No Git hunk lines were selected.", vim.log.levels.INFO)
+        end
+
+        callback(false, "no Git hunk lines were selected")
 
         return
     end
@@ -165,8 +193,9 @@ local function _apply_selection_from_details(action, buffer, data, diff, start_l
             git_diff.build_selection_target(data.base_text, data.target_text, diff, start_line, end_line, true)
 
         _set_buffer_text(buffer, checkout_text)
-        vim.notify(data.success_message, vim.log.levels.INFO)
+        _report_success()
         _refresh_git_views(buffer)
+        callback(true, nil)
 
         return
     end
@@ -178,20 +207,23 @@ local function _apply_selection_from_details(action, buffer, data, diff, start_l
         data.details.relative_path,
         function(patch, patch_error)
             if not patch then
-                _notify_error(string.format("Cannot create selected Git hunk patch: %s", patch_error or ""))
+                _report_error(string.format("Cannot create selected Git hunk patch: %s", patch_error or ""))
+                callback(false, patch_error)
 
                 return
             end
 
             git_diff.apply_cached_patch(data.details, patch, function(success, apply_error)
                 if not success then
-                    _notify_error(string.format("Cannot apply selected Git hunk patch: %s", apply_error or ""))
+                    _report_error(string.format("Cannot apply selected Git hunk patch: %s", apply_error or ""))
+                    callback(false, apply_error)
 
                     return
                 end
 
-                vim.notify(data.success_message, vim.log.levels.INFO)
+                _report_success()
                 _refresh_git_views(buffer)
+                callback(true, nil)
             end)
         end
     )
@@ -428,6 +460,229 @@ local function _find_closest_hunk(hunks, line)
     return closest
 end
 
+--- Find the hunk that covers `line`.
+---
+--- A quickfix row names one exact hunk, so this requires containment instead of
+--- the nearest-hunk search that cursor-driven staging uses. A row whose hunk is
+--- gone (already staged, or the file moved on since `:LoadGitDiff` ran) is
+--- reported rather than silently staging a neighbouring hunk.
+---
+---@param hunks _my.git_diff.SelectionHunk[] The available hunks.
+---@param line integer The quickfix entry line.
+---@return _my.git_diff.SelectionHunk? # The covering hunk, if any.
+local function _find_containing_hunk(hunks, line)
+    for _, hunk in ipairs(hunks) do
+        local first, last = _get_hunk_line_range(hunk)
+
+        if first <= line and line <= last then
+            return hunk
+        end
+    end
+
+    return nil
+end
+
+--- Check whether the current buffer lists quickfix entries.
+---
+---@return boolean # If `true`, the current buffer is a quickfix or location list.
+function _P.is_quickfix_buffer()
+    return vim.bo.buftype == "quickfix"
+end
+
+--- Get the entries shown in the current quickfix or location list buffer.
+---
+--- Location lists share the `quickfix` buftype but hold their own entries, so
+--- the window decides which list to read.
+---
+---@return table[] # The listed entries.
+local function _get_quickfix_items()
+    local window = vim.api.nvim_get_current_win()
+    local info = vim.fn.getwininfo(window)[1]
+
+    if info and info.loclist == 1 then
+        return vim.fn.getloclist(window)
+    end
+
+    return vim.fn.getqflist()
+end
+
+---@class _my.git_hunks.QuickfixTarget
+---@field buffer integer The buffer holding the hunk.
+---@field lnum integer The hunk's line within that buffer.
+
+--- Collect the unique hunks named by a range of quickfix rows.
+---
+---@param start_row integer The first selected quickfix row.
+---@param end_row integer The last selected quickfix row.
+---@return _my.git_hunks.QuickfixTarget[] # The referenced hunks, in row order.
+local function _get_quickfix_targets(start_row, end_row)
+    if start_row > end_row then
+        start_row, end_row = end_row, start_row
+    end
+
+    local items = _get_quickfix_items()
+    ---@type _my.git_hunks.QuickfixTarget[]
+    local targets = {}
+    ---@type table<string, boolean>
+    local seen = {}
+
+    for row = start_row, end_row do
+        local item = items[row]
+
+        if item and item.bufnr and item.bufnr ~= 0 and item.lnum and item.lnum > 0 then
+            local key = string.format("%s:%s", item.bufnr, item.lnum)
+
+            if not seen[key] then
+                seen[key] = true
+                table.insert(targets, { buffer = item.bufnr, lnum = item.lnum })
+            end
+        end
+    end
+
+    return targets
+end
+
+--- Run `action` on the single hunk that `target` names.
+---
+---@param action _my.git_hunks.Action The hunk operation to run.
+---@param target _my.git_hunks.QuickfixTarget The quickfix row to act on.
+---@param callback fun(success: boolean, message: string?): nil Callback once the hunk is handled.
+local function _apply_quickfix_target(action, target, callback)
+    local git_diff = require("modules.utilities.git_diff")
+    local buffer = target.buffer
+
+    if not vim.api.nvim_buf_is_valid(buffer) then
+        callback(false, "a quickfix entry buffer no longer exists")
+
+        return
+    end
+
+    -- NOTE: `:LoadGitDiff` names quickfix buffers without loading them, so the
+    -- file contents have to be read in before they can be diffed against the
+    -- index. Reading them would otherwise echo a "5L, 24B" message per file.
+    require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+        vim.fn.bufload(buffer)
+    end)
+
+    local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buffer), ":~:.")
+
+    git_diff.get_file_details(buffer, function(details, details_error)
+        if not details then
+            callback(false, details_error or string.format("no Git details for %s", name))
+
+            return
+        end
+
+        git_diff.has_unmerged_entries(details, function(has_unmerged)
+            if has_unmerged then
+                callback(false, string.format("%s has unresolved merge entries", details.relative_path))
+
+                return
+            end
+
+            _get_action_details(action, buffer, details, function(data)
+                if not data then
+                    callback(false, string.format("cannot read Git contents for %s", details.relative_path))
+
+                    return
+                end
+
+                git_diff.build_zero_context_diff(data.base_text, data.target_text, function(diff, diff_error)
+                    if not diff then
+                        callback(false, diff_error or string.format("cannot diff %s", details.relative_path))
+
+                        return
+                    end
+
+                    local hunk = _find_containing_hunk(git_diff.parse_selection_diff(diff), target.lnum)
+
+                    if not hunk then
+                        callback(
+                            false,
+                            string.format("%s:%s is no longer a Git hunk", details.relative_path, target.lnum)
+                        )
+
+                        return
+                    end
+
+                    local start_line, end_line = _get_hunk_line_range(hunk)
+                    _apply_selection_from_details(action, buffer, data, diff, start_line, end_line, {
+                        callback = callback,
+                        quiet = true,
+                    })
+                end)
+            end)
+        end)
+    end)
+end
+
+---@type table<_my.git_hunks.Action, string>
+local _ACTION_LABELS = {
+    checkout = "Checked out",
+    reset = "Reset",
+    stage = "Staged",
+}
+
+--- Run `action` on every hunk listed across a range of quickfix rows.
+---
+--- Hunks are handled strictly one at a time. Each one re-reads the index, so
+--- applying a hunk cannot invalidate the hunks queued behind it, and several
+--- hunks in the same file apply correctly. Running them concurrently would race
+--- on the index instead.
+---
+---@param action _my.git_hunks.Action The hunk operation to run.
+---@param start_row integer The first selected quickfix row.
+---@param end_row integer The last selected quickfix row.
+function _P.apply_quickfix_selection(action, start_row, end_row)
+    local targets = _get_quickfix_targets(start_row, end_row)
+
+    if #targets == 0 then
+        vim.notify("No Git hunks were selected.", vim.log.levels.INFO)
+
+        return
+    end
+
+    local index = 1
+    local applied = 0
+    ---@type string[]
+    local failures = {}
+
+    --- Handle the next selected hunk, then report once all of them are done.
+    local function _next()
+        local target = targets[index]
+        index = index + 1
+
+        if not target then
+            if applied > 0 then
+                vim.notify(
+                    string.format("%s %s of %s selected Git hunks.", _ACTION_LABELS[action], applied, #targets),
+                    vim.log.levels.INFO
+                )
+            end
+
+            if #failures > 0 then
+                _notify_error(
+                    string.format("Skipped %s selected Git hunks: %s", #failures, table.concat(failures, ", "))
+                )
+            end
+
+            return
+        end
+
+        _apply_quickfix_target(action, target, function(success, message)
+            if success then
+                applied = applied + 1
+            else
+                table.insert(failures, message or "unknown error")
+            end
+
+            _next()
+        end)
+    end
+
+    _next()
+end
+
 --- Run a visual Git hunk action for the closest hunk.
 ---
 ---@param action _my.git_hunks.Action The hunk operation to run.
@@ -480,8 +735,18 @@ end
 
 --- Stage a ranged Git hunk selection.
 ---
+--- In a quickfix buffer the range counts listed rows rather than file lines, so
+--- each selected row stages the hunk it points at. Without a range Vim supplies
+--- the cursor row, which stages just the hunk under the cursor.
+---
 ---@param options _my.git_hunks.RangeCommandOptions The command range details.
 local function _stage_selection_command(options)
+    if _P.is_quickfix_buffer() then
+        _P.apply_quickfix_selection("stage", options.line1, options.line2)
+
+        return
+    end
+
     _P.apply_selection("stage", options.line1, options.line2)
 end
 
@@ -517,6 +782,13 @@ vim.api.nvim_create_user_command("GitCheckoutSelection", _checkout_selection_com
 vim.keymap.set("x", "<leader>gah", ":GitStageSelection<CR>", { desc = "Stage selected Git hunk lines." })
 
 vim.keymap.set("n", "<leader>gah", function()
+    if _P.is_quickfix_buffer() then
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        _P.apply_quickfix_selection("stage", row, row)
+
+        return
+    end
+
     _P.apply_closest_hunk("stage")
 end, { desc = "Stage closest Git hunk." })
 

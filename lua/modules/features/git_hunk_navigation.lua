@@ -729,6 +729,19 @@ function M.to_quickfix(repository)
     return items
 end
 
+--- Get the quickfix title to show for `repository`.
+---
+--- `:~` collapses the home directory to `~` and leaves paths outside it alone,
+--- which keeps the title short without hiding where the repository is. `:.`
+--- is deliberately not used because it would shorten the repository root to `.`
+--- whenever the current directory already is that root.
+---
+---@param repository string The repository root.
+---@return string # The shortened repository root.
+function M.get_quickfix_title(repository)
+    return vim.fn.fnamemodify(repository, ":~")
+end
+
 --- Load repository hunks into the cache and quickfix list.
 ---
 ---@param arguments string[]? User-provided arguments after `:LoadGitDiff`.
@@ -752,13 +765,15 @@ function M.load_quickfix(arguments)
 
             repository_state = M.get_repository_state(repository)
 
+            local title = M.get_quickfix_title(repository)
+
             if not repository_state or #repository_state.entries == 0 then
-                vim.fn.setqflist({}, "r")
+                vim.fn.setqflist({}, "r", { items = {}, title = title })
 
                 return
             end
 
-            vim.fn.setqflist(M.to_quickfix(repository), "r")
+            vim.fn.setqflist({}, "r", { items = M.to_quickfix(repository), title = title })
             require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
                 vim.cmd.copen()
             end)

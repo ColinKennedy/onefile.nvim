@@ -34,8 +34,8 @@ describe("ripgrep quickfix", function()
         original_system = vim.system
         original_exists_command = core_helpers.exists_command
         original_notify = vim.notify
-        original_ripgrep_executable = core_helpers._RIPGREP_EXECUTABLE
-        core_helpers._RIPGREP_EXECUTABLE = "rg"
+        original_ripgrep_executable = core_helpers.RIPGREP_EXECUTABLE
+        core_helpers.RIPGREP_EXECUTABLE = "rg"
         rawset(core_helpers, "exists_command", function()
             return true
         end)
@@ -46,7 +46,7 @@ describe("ripgrep quickfix", function()
         vim.system = original_system
         vim.notify = original_notify
         rawset(core_helpers, "exists_command", original_exists_command)
-        core_helpers._RIPGREP_EXECUTABLE = original_ripgrep_executable
+        core_helpers.RIPGREP_EXECUTABLE = original_ripgrep_executable
         vim.fn.setqflist({}, "r")
         vim.cmd("silent! cclose")
     end)

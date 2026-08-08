@@ -58,7 +58,7 @@ end
 ---@param branch string The branch or fallback namespace.
 ---@param entries {relative_path: string, line: integer}[] The marks to write.
 local function write_marks_entries(root, branch, entries)
-    local directory = vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch)
+    local directory = vim.fs.joinpath(root, core_helpers.SESSIONS_DIRECTORY_NAME, branch)
     local path = vim.fs.joinpath(directory, ".nvim.marks.lua")
     ---@type string[]
     local lines = { "local buffer" }
@@ -270,7 +270,7 @@ describe("modules.plugins.native_grapple", function()
         local file_path = vim.fs.joinpath(root, "notes.txt")
         local marks_path = vim.fs.joinpath(
             root,
-            core_helpers._SESSIONS_DIRECTORY_NAME,
+            core_helpers.SESSIONS_DIRECTORY_NAME,
             native_grapple._NO_GIT_BRANCH_NAME,
             ".nvim.marks.lua"
         )

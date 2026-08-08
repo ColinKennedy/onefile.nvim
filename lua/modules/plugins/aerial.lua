@@ -562,7 +562,7 @@ end
 local function _get_language(filetype)
     local core_helpers = require("modules.utilities.core_helpers")
 
-    return core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
+    return core_helpers.FILETYPE_TO_TREESITTER[filetype] or filetype
 end
 
 --- Check whether `buffer` can use a Tree-sitter parser for `language`.
@@ -1106,7 +1106,7 @@ end
 function M._get_refresh_debounce_ms(source_buffer)
     local core_helpers = require("modules.utilities.core_helpers")
     local filetype = vim.bo[source_buffer].filetype
-    local language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
+    local language = core_helpers.FILETYPE_TO_TREESITTER[filetype] or filetype
 
     if
         language ~= ""
@@ -1700,7 +1700,7 @@ function _P.setup()
 
     local core_editor_setup = require("modules.features.core_editor_setup")
 
-    core_editor_setup._SESSION_MANAGER:register_session_write_pre_callback(".aerial.lua", function()
+    core_editor_setup.SESSION_MANAGER:register_session_write_pre_callback(".aerial.lua", function()
         local code = M._serialize_session_restore()
 
         if code == "" then

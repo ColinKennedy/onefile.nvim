@@ -1387,6 +1387,8 @@ end
 ---    If `true`, search forwards in the buffer. If `false`, search backwards.
 ---@param severity (string | integer)?
 ---    The type of severity to filter for. If no `severity` is given, allow anything.
+---@return fun(): nil
+---    A callback that does the diagnostic jump when it is called.
 ---
 function M.go_to_diagnostic(next, severity)
     severity = severity and vim.diagnostic.severity[severity] or nil

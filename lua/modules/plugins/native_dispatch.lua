@@ -31,18 +31,6 @@ local _QUIET_DEFAULTS = { display = "on_error", jump_first = true }
 ---@type _my.dispatch.Defaults
 local _OUTPUT_DEFAULTS = { display = "always", jump_first = false }
 
----@class _my.dispatch.Defaults
----@field display _my.dispatch.DisplayMode Whether to show command output while it runs.
----@field jump_first boolean Whether to jump to the first parsed quickfix item.
-
--- The flags that `:Dispatch` implies. They are what we want 90%+ of the time.
----@type _my.dispatch.Defaults
-local _QUIET_DEFAULTS = { display = "on_error", jump_first = true }
-
--- The flags that `:DispatchOutput` implies. Mirror output while the command runs.
----@type _my.dispatch.Defaults
-local _OUTPUT_DEFAULTS = { display = "always", jump_first = false }
-
 ---@class _my.dispatch.Display
 ---@field write fun(lines: string[]): nil
 ---@field close fun(): nil
@@ -139,6 +127,7 @@ function _P.parse_arguments(arguments, defaults)
     local display = defaults.display
     local command_start = 1
     local jump_first = defaults.jump_first
+    local allow_duplicates = false
 
     for index, argument in ipairs(argv) do
         if argument:sub(1, 2) ~= "--" then
@@ -150,6 +139,8 @@ function _P.parse_arguments(arguments, defaults)
             jump_first = true
         elseif argument == "--no-jump-first" then
             jump_first = false
+        elseif argument == "--allow-duplicates" then
+            allow_duplicates = true
         elseif argument:sub(1, 11) == "--compiler=" then
             compiler = argument:sub(12)
         elseif argument:sub(1, 10) == "--display=" then
@@ -422,6 +413,7 @@ function _P.complete(_, line)
 
     if last:sub(1, 2) == "--" then
         return {
+            "--allow-duplicates",
             "--compiler=",
             "--display=always",
             "--display=never",
@@ -470,6 +462,10 @@ function _P.finish(options, lines, code)
 
     _P.with_compiler(options.compiler, function()
         items = _P.lines_to_quickfix(lines)
+
+        if not options.allow_duplicates then
+            items = _P.remove_consecutive_duplicates(items)
+        end
 
         for index, item in ipairs(items) do
             if item.valid == 1 then

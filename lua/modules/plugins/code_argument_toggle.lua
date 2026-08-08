@@ -296,7 +296,7 @@ local function _replace_pair(pair, replacement)
 end
 
 --- Toggle the bracketed code around the cursor.
-function M.toggle()
+function M._toggle()
     local buffer = vim.api.nvim_get_current_buf()
     local lines = _get_lines(buffer)
     local cursor = vim.api.nvim_win_get_cursor(0)
@@ -317,7 +317,7 @@ function M.toggle()
     _replace_pair(pair, replacement)
 end
 
-vim.keymap.set("n", "<leader>sa", M.toggle, {
+vim.keymap.set("n", "<leader>sa", M._toggle, {
     desc = "Toggle bracketed code between single-line and multiline arguments.",
 })
 

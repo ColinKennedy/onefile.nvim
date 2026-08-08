@@ -30,7 +30,7 @@ describe("code argument toggle", function()
     it("expands and collapses parenthesized arguments", function()
         make_buffer({ "(foo, bar, fizz)" }, 1, 6)
 
-        code_argument_toggle.toggle()
+        code_argument_toggle._toggle()
 
         assert.are.same({
             "(",
@@ -41,7 +41,7 @@ describe("code argument toggle", function()
         }, get_lines())
 
         vim.api.nvim_win_set_cursor(0, { 3, 5 })
-        code_argument_toggle.toggle()
+        code_argument_toggle._toggle()
 
         assert.are.same({ "(foo, bar, fizz)" }, get_lines())
     end)
@@ -62,7 +62,7 @@ describe("code argument toggle", function()
     it("expands and collapses bracketed arguments", function()
         make_buffer({ "[foo, bar, fizz]" }, 1, 6)
 
-        code_argument_toggle.toggle()
+        code_argument_toggle._toggle()
 
         assert.are.same({
             "[",
@@ -73,7 +73,7 @@ describe("code argument toggle", function()
         }, get_lines())
 
         vim.api.nvim_win_set_cursor(0, { 3, 5 })
-        code_argument_toggle.toggle()
+        code_argument_toggle._toggle()
 
         assert.are.same({ "[foo, bar, fizz]" }, get_lines())
     end)
@@ -81,7 +81,7 @@ describe("code argument toggle", function()
     it("expands and collapses braced arguments", function()
         make_buffer({ "{foo: 1, bar: {baz: 2}, fizz: 3}" }, 1, 9)
 
-        code_argument_toggle.toggle()
+        code_argument_toggle._toggle()
 
         assert.are.same({
             "{",
@@ -92,7 +92,7 @@ describe("code argument toggle", function()
         }, get_lines())
 
         vim.api.nvim_win_set_cursor(0, { 3, 8 })
-        code_argument_toggle.toggle()
+        code_argument_toggle._toggle()
 
         assert.are.same({ "{foo: 1, bar: {baz: 2}, fizz: 3}" }, get_lines())
     end)
@@ -103,7 +103,7 @@ describe("code argument toggle", function()
 
         make_buffer({ line }, 1, 42)
 
-        code_argument_toggle.toggle()
+        code_argument_toggle._toggle()
 
         assert.are.same({
             "{",
@@ -116,7 +116,7 @@ describe("code argument toggle", function()
     it("targets the innermost containing wrapper", function()
         make_buffer({ "outer(foo, inner(bar, fizz), buzz)" }, 1, 18)
 
-        code_argument_toggle.toggle()
+        code_argument_toggle._toggle()
 
         assert.are.same({
             "outer(foo, inner(",
@@ -129,7 +129,7 @@ describe("code argument toggle", function()
     it("expands with the current line indentation", function()
         make_buffer({ "    call(foo, bar)" }, 1, 12)
 
-        code_argument_toggle.toggle()
+        code_argument_toggle._toggle()
 
         assert.are.same({
             "    call(",

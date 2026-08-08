@@ -173,7 +173,7 @@ local function load_quickfix_from(root, directory)
         vim.cmd("silent enew!")
         vim.cmd("LoadGitDiff")
         vim.wait(1000, function()
-            return git_hunk_navigation.get_repository_state(root) ~= nil and has_quickfix_window()
+            return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
         end)
 
         items = vim.fn.getqflist()
@@ -188,7 +188,7 @@ end
 local function load_hunks()
     local loaded
 
-    git_hunk_navigation.load(nil, function(success)
+    git_hunk_navigation._load(nil, function(success)
         loaded = success
     end)
 
@@ -201,7 +201,7 @@ end
 
 describe("modules.features.git_hunk_navigation", function()
     it("parses repository-wide hunks sequentially", function()
-        local entries = git_hunk_navigation.parse_diff(
+        local entries = git_hunk_navigation._parse_diff(
             "/tmp/repo",
             [[
 diff --git a/a.txt b/a.txt
@@ -228,7 +228,7 @@ index 2222222..3333333 100644
     end)
 
     it("parses renamed file hunks using the target path", function()
-        local entries = git_hunk_navigation.parse_diff(
+        local entries = git_hunk_navigation._parse_diff(
             "/tmp/repo",
             [[
 diff --git a/old/file.txt b/new/file.txt
@@ -250,7 +250,7 @@ index 1111111..2222222 100644
     end)
 
     it("skips whole-file deletion hunks because there is no target buffer to open", function()
-        local entries = git_hunk_navigation.parse_diff(
+        local entries = git_hunk_navigation._parse_diff(
             "/tmp/repo",
             [[
 diff --git a/deleted.txt b/deleted.txt
@@ -294,7 +294,7 @@ index 2222222..3333333 100644
                     assert.True(load_hunks())
                 end)
 
-                local state = git_hunk_navigation.get_state()
+                local state = git_hunk_navigation._get_state()
                 assert.equal(1, #state.repositories[first].entries)
                 assert.equal(1, #state.repositories[second].entries)
                 assert.equal("file.txt", state.repositories[first].entries[1].relative_path)
@@ -358,7 +358,7 @@ index 2222222..3333333 100644
                     assert.is_false(vim.api.nvim_buf_is_loaded(unloaded))
                     assert.True(load_hunks())
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(3, #repository_state.entries)
                     assert.equal("first.txt", repository_state.entries[1].relative_path)
                     assert.equal(2, repository_state.entries[1].lnum)
@@ -396,7 +396,7 @@ index 2222222..3333333 100644
                     assert.equal(vim.fs.joinpath(root, "file.txt"), vim.api.nvim_buf_get_name(0))
                     assert.are.same({ 2, 0 }, vim.api.nvim_win_get_cursor(0))
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(1, #repository_state.entries)
                 end)
             end)
@@ -460,10 +460,10 @@ index 2222222..3333333 100644
                 with_cwd(root, function()
                     vim.cmd("LoadGitDiff")
                     vim.wait(1000, function()
-                        return git_hunk_navigation.get_repository_state(root) ~= nil and has_quickfix_window()
+                        return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
                     end)
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(#repository_state.entries, #vim.fn.getqflist())
                     assert.equal("file.txt", repository_state.entries[1].relative_path)
                 end)
@@ -482,17 +482,17 @@ index 2222222..3333333 100644
 
         assert.equal(
             "Git: " .. vim.fs.joinpath("~", "repositories/example"),
-            git_hunk_navigation.get_quickfix_title(vim.fs.joinpath(home, "repositories/example"))
+            git_hunk_navigation._get_quickfix_title(vim.fs.joinpath(home, "repositories/example"))
         )
 
         -- NOTE: The home directory itself collapses to a bare `~`.
-        assert.equal("Git: ~", git_hunk_navigation.get_quickfix_title(home))
+        assert.equal("Git: ~", git_hunk_navigation._get_quickfix_title(home))
     end)
 
     it("leaves a repository root outside the home directory unshortened", function()
         -- NOTE: `:~` only rewrites paths under the home directory, so a repository
         -- somewhere else keeps its full path rather than being mangled.
-        assert.equal("Git: /opt/example/repository", git_hunk_navigation.get_quickfix_title("/opt/example/repository"))
+        assert.equal("Git: /opt/example/repository", git_hunk_navigation._get_quickfix_title("/opt/example/repository"))
     end)
 
     it("titles the quickfix list with the shortened repository root", function()
@@ -505,7 +505,7 @@ index 2222222..3333333 100644
             local ok, err = pcall(function()
                 load_quickfix_from(root, root)
 
-                assert.equal(git_hunk_navigation.get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
+                assert.equal(git_hunk_navigation._get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
             end)
 
             remove_tree(root)
@@ -528,7 +528,7 @@ index 2222222..3333333 100644
                 load_quickfix_from(root, root)
 
                 assert.equal(0, #vim.fn.getqflist())
-                assert.equal(git_hunk_navigation.get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
+                assert.equal(git_hunk_navigation._get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
             end)
 
             remove_tree(root)
@@ -642,7 +642,7 @@ index 2222222..3333333 100644
                     vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "file.txt")))
                     assert.True(load_hunks())
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(1, #repository_state.entries)
                     assert.equal("KEEP ME", repository_state.entries[1].text)
                 end)
@@ -668,7 +668,7 @@ index 2222222..3333333 100644
                     vim.api.nvim_buf_set_lines(0, 1, 2, false, { "    unsaved text" })
                     assert.True(load_hunks())
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(1, #repository_state.entries)
                     assert.equal("unsaved text", repository_state.entries[1].text)
                 end)

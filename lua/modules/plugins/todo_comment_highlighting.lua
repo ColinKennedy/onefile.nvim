@@ -3,6 +3,7 @@
 --- Inspired by https://github.com/folke/todo-comments.nvim.
 
 local M = {}
+local _P = {}
 
 ---@class _my.comment.HighlightGroup
 ---@field tag_highlight_name string The highlight group for the tag text.
@@ -60,7 +61,7 @@ local _UPDATE_GENERATION_BY_BUFFER = {}
 --- Get this module's extmark namespace.
 ---
 ---@return integer # The namespace id.
-function M.get_namespace()
+function M._get_namespace()
     return _COMMENT_HIGHLIGHT
 end
 
@@ -121,7 +122,7 @@ local function _get_highlight_groups(tag)
 end
 
 --- Define all tag highlight groups.
-function M.define_highlights()
+function _P.define_highlights()
     local normal_background = _get_normal_background()
 
     for _, details in pairs(_TAG_DETAILS) do
@@ -159,7 +160,7 @@ end
 ---@param line string The raw line.
 ---@param commentstring string The buffer commentstring.
 ---@return _my.comment.CommentLine? # The parsed comment line, if any.
-function M.parse_comment_line(line, commentstring)
+function M._parse_comment_line(line, commentstring)
     local pattern, prefix_length = _get_comment_pattern(commentstring)
     local indent, text = line:match(pattern)
 
@@ -185,7 +186,7 @@ end
 ---
 ---@param comment _my.comment.CommentLine The parsed comment line.
 ---@return _my.comment.TagMatch? # The matched tag, if any.
-function M.find_tag(comment)
+function M._find_tag(comment)
     local tag_start, tag_end, tag = comment.text:find("(%u+)%s*:")
 
     if tag_start == nil or tag_end == nil or tag == nil or _TAG_DETAILS[tag] == nil then
@@ -265,7 +266,7 @@ end
 --- Highlight tagged comment blocks in `buffer`.
 ---
 ---@param buffer integer The buffer to highlight.
-function M.highlight_buffer(buffer)
+function M._highlight_buffer(buffer)
     if not vim.api.nvim_buf_is_valid(buffer) then
         return
     end
@@ -278,8 +279,8 @@ function M.highlight_buffer(buffer)
 
     while line_index <= #lines do
         local raw_line = lines[line_index]
-        local comment = M.parse_comment_line(raw_line, commentstring)
-        local match = comment ~= nil and M.find_tag(comment) or nil
+        local comment = M._parse_comment_line(raw_line, commentstring)
+        local match = comment ~= nil and M._find_tag(comment) or nil
 
         if comment ~= nil and match ~= nil then
             _highlight_tag_line(buffer, line_index - 1, raw_line, match)
@@ -287,9 +288,9 @@ function M.highlight_buffer(buffer)
 
             while line_index <= #lines do
                 local continuation_raw = lines[line_index]
-                local continuation = M.parse_comment_line(continuation_raw, commentstring)
+                local continuation = M._parse_comment_line(continuation_raw, commentstring)
 
-                if continuation == nil or _is_empty_comment(continuation) or M.find_tag(continuation) ~= nil then
+                if continuation == nil or _is_empty_comment(continuation) or M._find_tag(continuation) ~= nil then
                     break
                 end
 
@@ -311,7 +312,7 @@ end
 --- Schedule an async-ish debounced highlight update for `buffer`.
 ---
 ---@param buffer integer The buffer to update.
-function M.schedule_highlight(buffer)
+function _P.schedule_highlight(buffer)
     if not vim.api.nvim_buf_is_valid(buffer) or vim.bo[buffer].buftype == "terminal" then
         return
     end
@@ -335,31 +336,31 @@ function M.schedule_highlight(buffer)
 
         vim.schedule(function()
             if _UPDATE_GENERATION_BY_BUFFER[buffer] == generation then
-                M.highlight_buffer(buffer)
+                M._highlight_buffer(buffer)
             end
         end)
     end, _DEBOUNCE_MS)
 end
 
 --- Create highlight groups and autocmds.
-function M.setup()
-    M.define_highlights()
+function _P.setup()
+    _P.define_highlights()
 
     vim.api.nvim_create_autocmd("ColorScheme", {
         group = vim.api.nvim_create_augroup("todo_comment_highlighting_colors", { clear = true }),
         desc = "Refresh todo comment highlight groups.",
-        callback = M.define_highlights,
+        callback = _P.define_highlights,
     })
 
     vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "TextChanged", "TextChangedI", "InsertLeave" }, {
         group = vim.api.nvim_create_augroup("todo_comment_highlighting", { clear = true }),
         desc = "Debounce todo comment highlighting.",
         callback = function(event)
-            M.schedule_highlight(event.buf)
+            _P.schedule_highlight(event.buf)
         end,
     })
 end
 
-M.setup()
+_P.setup()
 
 return M

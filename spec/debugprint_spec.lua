@@ -1,4 +1,4 @@
-local debugprint = require("modules.plugins.debugprint")
+local debugprint = require("modules.plugins.debugprint")._P
 
 --- Create a scratch buffer for debugprint tests.
 ---

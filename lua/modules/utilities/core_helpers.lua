@@ -1356,7 +1356,7 @@ end
 --- Delete all grapple bookmarks (so we can start from scratch).
 function M.delete_all_bookmarks()
     for index, _, _ in M.iter_bookmarks() do
-        M.delete_bookmark(index)
+        _P.delete_bookmark(index)
     end
 end
 
@@ -1420,7 +1420,7 @@ end
 ---    The number of bookmarks to jump. Usually this value is
 ---    just `1`, meaning "next bookmark" and `-1`, meaning "previous bookmark".
 ---
-function M.go_to_relative_bookmark(offset)
+function _P.go_to_relative_bookmark(offset)
     --- Open or load an existing Vim `buffer`.
     ---
     ---@param buffer {index: integer, path: string}
@@ -1493,7 +1493,7 @@ end
 ---
 ---@param mark string The Vim mark to jump to (or apply) to the current buffer.
 ---
-function M.mark_current_buffer_as_bookmark(mark)
+function _P.mark_current_buffer_as_bookmark(mark)
     if not _P.is_mark_defined(mark) then
         vim.cmd.mark(mark) -- Set the mark
     else
@@ -1527,7 +1527,7 @@ function M.mark_current_buffer_as_next_bookmark()
         next_index = ((maximum + 1) % M._BOOKMARK_MAXIMUM) + 1
     end
 
-    M.mark_current_buffer_as_bookmark(M.get_vim_mark_from_bookmark_index(next_index))
+    _P.mark_current_buffer_as_bookmark(M.get_vim_mark_from_bookmark_index(next_index))
 end
 
 --- Open `text` relative path using the current directory as a root.
@@ -1600,7 +1600,7 @@ end
 ---
 ---@param index integer 1-to-9 bookmark logical index.
 ---
-function M.delete_bookmark(index)
+function _P.delete_bookmark(index)
     local mark = M.get_vim_mark_from_bookmark_index(index)
     vim.cmd.delmarks(mark)
 end
@@ -1679,7 +1679,7 @@ end
 ---@param text string Some text that has whitespace at the end. e.g. `"foo    "`.
 ---@return string # The removed text. e.g. `"foo"`.
 ---
-function M.rstrip(text)
+function _P.rstrip(text)
     return text:match("^(.-)%s*$")
 end
 

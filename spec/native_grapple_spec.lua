@@ -126,12 +126,12 @@ end
 describe("modules.plugins.native_grapple", function()
     before_each(function()
         native_grapple.teardown()
-        native_grapple.delete_all_bookmarks()
+        native_grapple._delete_all_bookmarks()
     end)
 
     after_each(function()
         native_grapple.teardown()
-        native_grapple.delete_all_bookmarks()
+        native_grapple._delete_all_bookmarks()
         vim.cmd("silent enew!")
     end)
 
@@ -164,7 +164,7 @@ describe("modules.plugins.native_grapple", function()
             notification = { message = message, level = level }
         end)
 
-        local ok, result = pcall(native_grapple.write_branch_marks, "/usr", "cwd")
+        local ok, result = pcall(native_grapple._write_branch_marks, "/usr", "cwd")
 
         rawset(vim.fn, "mkdir", original_mkdir)
         rawset(vim, "notify", original_notify)
@@ -183,10 +183,10 @@ describe("modules.plugins.native_grapple", function()
         write_marks_file(root, branch, "main.txt", 1)
 
         with_cwd(root, function()
-            assert.True(native_grapple.load_branch_marks(root, branch))
+            assert.True(native_grapple._load_branch_marks(root, branch))
             assert.same({ "1:main.txt:1" }, get_bookmark_summaries())
 
-            assert.False(native_grapple.load_branch_marks(root, "feature"))
+            assert.False(native_grapple._load_branch_marks(root, "feature"))
         end)
 
         assert.same({}, get_bookmark_summaries())
@@ -200,7 +200,7 @@ describe("modules.plugins.native_grapple", function()
         write_marks_file(root, branch, "main.txt", 1)
 
         with_cwd(root, function()
-            assert.True(native_grapple.load_branch_marks(root, branch))
+            assert.True(native_grapple._load_branch_marks(root, branch))
         end)
 
         local _, buffer = native_grapple.iter_bookmarks()()
@@ -220,7 +220,7 @@ describe("modules.plugins.native_grapple", function()
         write_marks_file(root, branch, "main.txt", 1)
 
         with_cwd(root, function()
-            assert.True(native_grapple.load_branch_marks(root, branch))
+            assert.True(native_grapple._load_branch_marks(root, branch))
         end)
 
         local code = table.concat(native_grapple.serialize_mark_code(root), "\n")
@@ -235,7 +235,7 @@ describe("modules.plugins.native_grapple", function()
         write_marks_file(root, branch, "main.txt", 999)
 
         with_cwd(root, function()
-            assert.True(native_grapple.load_branch_marks(root, branch))
+            assert.True(native_grapple._load_branch_marks(root, branch))
             core_helpers.with_file_messages_suppressed(function()
                 native_grapple.mark_current_buffer_as_bookmark("A")
             end)
@@ -255,10 +255,10 @@ describe("modules.plugins.native_grapple", function()
         write_marks_file(root, "feature", "feature.txt", 1)
 
         with_cwd(root, function()
-            native_grapple.load_branch_marks(root, branch)
+            native_grapple._load_branch_marks(root, branch)
             assert.same({ "1:main.txt:1", "2:feature.txt:1" }, get_bookmark_summaries())
 
-            native_grapple.load_branch_marks(root, "feature")
+            native_grapple._load_branch_marks(root, "feature")
         end)
 
         assert.same({ "1:feature.txt:1" }, get_bookmark_summaries())
@@ -271,7 +271,7 @@ describe("modules.plugins.native_grapple", function()
         local marks_path = vim.fs.joinpath(
             root,
             core_helpers._SESSIONS_DIRECTORY_NAME,
-            native_grapple.NO_GIT_BRANCH_NAME,
+            native_grapple._NO_GIT_BRANCH_NAME,
             ".nvim.marks.lua"
         )
 
@@ -285,7 +285,7 @@ describe("modules.plugins.native_grapple", function()
             assert.equal(1, vim.fn.filereadable(marks_path))
             assert.same({ "1:notes.txt:1" }, get_bookmark_summaries())
 
-            native_grapple.delete_all_bookmarks()
+            native_grapple._delete_all_bookmarks()
             native_grapple.teardown()
             native_grapple.sync_branch()
         end)

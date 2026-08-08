@@ -1,5 +1,6 @@
 --- A lightweight winbar inspired by fgheng/winbar.nvim.
 
+local M = {}
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
 
@@ -986,4 +987,7 @@ vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "BufWinEnter", "TermOpen",
 
 _P.sync_all_window_winbars()
 
-return _P
+--- Expose the private namespace so the specs can reach it.
+M._P = _P
+
+return M

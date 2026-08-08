@@ -464,7 +464,7 @@ end
 --- Get all toggle-terminal modes that should be written to Session.vim.
 ---
 ---@return table<string, string> # Terminal buffer names to saved modes.
-function M.get_session_modes()
+function _P.get_session_modes()
     if vim.bo.buftype == "terminal" then
         _handle_term_leave(vim.fn.bufnr())
     end
@@ -487,7 +487,7 @@ end
 ---
 ---@param session string The session file to update.
 function M.append_session_state(session)
-    local modes = M.get_session_modes()
+    local modes = _P.get_session_modes()
 
     if next(modes) == nil then
         return

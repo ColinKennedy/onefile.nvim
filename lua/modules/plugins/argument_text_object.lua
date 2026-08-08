@@ -1,6 +1,7 @@
 --- Define text objects for function-call arguments inside parentheses.
 
 local M = {}
+local _P = {}
 
 ---@class _my.argument_text_object.Position
 ---@field line integer The 1-or-more line number.
@@ -310,7 +311,7 @@ end
 ---@param buffer integer The buffer to inspect.
 ---@param cursor _my.argument_text_object.Position The cursor position.
 ---@return _my.argument_text_object.Range? # The argument range, if found.
-function M.get_range(buffer, cursor)
+function M._get_range(buffer, cursor)
     local lines = _get_lines(buffer)
     local open = _find_open_paren(lines, cursor)
 
@@ -375,9 +376,9 @@ local function _replace_range(range)
 end
 
 --- Delete the argument under the cursor.
-function M.delete()
+function _P.delete()
     local cursor = vim.api.nvim_win_get_cursor(0)
-    local range = M.get_range(0, { line = cursor[1], column = cursor[2] })
+    local range = M._get_range(0, { line = cursor[1], column = cursor[2] })
 
     if range == nil then
         vim.notify("No argument text object found.", vim.log.levels.WARN)
@@ -388,9 +389,9 @@ function M.delete()
 end
 
 --- Select the argument under the cursor.
-function M.select()
+function _P.select()
     local cursor = vim.api.nvim_win_get_cursor(0)
-    local range = M.get_range(0, { line = cursor[1], column = cursor[2] })
+    local range = M._get_range(0, { line = cursor[1], column = cursor[2] })
 
     if range == nil then
         vim.notify("No argument text object found.", vim.log.levels.WARN)
@@ -405,11 +406,11 @@ function M.select()
     )
 end
 
-vim.keymap.set({ "o", "x" }, "aa", M.select, {
+vim.keymap.set({ "o", "x" }, "aa", _P.select, {
     desc = "Select around the argument under the cursor.",
 })
 
-vim.keymap.set("n", "daa", M.delete, {
+vim.keymap.set("n", "daa", _P.delete, {
     desc = "Delete around the argument under the cursor.",
 })
 

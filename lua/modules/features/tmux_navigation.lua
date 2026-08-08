@@ -1,5 +1,6 @@
 --- Move between Neovim windows and adjacent tmux panes with the same keys.
 
+local M = {}
 local _P = {}
 
 ---@alias _my.tmux.DirectionKey "h" | "j" | "k" | "l"
@@ -215,7 +216,7 @@ function _P.move(direction)
 end
 
 ---@param direction "h" | "j" | "k" | "l"
-function _P.resize(direction)
+function M._resize(direction)
     local core_helpers = require("modules.utilities.core_helpers")
     local details = _DIRECTIONS[direction]
 
@@ -261,7 +262,7 @@ end
 ---@param direction_name _my.tmux.DirectionName The adjacent tmux pane direction.
 ---@param text string The text to send. Literal `<CR>` is converted to Enter.
 ---@return string[] # The `tmux send-keys` command arguments.
-function _P.get_send_text_arguments(direction_name, text)
+function M._get_send_text_arguments(direction_name, text)
     local direction = _DIRECTION_BY_NAME[direction_name]
     local details = _DIRECTIONS[direction]
     ---@type string[]
@@ -283,13 +284,13 @@ function _P.send_text(direction_name, text)
         return
     end
 
-    vim.fn.system(_P.get_send_text_arguments(direction_name, text))
+    vim.fn.system(M._get_send_text_arguments(direction_name, text))
 end
 
 --- Parse and run a `:SendTmux` command.
 ---
 ---@param arguments string The raw command arguments.
-function _P.send_text_from_command(arguments)
+function M.send_text_from_command(arguments)
     local direction, text = _parse_send_tmux_arguments(arguments)
 
     if not direction or not text then
@@ -306,7 +307,7 @@ end
 ---@param argument_lead string The current argument fragment.
 ---@param command_line string The whole command line.
 ---@return string[] # Matching direction names.
-function _P.complete_send_text(argument_lead, command_line)
+function M.complete_send_text(argument_lead, command_line)
     local arguments = command_line:match("^%s*%S+%s*(.*)$") or ""
 
     if arguments:match("^%S+%s+") then
@@ -327,11 +328,11 @@ for direction, details in pairs(_DIRECTIONS) do
     })
 
     vim.keymap.set({ "n", "t" }, "<M-" .. direction .. ">", function()
-        _P.resize(direction)
+        M._resize(direction)
     end, {
         desc = string.format('Resize the "%s" split or tmux pane.', details.description),
         silent = true,
     })
 end
 
-return _P
+return M

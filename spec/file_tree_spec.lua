@@ -118,7 +118,7 @@ describe("file tree", function()
 
     after_each(function()
         core_helpers.IS_NERDFONT_ALLOWED = original_nerdfont_allowed
-        aerial.close_all()
+        aerial._close_all()
         close_file_tree_windows()
         vim.cmd.enew({ bang = true })
     end)
@@ -177,14 +177,14 @@ describe("file tree", function()
         local root = make_repository()
         local source_window = vim.api.nvim_get_current_win()
 
-        file_tree.open(root)
+        file_tree._open(root)
 
         local tree_window = vim.api.nvim_get_current_win()
         vim.api.nvim_win_set_cursor(tree_window, { 1, 0 })
-        file_tree.expand()
+        file_tree._expand()
         vim.api.nvim_win_set_cursor(tree_window, { 2, 0 })
         core_helpers.with_file_messages_suppressed(function()
-            file_tree.open_entry()
+            file_tree._open_entry()
         end)
 
         assert.equal(source_window, vim.api.nvim_get_current_win())
@@ -200,13 +200,13 @@ describe("file tree", function()
         write_text(vim.fs.joinpath(root, "src", "package", "util.py"), "print('util')\n")
         run_git(root, { "add", "src/package/util.py" })
 
-        file_tree.open(root)
+        file_tree._open(root)
 
-        file_tree.expand_all()
+        file_tree._expand_all()
 
         assert.is_not_nil(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"):match("util%.py"))
 
-        file_tree.collapse_all()
+        file_tree._collapse_all()
 
         assert.is_nil(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"):match("main%.py"))
         assert.is_nil(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"):match("util%.py"))
@@ -216,7 +216,7 @@ describe("file tree", function()
     it("sets winfixbuf on the file tree window", function()
         local root = make_repository()
 
-        file_tree.open(root)
+        file_tree._open(root)
 
         assert.True(vim.wo[vim.api.nvim_get_current_win()].winfixbuf)
         vim.fn.delete(root, "rf")
@@ -226,20 +226,20 @@ describe("file tree", function()
         local root = make_repository()
         local first_window = vim.api.nvim_get_current_win()
 
-        file_tree.open(root)
+        file_tree._open(root)
         vim.api.nvim_set_current_win(first_window)
         vim.cmd.vsplit()
 
         local second_window = vim.api.nvim_get_current_win()
 
-        file_tree.toggle()
+        file_tree._toggle()
 
         local tree_window = vim.api.nvim_get_current_win()
         vim.api.nvim_win_set_cursor(tree_window, { 1, 0 })
-        file_tree.expand()
+        file_tree._expand()
         vim.api.nvim_win_set_cursor(tree_window, { 2, 0 })
         core_helpers.with_file_messages_suppressed(function()
-            file_tree.open_entry()
+            file_tree._open_entry()
         end)
 
         assert.equal(second_window, vim.api.nvim_get_current_win())
@@ -253,7 +253,7 @@ describe("file tree", function()
     it("registers buffer-local navigation and show-all mappings", function()
         local root = make_repository()
 
-        file_tree.open(root)
+        file_tree._open(root)
 
         for _, key in ipairs({ "h", "l", "H", "L", "<CR>", "<leader>sa" }) do
             local mapping = vim.fn.maparg(key, "n", false, true)
@@ -267,7 +267,7 @@ describe("file tree", function()
     it("toggles showing ignored files from the tree buffer", function()
         local root = make_repository()
 
-        file_tree.open(root)
+        file_tree._open(root)
 
         assert.is_nil(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"):match("ignored%.log"))
 
@@ -288,7 +288,7 @@ describe("file tree", function()
     it("refreshes when a visible root file is deleted externally", function()
         local root = make_repository()
 
-        file_tree.open(root)
+        file_tree._open(root)
 
         local buffer = vim.api.nvim_get_current_buf()
 
@@ -308,11 +308,11 @@ describe("file tree", function()
 
         write_text(nested_file, "print('util')\n")
         run_git(root, { "add", "src/package/util.py" })
-        file_tree.open(root)
+        file_tree._open(root)
 
         local buffer = vim.api.nvim_get_current_buf()
 
-        file_tree.expand_all()
+        file_tree._expand_all()
 
         assert.is_not_nil(buffer_text(buffer):match("util%.py"))
         assert.equal(0, vim.fn.delete(nested_file))
@@ -332,19 +332,19 @@ describe("file tree", function()
             vim.cmd.edit(vim.fn.fnameescape(source_name))
         end)
 
-        file_tree.open(root)
-        file_tree.expand()
-        file_tree.toggle_show_all()
+        file_tree._open(root)
+        file_tree._expand()
+        file_tree._toggle_show_all()
 
-        local entries = file_tree.get_session_entries()
+        local entries = file_tree._get_session_entries()
 
         assert.equal(1, #entries)
         assert.equal(vim.fs.normalize(root), entries[1].root)
         assert.equal(vim.fs.normalize(source_name), vim.fs.normalize(entries[1].source_name))
         assert.True(entries[1].show_all)
         assert.True(vim.tbl_contains(entries[1].expanded, vim.fs.normalize(vim.fs.joinpath(root, "src"))))
-        assert.is_not_nil(file_tree.serialize_session_restore():match("modules%.plugins%.file_tree"))
-        assert.equal("", file_tree.serialize_session_restore(root .. "-other"))
+        assert.is_not_nil(file_tree._serialize_session_restore():match("modules%.plugins%.file_tree"))
+        assert.equal("", file_tree._serialize_session_restore(root .. "-other"))
         vim.fn.delete(root, "rf")
     end)
 
@@ -407,9 +407,9 @@ describe("file tree", function()
                 show_all = false,
                 source_window = get_stale_file_tree_window(),
             },
-        }, file_tree.get_stale_session_entries())
+        }, file_tree._get_stale_session_entries())
 
-        file_tree.restore_stale_session_windows()
+        file_tree._restore_stale_session_windows()
 
         local tree_window = assert(get_file_tree_window())
         local tree_buffer = vim.api.nvim_win_get_buf(tree_window)
@@ -463,7 +463,7 @@ describe("file tree", function()
 
         local ok, error_ = pcall(function()
             vim.cmd.tcd(vim.fn.fnameescape(root))
-            file_tree.open(root)
+            file_tree._open(root)
 
             vim.cmd("mksession! " .. vim.fn.fnameescape(session))
 
@@ -516,15 +516,15 @@ describe("file tree", function()
             vim.cmd.tcd(vim.fn.fnameescape(root))
 
             for _, source_path in ipairs(source_paths) do
-                aerial.close_all()
+                aerial._close_all()
                 close_file_tree_windows()
                 vim.cmd("silent! only")
                 vim.cmd("silent edit " .. vim.fn.fnameescape(source_path))
                 local source_window = vim.api.nvim_get_current_win()
 
-                aerial.open_for_window(source_window, false)
+                aerial._open_for_window(source_window, false)
                 vim.api.nvim_set_current_win(source_window)
-                file_tree.open(root)
+                file_tree._open(root)
                 vim.api.nvim_set_current_win(source_window)
 
                 assert.equal(3, #vim.api.nvim_list_wins())
@@ -539,7 +539,7 @@ describe("file tree", function()
                 assert.is_not_nil(table.concat(vim.fn.readfile(aerial_sidecar), "\n"):find(source_path, 1, true))
                 assert.is_not_nil(table.concat(vim.fn.readfile(tree_sidecar), "\n"):find(source_path, 1, true))
 
-                aerial.close_all()
+                aerial._close_all()
                 close_file_tree_windows()
                 vim.cmd("silent! only")
                 vim.cmd("silent source " .. vim.fn.fnameescape(session))
@@ -557,7 +557,7 @@ describe("file tree", function()
         end)
 
         vim.cmd.tcd(vim.fn.fnameescape(original_cwd))
-        aerial.close_all()
+        aerial._close_all()
         close_file_tree_windows()
         vim.fn.delete(root, "rf")
 
@@ -588,7 +588,7 @@ describe("file tree", function()
             vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "src", "main.py")))
             local source_window = vim.api.nvim_get_current_win()
 
-            file_tree.open(root)
+            file_tree._open(root)
             assert(get_file_tree_window())
 
             vim.api.nvim_set_current_win(source_window)
@@ -619,7 +619,7 @@ describe("file tree", function()
         vim.notify = original_notify
         vim.cmd([[let v:this_session = ""]])
         vim.cmd.tcd(vim.fn.fnameescape(original_cwd))
-        aerial.close_all()
+        aerial._close_all()
         close_file_tree_windows()
         vim.fn.delete(root, "rf")
 

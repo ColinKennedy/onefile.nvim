@@ -1,6 +1,7 @@
 --- Define text objects for underscore and camelCase sub-variable segments.
 
 local M = {}
+local _P = {}
 
 ---@alias _my.subvariable.Kind "inner" | "around"
 
@@ -177,7 +178,7 @@ end
 ---@param cursor_column integer The 0-or-more cursor column.
 ---@param kind _my.subvariable.Kind The text-object variant.
 ---@return _my.subvariable.Range # The absolute range.
-function M.get_range(line, cursor_column, kind)
+function M._get_range(line, cursor_column, kind)
     local token_start, _, token = _get_token(line, cursor_column)
     local token_column = cursor_column - token_start
     local has_underscore = token:find("_", 1, true) ~= nil
@@ -202,10 +203,10 @@ end
 --- Select the sub-variable text object under the cursor.
 ---
 ---@param kind _my.subvariable.Kind The text-object variant.
-function M.select(kind)
+function _P.select(kind)
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line = vim.api.nvim_get_current_line()
-    local range = M.get_range(line, cursor[2], kind)
+    local range = M._get_range(line, cursor[2], kind)
 
     require("modules.features.core_editor_setup").set_text_object_marks(
         cursor[1],
@@ -218,10 +219,10 @@ end
 --- Delete the sub-variable under the cursor.
 ---
 ---@param kind _my.subvariable.Kind The text-object variant.
-function M.delete(kind)
+function _P.delete(kind)
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line = vim.api.nvim_get_current_line()
-    local range = M.get_range(line, cursor[2], kind)
+    local range = M._get_range(line, cursor[2], kind)
     local replacement = range.replacement or ""
     local updated = line:sub(1, range.start_column) .. replacement .. line:sub(range.end_column + 2)
 
@@ -233,14 +234,14 @@ end
 ---
 ---@param _ string The ignored operator type.
 function M.operatorfunc(_)
-    M.delete(_OPERATOR_KIND)
+    _P.delete(_OPERATOR_KIND)
 end
 
 --- Start a sub-variable delete operator.
 ---
 ---@param kind _my.subvariable.Kind The text-object variant.
 ---@return string # The operator-pending key sequence.
-function M.start_delete(kind)
+function _P.start_delete(kind)
     _OPERATOR_KIND = kind
     vim.go.operatorfunc = "v:lua.require'modules.plugins.subvariable_text_object'.operatorfunc"
 
@@ -248,19 +249,19 @@ function M.start_delete(kind)
 end
 
 vim.keymap.set({ "o", "x" }, "iv", function()
-    M.select("inner")
+    _P.select("inner")
 end, { desc = "Select the inner sub-variable under the cursor." })
 
 vim.keymap.set({ "o", "x" }, "av", function()
-    M.select("around")
+    _P.select("around")
 end, { desc = "Select around the sub-variable under the cursor." })
 
 vim.keymap.set("n", "div", function()
-    return M.start_delete("inner")
+    return _P.start_delete("inner")
 end, { expr = true, desc = "Delete the inner sub-variable under the cursor." })
 
 vim.keymap.set("n", "dav", function()
-    return M.start_delete("around")
+    return _P.start_delete("around")
 end, { expr = true, desc = "Delete around the sub-variable under the cursor." })
 
 return M

@@ -56,7 +56,7 @@ end
 local function wait_for_statusline(root, text)
     local statusline = ""
 
-    git_status.refresh(root)
+    git_status._refresh(root)
 
     local found = vim.wait(1000, function()
         statusline = git_status.get_statusline(root)

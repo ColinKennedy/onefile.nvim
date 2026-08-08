@@ -539,7 +539,7 @@ end
 --- Run a parsed dispatch command.
 ---
 ---@param options _my.dispatch.Options The parsed options.
-function M.run(options)
+function M._run(options)
     ---@type string[]
     local output = {}
     ---@type _my.dispatch.Display?
@@ -665,30 +665,30 @@ function _P.dispatch(command_options, defaults)
         return
     end
 
-    M.run(options)
+    M._run(options)
 end
 
 --- Run :Dispatch from command-line options.
 ---
 ---@param command_options vim.api.keyset.create_user_command.command_args The command arguments.
-function M.dispatch(command_options)
+function M._dispatch(command_options)
     _P.dispatch(command_options, _QUIET_DEFAULTS)
 end
 
 --- Run :DispatchOutput from command-line options.
 ---
 ---@param command_options vim.api.keyset.create_user_command.command_args The command arguments.
-function M.dispatch_output(command_options)
+function M._dispatch_output(command_options)
     _P.dispatch(command_options, _OUTPUT_DEFAULTS)
 end
 
-vim.api.nvim_create_user_command("Dispatch", M.dispatch, {
+vim.api.nvim_create_user_command("Dispatch", M._dispatch, {
     desc = "Run a command quietly and load its output into quickfix.",
     nargs = "+",
     complete = _P.complete,
 })
 
-vim.api.nvim_create_user_command("DispatchOutput", M.dispatch_output, {
+vim.api.nvim_create_user_command("DispatchOutput", M._dispatch_output, {
     desc = "Run a command, mirror its output live, and load it into quickfix.",
     nargs = "+",
     complete = _P.complete,

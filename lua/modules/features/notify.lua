@@ -79,5 +79,3 @@ vim.api.nvim_create_user_command("OpenLogPath", function()
     print(string.format('Opening "%s" log file.', _P.TEMPORARY_LOG_PATH))
     vim.cmd.edit({ args = { _P.TEMPORARY_LOG_PATH }, mods = { silent = true } })
 end, { nargs = "?", desc = "View/Edit the vim.notify(...) master log file." })
-
-return _P

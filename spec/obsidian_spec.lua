@@ -1,4 +1,4 @@
-local obsidian = require("modules.plugins.obsidian")
+local obsidian = require("modules.plugins.obsidian")._P
 
 --- Write exact lines to `path`.
 ---

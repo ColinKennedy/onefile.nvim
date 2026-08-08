@@ -3,10 +3,10 @@
 local M = {}
 local _P = {}
 
-M.BOOKMARK_MINIMUM = 1
-M.BOOKMARK_MAXIMUM = 9
-M.MARKS_FILE_NAME = ".nvim.marks.lua"
-M.NO_GIT_BRANCH_NAME = "cwd"
+_P.BOOKMARK_MINIMUM = 1
+_P.BOOKMARK_MAXIMUM = 9
+_P.MARKS_FILE_NAME = ".nvim.marks.lua"
+M._NO_GIT_BRANCH_NAME = "cwd"
 
 ---@class _my.native_grapple.Context
 ---@field cwd string The directory that Neovim's current working directory resolved to.
@@ -101,7 +101,7 @@ function _P.resolve_context(reference_path)
 
     if result.code ~= 0 then
         return {
-            branch = M.NO_GIT_BRANCH_NAME,
+            branch = M._NO_GIT_BRANCH_NAME,
             cwd = cwd,
             root = cwd,
         }
@@ -117,7 +117,7 @@ function _P.resolve_context(reference_path)
     end
 
     if not branch or branch == "" or branch == "HEAD" then
-        branch = M.NO_GIT_BRANCH_NAME
+        branch = M._NO_GIT_BRANCH_NAME
     end
 
     ---@type _my.native_grapple.Context
@@ -138,7 +138,7 @@ end
 function _P.get_marks_path(root, branch)
     local core_helpers = require("modules.utilities.core_helpers")
 
-    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, M.MARKS_FILE_NAME)
+    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, _P.MARKS_FILE_NAME)
 end
 
 --- Close one watched Git HEAD file.
@@ -223,13 +223,13 @@ end
 ---    The Vim buffer number of the bookmarked file.
 ---    The full path to the Vim buffer.
 function M.iter_bookmarks()
-    local index = M.BOOKMARK_MINIMUM - 1
+    local index = _P.BOOKMARK_MINIMUM - 1
 
     return function()
         while true do
             index = index + 1
 
-            if index > M.BOOKMARK_MAXIMUM then
+            if index > _P.BOOKMARK_MAXIMUM then
                 return nil
             end
 
@@ -244,8 +244,8 @@ function M.iter_bookmarks()
 end
 
 --- Delete every native grapple bookmark mark.
-function M.delete_all_bookmarks()
-    for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
+function M._delete_all_bookmarks()
+    for index = _P.BOOKMARK_MINIMUM, _P.BOOKMARK_MAXIMUM do
         _P.delete_bookmark(index)
     end
 end
@@ -267,7 +267,7 @@ end
 ---@param buffer integer | string A buffer number or path.
 ---@param line integer?
 ---@param column integer?
-function M.reset_bookmark(mark, buffer, line, column)
+function _P.reset_bookmark(mark, buffer, line, column)
     local buffer_number
 
     if type(buffer) == "number" then
@@ -283,10 +283,10 @@ function M.reset_bookmark(mark, buffer, line, column)
 end
 
 --- Mark the current buffer as the next available bookmark.
-function M.mark_current_buffer_as_next_bookmark()
+function _P.mark_current_buffer_as_next_bookmark()
     local maximum
 
-    for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
+    for index = _P.BOOKMARK_MINIMUM, _P.BOOKMARK_MAXIMUM do
         if _P.is_mark_defined(M.get_mark_from_index(index)) then
             maximum = index
         end
@@ -295,7 +295,7 @@ function M.mark_current_buffer_as_next_bookmark()
     local next_index = 1
 
     if maximum then
-        next_index = (maximum % M.BOOKMARK_MAXIMUM) + 1
+        next_index = (maximum % _P.BOOKMARK_MAXIMUM) + 1
     end
 
     M.mark_current_buffer_as_bookmark(M.get_mark_from_index(next_index))
@@ -323,18 +323,18 @@ function M.go_to_relative_bookmark(offset)
     for index, bookmark in ipairs(bookmarks) do
         if bookmark.buffer == current_buffer then
             local new_index = ((index - 1 + offset) % #bookmarks) + 1
-            M.open_bookmark(bookmarks[new_index])
+            _P.open_bookmark(bookmarks[new_index])
 
             return
         end
     end
 
     local fallback_index = (offset % #bookmarks) + 1
-    M.open_bookmark(bookmarks[fallback_index])
+    _P.open_bookmark(bookmarks[fallback_index])
 end
 
 ---@param bookmark _my.native_grapple.Bookmark The bookmark to open.
-function M.open_bookmark(bookmark)
+function _P.open_bookmark(bookmark)
     if bookmark.buffer ~= 0 and vim.api.nvim_buf_is_valid(bookmark.buffer) then
         vim.cmd.buffer(bookmark.buffer)
     else
@@ -369,7 +369,7 @@ function M.mark_current_buffer_as_bookmark(mark)
     end
 
     local position = vim.api.nvim_get_mark(mark, {})
-    M.open_bookmark({ buffer = position[3], path = position[4], line = position[1], column = position[2] })
+    _P.open_bookmark({ buffer = position[3], path = position[4], line = position[1], column = position[2] })
 end
 
 --- Load current bookmarks into the quickfix list.
@@ -424,13 +424,13 @@ function M.toggle_current_buffer()
         table.insert(bookmarks, { index = current_buffer })
     end
 
-    M.delete_all_bookmarks()
+    M._delete_all_bookmarks()
 
     for new_index, bookmark in ipairs(bookmarks) do
         local value = bookmark.index or bookmark.path
 
         if value then
-            M.reset_bookmark(M.get_mark_from_index(new_index), value)
+            _P.reset_bookmark(M.get_mark_from_index(new_index), value)
         end
     end
 
@@ -484,7 +484,7 @@ end
 ---@param root string?
 ---@param branch string?
 ---@return boolean # Whether the marks were written.
-function M.write_branch_marks(root, branch)
+function M._write_branch_marks(root, branch)
     if not root or not branch then
         return false
     end
@@ -517,7 +517,7 @@ end
 --- Write marks for the currently loaded root and branch.
 ---@return boolean # Whether the marks were written.
 function M.write_current_branch_marks()
-    return M.write_branch_marks(_STATE.root, _STATE.branch)
+    return M._write_branch_marks(_STATE.root, _STATE.branch)
 end
 
 --- Set a Vim mark, falling back to the file top when a saved line is stale.
@@ -590,10 +590,10 @@ end
 ---@param root string The storage root that relative saved paths should resolve from.
 ---@param branch string The Git branch, or the non-Git fallback namespace.
 ---@return boolean # If a marks file was loaded, return true.
-function M.load_branch_marks(root, branch)
+function M._load_branch_marks(root, branch)
     local path = _P.get_marks_path(root, branch)
 
-    M.delete_all_bookmarks()
+    M._delete_all_bookmarks()
 
     if vim.fn.filereadable(path) ~= 1 then
         return false
@@ -645,7 +645,7 @@ function M.sync_branch(reference_path, options)
     end
 
     M.write_current_branch_marks()
-    M.delete_all_bookmarks()
+    M._delete_all_bookmarks()
 
     _STATE.cwd = context.cwd
     _STATE.root = context.root
@@ -653,7 +653,7 @@ function M.sync_branch(reference_path, options)
     _STATE.git_dir = context.git_dir
     _STATE.head_path = context.head_path
 
-    M.load_branch_marks(context.root, context.branch)
+    M._load_branch_marks(context.root, context.branch)
     _P.watch_head(context)
 end
 
@@ -663,7 +663,7 @@ function M.get_current_root()
 end
 
 ---@return string? # The current branch or non-Git namespace.
-function M.get_current_branch()
+function _P.get_current_branch()
     return _STATE.branch
 end
 

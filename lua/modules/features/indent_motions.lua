@@ -1,5 +1,6 @@
 --- Define motions for jumping between lines by relative indentation.
 
+local M = {}
 local _P = {}
 
 ---@alias _my.indent_motion.Direction "previous" | "next"
@@ -171,4 +172,7 @@ vim.keymap.set("n", "]]", function()
     _P.move_to_indent_change("next")
 end, { desc = "Move to the next line with changed indentation." })
 
-return _P
+--- Expose the private namespace so the specs can reach it.
+M._P = _P
+
+return M

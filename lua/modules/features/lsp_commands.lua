@@ -1,6 +1,7 @@
 --- Register commands for inspecting LSP clients and capabilities.
 
 local M = {}
+local _P = {}
 
 ---@type table<string, boolean>
 local _IGNORED_CLIENTS = {
@@ -20,7 +21,7 @@ end
 ---
 ---@param buffer integer The buffer to inspect.
 ---@return vim.lsp.Client[] # Attached LSP clients, excluding hidden/meta clients.
-function M.get_reportable_clients(buffer)
+function _P.get_reportable_clients(buffer)
     local clients = vim.lsp.get_clients({ bufnr = buffer })
     ---@type vim.lsp.Client[]
     local output = {}
@@ -37,8 +38,8 @@ end
 --- Get a summary of LSP clients attached to the current buffer.
 ---
 ---@return string # A display summary of attached LSP client names.
-function M.get_attached_clients()
-    local clients = M.get_reportable_clients(0)
+function M._get_attached_clients()
+    local clients = _P.get_reportable_clients(0)
 
     if #clients == 0 then
         return "LSP Inactive"
@@ -57,15 +58,15 @@ function M.get_attached_clients()
 end
 
 --- Notify the user of the current buffer's LSP clients.
-function M.show_attached_clients()
-    vim.notify(M.get_attached_clients(), vim.log.levels.INFO)
+function _P.show_attached_clients()
+    vim.notify(M._get_attached_clients(), vim.log.levels.INFO)
 end
 
 --- Get a sorted list of capability names supported by `client`.
 ---
 ---@param client vim.lsp.Client The LSP client to inspect.
 ---@return string[] # Capability names without the trailing "Provider" suffix.
-function M.get_client_capabilities(client)
+function _P.get_client_capabilities(client)
     ---@type string[]
     local capabilities = {}
 
@@ -85,13 +86,13 @@ end
 --- Build Markdown messages describing all current-buffer LSP capabilities.
 ---
 ---@return string[] # One Markdown message per reportable client.
-function M.get_capabilities_messages()
-    local clients = M.get_reportable_clients(vim.api.nvim_get_current_buf())
+function M._get_capabilities_messages()
+    local clients = _P.get_reportable_clients(vim.api.nvim_get_current_buf())
     ---@type string[]
     local messages = {}
 
     for _, client in ipairs(clients) do
-        local capabilities = M.get_client_capabilities(client)
+        local capabilities = _P.get_client_capabilities(client)
         ---@type string[]
         local lines = { "# " .. client.name }
 
@@ -106,8 +107,8 @@ function M.get_capabilities_messages()
 end
 
 --- Notify the user of the current buffer's LSP server capabilities.
-function M.show_capabilities()
-    local clients = M.get_reportable_clients(vim.api.nvim_get_current_buf())
+function _P.show_capabilities()
+    local clients = _P.get_reportable_clients(vim.api.nvim_get_current_buf())
 
     if #clients == 0 then
         vim.notify("LSP Inactive", vim.log.levels.INFO)
@@ -116,7 +117,7 @@ function M.show_capabilities()
     end
 
     for _, client in ipairs(clients) do
-        local capabilities = M.get_client_capabilities(client)
+        local capabilities = _P.get_client_capabilities(client)
         ---@type string[]
         local lines = { "# " .. client.name }
 
@@ -140,11 +141,11 @@ function M.show_capabilities()
     end
 end
 
-vim.api.nvim_create_user_command("LspClients", M.show_attached_clients, {
+vim.api.nvim_create_user_command("LspClients", _P.show_attached_clients, {
     desc = "Show LSP clients attached to the current buffer.",
 })
 
-vim.api.nvim_create_user_command("LspCapabilities", M.show_capabilities, {
+vim.api.nvim_create_user_command("LspCapabilities", _P.show_capabilities, {
     desc = "Show capabilities for LSP clients attached to the current buffer.",
 })
 

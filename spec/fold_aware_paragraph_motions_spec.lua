@@ -1,4 +1,4 @@
-local fold_aware_paragraph_motions = require("modules.features.fold_aware_paragraph_motions")
+local fold_aware_paragraph_motions = require("modules.features.fold_aware_paragraph_motions")._P
 
 --- Create a scratch buffer + window for fold-aware paragraph motion tests.
 ---

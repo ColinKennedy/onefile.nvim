@@ -29,6 +29,11 @@ end
 
 --- Create a temporary Git repository for integration tests.
 ---
+--- CAVEAT: `git init` inherits the developer's global configuration, and the
+--- diff parser hard-codes the default `a/`/`b/` header prefixes. A machine with
+--- `diff.noprefix` or `diff.mnemonicPrefix` set globally therefore fails these
+--- tests for reasons unrelated to the code under test.
+---
 ---@return string # The temporary repository root.
 local function make_repo()
     local root = vim.fn.tempname()
@@ -138,6 +143,43 @@ end
 local function press_normal_keys(keys)
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "x", false)
     vim.wait(400)
+end
+
+--- Get the resolved absolute path for a quickfix entry.
+---
+--- Quickfix entries store a buffer number, and Vim may display that buffer's
+--- name relative to the current directory. Tests compare absolute paths so that
+--- the current directory cannot change the result.
+---
+---@param entry table The quickfix entry to inspect.
+---@return string # The absolute file path for `entry`.
+local function get_quickfix_path(entry)
+    return vim.fn.fnamemodify(vim.fn.bufname(entry.bufnr), ":p")
+end
+
+--- Run `:LoadGitDiff` from `directory` and wait for the quickfix list.
+---
+--- The current buffer is emptied first so that the repository is resolved from
+--- the current directory instead of a buffer path.
+---
+---@param root string The repository root, used to wait for the loaded state.
+---@param directory string The directory to run `:LoadGitDiff` from.
+---@return table[] # The resulting quickfix entries.
+local function load_quickfix_from(root, directory)
+    ---@type table[]
+    local items = {}
+
+    with_cwd(directory, function()
+        vim.cmd("silent enew!")
+        vim.cmd("LoadGitDiff")
+        vim.wait(1000, function()
+            return git_hunk_navigation.get_repository_state(root) ~= nil and has_quickfix_window()
+        end)
+
+        items = vim.fn.getqflist()
+    end)
+
+    return items
 end
 
 --- Load repository hunks and wait for async completion.
@@ -424,6 +466,113 @@ index 2222222..3333333 100644
                     local repository_state = assert(git_hunk_navigation.get_repository_state(root))
                     assert.equal(#repository_state.entries, #vim.fn.getqflist())
                     assert.equal("file.txt", repository_state.entries[1].relative_path)
+                end)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("resolves quickfix paths from the repository root when the current directory is a subfolder", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "docs/beta.txt", "a\nb\nc\nd\n")
+            commit_file(root, "src/deep/nested/alpha.txt", "one\ntwo\nthree\n")
+            write_text(vim.fs.joinpath(root, "docs/beta.txt"), "a\nb\nC\nd\n")
+            write_text(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), "one\nTWO\nthree\n")
+
+            local ok, err = pcall(function()
+                local items = load_quickfix_from(root, vim.fs.joinpath(root, "src/deep"))
+
+                assert.equal(2, #items)
+
+                -- NOTE: Git reports diff paths relative to the repository root,
+                -- never relative to the current directory. The quickfix entries
+                -- must point at the real files even though `src/deep` is neither
+                -- the repository root nor a parent of `docs/beta.txt`.
+                assert.equal(
+                    vim.fn.fnamemodify(vim.fs.joinpath(root, "docs/beta.txt"), ":p"),
+                    get_quickfix_path(items[1])
+                )
+                assert.equal(3, items[1].lnum)
+                assert.equal(
+                    vim.fn.fnamemodify(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), ":p"),
+                    get_quickfix_path(items[2])
+                )
+                assert.equal(2, items[2].lnum)
+
+                -- NOTE: The display text stays repository-relative so that hunk
+                -- labels do not change when the current directory changes.
+                assert.equal("docs/beta.txt:3", items[1].text)
+                assert.equal("src/deep/nested/alpha.txt:2", items[2].text)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("builds the same quickfix entries from the repository root and from a subfolder", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "top.txt", "one\ntwo\n")
+            commit_file(root, "src/deep/nested/alpha.txt", "one\ntwo\nthree\n")
+            write_text(vim.fs.joinpath(root, "top.txt"), "one\nTWO\n")
+            write_text(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), "one\nTWO\nthree\n")
+
+            local ok, err = pcall(function()
+                local from_root = load_quickfix_from(root, root)
+                local from_subfolder = load_quickfix_from(root, vim.fs.joinpath(root, "src/deep/nested"))
+
+                assert.equal(2, #from_root)
+                assert.equal(#from_root, #from_subfolder)
+
+                for index = 1, #from_root do
+                    assert.equal(get_quickfix_path(from_root[index]), get_quickfix_path(from_subfolder[index]))
+                    assert.equal(from_root[index].lnum, from_subfolder[index].lnum)
+                    assert.equal(from_root[index].text, from_subfolder[index].text)
+                end
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("jumps to the correct file and line from a subfolder quickfix entry", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "src/deep/nested/alpha.txt", "one\ntwo\nthree\nfour\nfive\n")
+            write_text(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), "one\ntwo\nthree\nFOUR\nfive\n")
+
+            local ok, err = pcall(function()
+                local subfolder = vim.fs.joinpath(root, "src/deep")
+                local items = load_quickfix_from(root, subfolder)
+
+                assert.equal(1, #items)
+
+                with_cwd(subfolder, function()
+                    vim.cmd("silent cfirst")
+
+                    assert.equal(
+                        vim.fn.fnamemodify(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), ":p"),
+                        vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p")
+                    )
+                    assert.equal(4, vim.api.nvim_win_get_cursor(0)[1])
+                    assert.equal("FOUR", vim.api.nvim_get_current_line())
                 end)
             end)
 

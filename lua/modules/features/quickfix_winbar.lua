@@ -9,7 +9,6 @@ local _P = {}
 --- The expression is re-evaluated on every redraw so the winbar always shows
 --- the current quickfix title, even when the title changes later.
 ---
----@type string
 M.WINBAR_EXPRESSION = " %{v:lua.require'modules.features.quickfix_winbar'.get_quickfix_winbar_title()}"
 
 --- Check if `window` displays a quickfix or location list buffer.
@@ -51,7 +50,7 @@ end
 --- Show the quickfix title in the winbar of `window`, if it is a quickfix window.
 ---
 ---@param window integer The window to modify.
-function _P.sync_quickfix_winbar(window)
+function M.sync_quickfix_winbar(window)
     if not M.is_quickfix_window(window) then
         return
     end
@@ -71,7 +70,7 @@ vim.api.nvim_create_autocmd({ "BufWinEnter", "FileType", "WinEnter" }, {
             return
         end
 
-        _P.sync_quickfix_winbar(window)
+        M.sync_quickfix_winbar(window)
     end,
 })
 

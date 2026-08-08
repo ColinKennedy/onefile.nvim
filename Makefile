@@ -33,7 +33,7 @@ check-stylua:
 	stylua init.lua lua spec --color always --check
 
 privata:
-	LUA_PATH="$(PRIVATA)/lua/?.lua;$(PRIVATA)/lua/?/init.lua;;" lua "$(PRIVATA)/bin/privata.lua" . $(ARGUMENTS)
+	privata . $(ARGUMENTS)
 
 stylua:
 	stylua init.lua lua spec

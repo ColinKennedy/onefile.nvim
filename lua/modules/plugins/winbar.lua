@@ -381,7 +381,7 @@ end
 ---@return string[]
 function _P.get_treesitter_scope_names(buffer)
     local filetype = vim.bo[buffer].filetype
-    local language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
+    local language = core_helpers.FILETYPE_TO_TREESITTER[filetype] or filetype
     local query = _P.get_treesitter_query(language)
 
     if not query or not core_helpers.has_treesitter_parser(language) then
@@ -460,7 +460,7 @@ end
 ---@return boolean # If a parser can be used, return `true`.
 function _P.has_treesitter_context(buffer)
     local filetype = vim.bo[buffer].filetype
-    local language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
+    local language = core_helpers.FILETYPE_TO_TREESITTER[filetype] or filetype
 
     if language == "" then
         return false

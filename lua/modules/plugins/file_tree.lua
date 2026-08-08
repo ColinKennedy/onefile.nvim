@@ -916,7 +916,7 @@ vim.api.nvim_create_autocmd("BufWipeout", {
 
 local core_editor_setup = require("modules.features.core_editor_setup")
 
-core_editor_setup._SESSION_MANAGER:register_session_write_pre_callback(".file_tree.lua", function()
+core_editor_setup.SESSION_MANAGER:register_session_write_pre_callback(".file_tree.lua", function()
     local root = require("modules.utilities.core_helpers").get_nearest_project_root(vim.fn.getcwd())
 
     if root == nil then

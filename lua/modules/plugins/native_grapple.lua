@@ -77,7 +77,7 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
     desc = "Save native grapple marks and close branch watchers.",
 })
 
-require("modules.features.core_editor_setup")._SESSION_MANAGER:register_session_write_pre_callback(
+require("modules.features.core_editor_setup").SESSION_MANAGER:register_session_write_pre_callback(
     ".nvim.marks.lua",
     function()
         local core = require("modules.plugins.native_grapple.core")

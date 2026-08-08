@@ -114,7 +114,7 @@ end
 ---@return boolean
 local function _is_git_available()
     if _IS_GIT_AVAILABLE == nil then
-        _IS_GIT_AVAILABLE = core_helpers.exists_command(core_helpers._GIT_EXECUTABLE)
+        _IS_GIT_AVAILABLE = core_helpers.exists_command(core_helpers.GIT_EXECUTABLE)
     end
 
     return _IS_GIT_AVAILABLE
@@ -210,7 +210,7 @@ end
 ---@param callback fun(details: _my.git_status.RepositoryDetails?): nil
 local function _get_repository_details(path, callback)
     vim.system(
-        { core_helpers._GIT_EXECUTABLE, "-C", path, "rev-parse", "--show-toplevel", "--absolute-git-dir" },
+        { core_helpers.GIT_EXECUTABLE, "-C", path, "rev-parse", "--show-toplevel", "--absolute-git-dir" },
         { text = true },
         function(process)
             if process.code ~= 0 then
@@ -421,7 +421,7 @@ local function _run_status(entry)
     end
 
     vim.system({
-        core_helpers._GIT_EXECUTABLE,
+        core_helpers.GIT_EXECUTABLE,
         "-C",
         entry.details.repository,
         "--no-optional-locks",
@@ -512,7 +512,7 @@ function _P.fetch()
     end
 
     vim.system(
-        { core_helpers._GIT_EXECUTABLE, "-C", entry.details.repository, "fetch" },
+        { core_helpers.GIT_EXECUTABLE, "-C", entry.details.repository, "fetch" },
         { text = true },
         function(process)
             if process.code == 0 then

@@ -116,9 +116,9 @@ end
 ---@param stdin string? Optional standard input.
 ---@param callback _my.git_diff.SystemCallback The callback that receives the command result.
 ---
-function _P.run_git(arguments, directory, stdin, callback)
+function M.run_git(arguments, directory, stdin, callback)
     ---@type string[]
-    local command = { core_helpers._GIT_EXECUTABLE }
+    local command = { core_helpers.GIT_EXECUTABLE }
     vim.list_extend(command, arguments)
 
     local success, message = pcall(function()
@@ -142,16 +142,6 @@ function _P.run_git(arguments, directory, stdin, callback)
             })
         end)
     end
-end
-
---- Run a git command asynchronously.
----
----@param arguments string[] Git arguments, without the leading executable.
----@param directory string The directory to run within.
----@param stdin string? Optional standard input.
----@param callback _my.git_diff.SystemCallback The callback that receives the command result.
-function M.run_git(arguments, directory, stdin, callback)
-    _P.run_git(arguments, directory, stdin, callback)
 end
 
 --- Get the first path from Git path-list output.
@@ -187,7 +177,7 @@ function M.get_file_details(buffer, callback)
         return
     end
 
-    _P.run_git({ "-C", directory, "rev-parse", "--show-toplevel" }, directory, nil, function(repository)
+    M.run_git({ "-C", directory, "rev-parse", "--show-toplevel" }, directory, nil, function(repository)
         if repository.code ~= 0 then
             callback(nil, "Current buffer is not inside a git repository.")
 
@@ -196,7 +186,7 @@ function M.get_file_details(buffer, callback)
 
         local repository_path = vim.trim(repository.stdout)
 
-        _P.run_git(
+        M.run_git(
             { "-C", repository_path, "ls-files", "--full-name", "--deduplicate", "--", absolute_path },
             repository_path,
             nil,
@@ -213,7 +203,7 @@ function M.get_file_details(buffer, callback)
                     return
                 end
 
-                _P.run_git(
+                M.run_git(
                     { "-C", repository_path, "rev-parse", "--show-prefix" },
                     repository_path,
                     nil,
@@ -237,7 +227,7 @@ end
 ---@param callback fun(lines: string[], missing: boolean): nil Callback with the HEAD lines.
 ---
 function _P.get_head_lines(details, callback)
-    _P.run_git(
+    M.run_git(
         { "-C", details.repository, "show", "HEAD:" .. details.relative_path },
         details.repository,
         nil,
@@ -259,7 +249,7 @@ end
 ---@param callback fun(lines: string[], missing: boolean): nil Callback with the index lines.
 ---
 function M.get_index_lines(details, callback)
-    _P.run_git(
+    M.run_git(
         { "-C", details.repository, "show", ":" .. details.relative_path },
         details.repository,
         nil,
@@ -540,7 +530,7 @@ end
 ---@param diff string The output from `git diff --unified=0`.
 ---@return _my.git_diff.SelectionHunk[] # The parsed hunks.
 ---
-function _P.parse_selection_diff(diff)
+function M.parse_selection_diff(diff)
     ---@type _my.git_diff.SelectionHunk[]
     local hunks = {}
     ---@type _my.git_diff.SelectionHunk?
@@ -572,14 +562,6 @@ function _P.parse_selection_diff(diff)
     return hunks
 end
 
---- Parse a zero-context unified diff into hunks.
----
----@param diff string The output from `git diff --unified=0`.
----@return _my.git_diff.SelectionHunk[] # The parsed hunks.
-function M.parse_selection_diff(diff)
-    return _P.parse_selection_diff(diff)
-end
-
 --- Build text containing only selected changes from `base_text` to `target_text`.
 ---
 ---@param base_text string The text to patch from.
@@ -596,7 +578,7 @@ function M.build_selection_target(base_text, target_text, diff, start_line, end_
 
     local base_lines, base_has_eol = _P.split_git_text(base_text)
     local _, target_has_eol = _P.split_git_text(target_text)
-    local hunks = _P.parse_selection_diff(diff)
+    local hunks = M.parse_selection_diff(diff)
 
     ---@type string[]
     local output = {}
@@ -779,7 +761,7 @@ local function _build_no_index_diff(base_text, target_text, context, callback)
 
     local success, start_error = pcall(function()
         vim.system({
-            core_helpers._GIT_EXECUTABLE,
+            core_helpers.GIT_EXECUTABLE,
             "diff",
             "--no-index",
             "--unified=" .. context,
@@ -861,7 +843,7 @@ end
 ---@param object string The object name to read.
 ---@param callback fun(text: string?, message: string?): nil Callback with blob text or an error.
 function M.get_blob_text(details, object, callback)
-    _P.run_git({ "-C", details.repository, "show", object }, details.repository, nil, function(result)
+    M.run_git({ "-C", details.repository, "show", object }, details.repository, nil, function(result)
         if result.code ~= 0 then
             callback(nil, result.stderr)
 
@@ -877,7 +859,7 @@ end
 ---@param details _my.git_diff.FileDetails The file details to use.
 ---@param callback fun(has_unmerged: boolean): nil Callback with whether unmerged entries exist.
 function M.has_unmerged_entries(details, callback)
-    _P.run_git(
+    M.run_git(
         {
             "-C",
             details.repository,
@@ -918,7 +900,7 @@ function M.apply_cached_patch(details, patch, callback)
         return
     end
 
-    _P.run_git(
+    M.run_git(
         { "-C", details.repository, "apply", "--cached", "--check", path },
         details.repository,
         nil,
@@ -931,22 +913,17 @@ function M.apply_cached_patch(details, patch, callback)
                 return
             end
 
-            _P.run_git(
-                { "-C", details.repository, "apply", "--cached", path },
-                details.repository,
-                nil,
-                function(result)
-                    pcall(vim.uv.fs_unlink, path)
+            M.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository, nil, function(result)
+                pcall(vim.uv.fs_unlink, path)
 
-                    if result.code ~= 0 then
-                        callback(false, vim.trim(result.stderr))
+                if result.code ~= 0 then
+                    callback(false, vim.trim(result.stderr))
 
-                        return
-                    end
-
-                    callback(true, nil)
+                    return
                 end
-            )
+
+                callback(true, nil)
+            end)
         end
     )
 end

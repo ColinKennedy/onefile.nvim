@@ -13,12 +13,12 @@ describe("git command", function()
 
     before_each(function()
         original_jobstart = vim.fn.jobstart
-        original_git_executable = get_core_helpers()._GIT_EXECUTABLE
+        original_git_executable = get_core_helpers().GIT_EXECUTABLE
     end)
 
     after_each(function()
         vim.fn.jobstart = original_jobstart
-        get_core_helpers()._GIT_EXECUTABLE = original_git_executable
+        get_core_helpers().GIT_EXECUTABLE = original_git_executable
         vim.cmd.stopinsert()
         vim.cmd("silent! only!")
         vim.cmd.enew({ bang = true })
@@ -35,7 +35,7 @@ describe("git command", function()
         ---@type table?
         local captured_options = nil
 
-        get_core_helpers()._GIT_EXECUTABLE = "C:\\Program Files\\Git\\cmd\\git.exe"
+        get_core_helpers().GIT_EXECUTABLE = "C:\\Program Files\\Git\\cmd\\git.exe"
         ---@diagnostic disable-next-line: duplicate-set-field
         vim.fn.jobstart = function(command, options)
             captured_command = command

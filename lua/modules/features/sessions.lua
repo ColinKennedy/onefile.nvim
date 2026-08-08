@@ -36,7 +36,7 @@ local _P = {}
 local function _get_git_branch(root)
     local core_helpers = require("modules.utilities.core_helpers")
     local result = vim.system({
-        core_helpers._GIT_EXECUTABLE,
+        core_helpers.GIT_EXECUTABLE,
         "-C",
         root,
         "rev-parse",
@@ -78,7 +78,7 @@ function _P.get_session_branch_path(reference_path)
         return nil
     end
 
-    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, core_helpers._VIM_SESSION_FILE_NAME)
+    return vim.fs.joinpath(root, core_helpers.SESSIONS_DIRECTORY_NAME, branch, core_helpers.VIM_SESSION_FILE_NAME)
 end
 
 --- Keep track of the current Vim Session.vim, if there is one.
@@ -149,7 +149,7 @@ vim.api.nvim_create_user_command("SessionWrite", function()
         return
     end
 
-    local session = vim.fs.joinpath(directory, require("modules.utilities.core_helpers")._VIM_SESSION_FILE_NAME)
+    local session = vim.fs.joinpath(directory, require("modules.utilities.core_helpers").VIM_SESSION_FILE_NAME)
     _P.save_session(session)
     vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
     vim.uv.fs_copyfile(session, path)

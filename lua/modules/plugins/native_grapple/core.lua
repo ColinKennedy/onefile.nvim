@@ -88,7 +88,7 @@ function _P.resolve_context(reference_path)
     local core_helpers = require("modules.utilities.core_helpers")
     ---@type string[]
     local command = {
-        core_helpers._GIT_EXECUTABLE,
+        core_helpers.GIT_EXECUTABLE,
         "-C",
         cwd,
         "rev-parse",
@@ -138,7 +138,7 @@ end
 function _P.get_marks_path(root, branch)
     local core_helpers = require("modules.utilities.core_helpers")
 
-    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, _P.MARKS_FILE_NAME)
+    return vim.fs.joinpath(root, core_helpers.SESSIONS_DIRECTORY_NAME, branch, _P.MARKS_FILE_NAME)
 end
 
 --- Close one watched Git HEAD file.
@@ -246,19 +246,21 @@ end
 --- Delete every native grapple bookmark mark.
 function M._delete_all_bookmarks()
     for index = _P.BOOKMARK_MINIMUM, _P.BOOKMARK_MAXIMUM do
-        _P.delete_bookmark(index)
+        _P.clear_bookmark_mark(index)
     end
 end
 
+--- Drop the Vim mark backing `index`, without touching the saved marks file.
+---
 ---@param index integer 1-to-9 bookmark logical index.
-function _P.delete_bookmark(index)
+function _P.clear_bookmark_mark(index)
     vim.cmd.delmarks(M.get_mark_from_index(index))
 end
 
 ---@param index integer 1-to-9 bookmark logical index.
 function M.delete_bookmark(index)
     M.sync_branch()
-    _P.delete_bookmark(index)
+    _P.clear_bookmark_mark(index)
     M.write_current_branch_marks()
     _P.redraw_statusline()
 end

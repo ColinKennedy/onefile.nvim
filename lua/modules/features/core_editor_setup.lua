@@ -261,7 +261,7 @@ function M.select_file_in_directory(root)
     root = root or vim.fn.getcwd()
     ---@type string[]
     local command = {
-        core_helpers._RIPGREP_EXECUTABLE,
+        core_helpers.RIPGREP_EXECUTABLE,
         "--files",
         "--hidden",
         "--no-messages",
@@ -1146,7 +1146,7 @@ function _P.show_bookmarks()
     ---@type vim.quickfix.entry[]
     local quickfix_entries = {}
 
-    for index = core_helpers._BOOKMARK_MINIMUM, core_helpers._BOOKMARK_MAXIMUM do
+    for index = core_helpers.BOOKMARK_MINIMUM, core_helpers.BOOKMARK_MAXIMUM do
         local mark = core_helpers.get_vim_mark_from_bookmark_index(index)
         local position = vim.api.nvim_get_mark(mark, {})
 
@@ -1177,7 +1177,7 @@ end
 ---@param stash string The stash reference to inspect.
 ---@return integer # The number of added and removed lines in the stash.
 function M._get_stash_changed_line_count(stash)
-    local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--numstat", stash }):wait()
+    local process = vim.system({ core_helpers.GIT_EXECUTABLE, "stash", "show", "--numstat", stash }):wait()
 
     if process.code ~= 0 then
         return 0
@@ -1201,7 +1201,7 @@ end
 ---@param stash string The stash reference to inspect.
 ---@param callback fun(count: integer): nil The callback that receives the changed line count.
 function M._get_stash_changed_line_count_async(stash, callback)
-    vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--numstat", stash }, {}, function(process)
+    vim.system({ core_helpers.GIT_EXECUTABLE, "stash", "show", "--numstat", stash }, {}, function(process)
         local count = 0
 
         if process.code == 0 then
@@ -1225,7 +1225,7 @@ end
 ---@param stash string The stash reference to inspect.
 ---@return string[] # The preview lines to draw.
 function M._get_stash_preview_lines(stash)
-    local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }):wait()
+    local process = vim.system({ core_helpers.GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }):wait()
 
     if process.code ~= 0 then
         return { process.stderr ~= "" and process.stderr or "Could not preview stash." }
@@ -1239,7 +1239,7 @@ end
 ---@param stash string The stash reference to inspect.
 ---@param callback fun(lines: string[]): nil The callback that receives preview lines.
 function M._get_stash_preview_lines_async(stash, callback)
-    vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }, {}, function(process)
+    vim.system({ core_helpers.GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }, {}, function(process)
         ---@type string[]
         local lines_
 
@@ -1289,7 +1289,7 @@ end
 --- Show all git stashes in the repository in a floating window, if any.
 function M.show_git_stashes()
     ---@type string[]
-    local command = { core_helpers._GIT_EXECUTABLE, "stash", "list" }
+    local command = { core_helpers.GIT_EXECUTABLE, "stash", "list" }
 
     if not core_helpers.exists_command(command[1]) then
         vim.notify("Cannot create state. No `git` command was found.", vim.log.levels.ERROR)
@@ -1414,7 +1414,7 @@ function M.show_git_stashes()
         },
         confirm = function(entry)
             local stash = entry.value.index
-            local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "apply", stash }):wait()
+            local process = vim.system({ core_helpers.GIT_EXECUTABLE, "stash", "apply", stash }):wait()
 
             if process.code == 0 then
                 return
@@ -1458,7 +1458,7 @@ function M.show_snippet_completion()
     ---@param data _my.completion.Data
     ---
     local function _expand_snippet(data)
-        local snippet = core_helpers._TRIGGER_TO_SNIPPET_CACHE[data.completed.word]
+        local snippet = core_helpers.TRIGGER_TO_SNIPPET_CACHE[data.completed.word]
 
         if not snippet then
             return
@@ -1512,7 +1512,7 @@ function M.show_snippet_completion()
     vim.fn.complete(start_column, matches)
 
     vim.api.nvim_create_autocmd("CompleteDone", {
-        group = core_helpers._SNIPPET_AUGROUP,
+        group = core_helpers.SNIPPET_AUGROUP,
         callback = function()
             _handle_complete_done(start_column - 1, _expand_snippet)
         end,
@@ -1603,7 +1603,7 @@ end
 ---@return string? # The active Git branch, if one can be found.
 local function _get_git_branch(root)
     local result = vim.system({
-        core_helpers._GIT_EXECUTABLE,
+        core_helpers.GIT_EXECUTABLE,
         "-C",
         root,
         "rev-parse",
@@ -1637,7 +1637,7 @@ function _P.get_branch_path(name, root)
         error(string.format('Cannot save "%s" project. No branch was found.', root))
     end
 
-    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, name)
+    return vim.fs.joinpath(root, core_helpers.SESSIONS_DIRECTORY_NAME, branch, name)
 end
 
 --- Find the currently-active VCS branch name from `root`
@@ -1676,7 +1676,7 @@ function SessionManager:_get_stored_branch_name(path)
             if not line:match("^%s*$") then
                 local stripped = M.strip_left(line)
 
-                if not vim.startswith(stripped, core_helpers._VIMSCRIPT_COMMENT_MARKER) then
+                if not vim.startswith(stripped, core_helpers.VIMSCRIPT_COMMENT_MARKER) then
                     return nil
                 end
 
@@ -1712,7 +1712,7 @@ function SessionManager:_get_vcs_root_sessionx_file(directory)
         error(string.format('Directory "%s" has no VCS root. Cannot sync a session.', directory))
     end
 
-    return vim.fs.joinpath(root, core_helpers._SESSIONX_NAME)
+    return vim.fs.joinpath(root, core_helpers.SESSIONX_NAME)
 end
 
 --- Generate a session-related `name` file later, using the output of `callback`.
@@ -1760,7 +1760,7 @@ function SessionManager:sync_current_session()
         error(string.format('No VCS root was found for "%s" directory.', directory))
     end
 
-    local sessionx_destination = _P.get_branch_path(core_helpers._SESSIONX_NAME, root)
+    local sessionx_destination = _P.get_branch_path(core_helpers.SESSIONX_NAME, root)
 
     if vim.fn.filereadable(sessionx_destination) ~= 1 then
         -- NOTE: This would only happen if a session was not saved for the git
@@ -1770,7 +1770,7 @@ function SessionManager:sync_current_session()
         return
     end
 
-    local root_destination = vim.fs.joinpath(root, core_helpers._SESSIONX_NAME)
+    local root_destination = vim.fs.joinpath(root, core_helpers.SESSIONX_NAME)
     vim.uv.fs_copyfile(sessionx_destination, root_destination)
 end
 
@@ -1796,7 +1796,7 @@ function SessionManager:write_current_session()
         table.insert(paths, destination)
     end
 
-    local sessionx_destination = _P.get_branch_path(core_helpers._SESSIONX_NAME, root)
+    local sessionx_destination = _P.get_branch_path(core_helpers.SESSIONX_NAME, root)
 
     local handler, error_ = io.open(sessionx_destination, "w")
     assert(handler, error_)
@@ -1809,11 +1809,11 @@ function SessionManager:write_current_session()
 
     handler:close()
 
-    local root_destination = vim.fs.joinpath(root, core_helpers._SESSIONX_NAME)
+    local root_destination = vim.fs.joinpath(root, core_helpers.SESSIONX_NAME)
     vim.uv.fs_copyfile(sessionx_destination, root_destination)
 end
 
-M._SESSION_MANAGER = SessionManager.new()
+M.SESSION_MANAGER = SessionManager.new()
 
 --- Unset the bookmark if it is set or set it if it's not set.
 function _P.toggle_bookmark_in_current_buffer()
@@ -1876,7 +1876,7 @@ function _P.toggle_bookmark_in_current_buffer()
     _add_current_buffer_if_needed()
     _refresh_all_bookmark_values()
 
-    M._SESSION_MANAGER:write_current_session()
+    M.SESSION_MANAGER:write_current_session()
 end
 
 --- Open or close the QuickFix window (don't move the cursor to the window).
@@ -1959,7 +1959,7 @@ local _IS_GIT_AVAILABLE = nil
 ---@return boolean
 local function _is_git_available()
     if _IS_GIT_AVAILABLE == nil then
-        _IS_GIT_AVAILABLE = core_helpers.exists_command(core_helpers._GIT_EXECUTABLE)
+        _IS_GIT_AVAILABLE = core_helpers.exists_command(core_helpers.GIT_EXECUTABLE)
     end
 
     return _IS_GIT_AVAILABLE
@@ -2042,7 +2042,7 @@ end
 ---@return string[]
 local function _get_git_branch_command(path)
     return {
-        core_helpers._GIT_EXECUTABLE,
+        core_helpers.GIT_EXECUTABLE,
         "-C",
         path or _get_git_branch_reference_path(),
         "rev-parse",
@@ -2349,7 +2349,7 @@ vim.api.nvim_create_autocmd("TermOpen", {
             noremap = true,
         })
     end,
-    group = core_helpers._TERMINAL_GROUP,
+    group = core_helpers.TERMINAL_GROUP,
     pattern = "*",
 })
 

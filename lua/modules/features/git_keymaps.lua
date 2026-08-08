@@ -51,7 +51,7 @@ function _P.run_git_command(command, directory)
 
     ---@type string[]
     local full_command = {}
-    vim.list_extend(full_command, { require("modules.utilities.core_helpers")._GIT_EXECUTABLE, "-C", directory })
+    vim.list_extend(full_command, { require("modules.utilities.core_helpers").GIT_EXECUTABLE, "-C", directory })
     vim.list_extend(full_command, command)
 
     vim.system(full_command, { text = true }, function(object)

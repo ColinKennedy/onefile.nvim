@@ -11,7 +11,7 @@ table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
 local function _get_git_repository_root()
     local core_helpers = require("modules.utilities.core_helpers")
     local result = vim.system(
-        { core_helpers._GIT_EXECUTABLE, "-C", vim.fn.getcwd(), "rev-parse", "--show-toplevel" },
+        { core_helpers.GIT_EXECUTABLE, "-C", vim.fn.getcwd(), "rev-parse", "--show-toplevel" },
         { text = true }
     ):wait()
 

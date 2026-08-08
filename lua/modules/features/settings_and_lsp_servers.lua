@@ -96,7 +96,7 @@ _P.servers = {
     {
         name = "lua_ls",
         config = function()
-            local paths = vim.tbl_deep_extend("force", {}, require("modules.utilities.core_helpers")._LUA_ROOT_PATHS)
+            local paths = vim.tbl_deep_extend("force", {}, require("modules.utilities.core_helpers").LUA_ROOT_PATHS)
             table.insert(paths, ".git")
 
             return {

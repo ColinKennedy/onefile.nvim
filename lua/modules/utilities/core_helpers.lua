@@ -123,10 +123,10 @@ local _P = {}
 
 ---@type string[]
 local _ALL_CONTIGUOUS_PROJECT_ROOT_MARKERS = { "CMakeLists.txt", "__init__.py" }
-M._ENGLISH_LANGUAGE = "en"
+M.ENGLISH_LANGUAGE = "en"
 
 ---@type string[]
-M._LUA_ROOT_PATHS = {
+M.LUA_ROOT_PATHS = {
     ".luacheckrc",
     ".luarc.json",
     ".luarc.jsonc",
@@ -159,7 +159,7 @@ function M.with_file_messages_suppressed(callback)
     return result
 end
 
-local _ALL_SINGLE_PROJECT_ROOTS = vim.tbl_deep_extend("force", {}, M._LUA_ROOT_PATHS)
+local _ALL_SINGLE_PROJECT_ROOTS = vim.tbl_deep_extend("force", {}, M.LUA_ROOT_PATHS)
 _ALL_SINGLE_PROJECT_ROOTS = vim.list_extend(_ALL_SINGLE_PROJECT_ROOTS, {
     -- Language-Agnostic
     ".editorconfig",
@@ -185,20 +185,20 @@ _ALL_SINGLE_PROJECT_ROOTS = vim.list_extend(_ALL_SINGLE_PROJECT_ROOTS, {
     "init.vim",
 })
 
-M._BOOKMARK_MINIMUM = 1
-M._BOOKMARK_MAXIMUM = 9
+M.BOOKMARK_MINIMUM = 1
+M.BOOKMARK_MAXIMUM = 9
 
 ---@type integer?
 local _CURRENT_RIPGREP_COMMAND = nil
 
 ---@type table<string, string>
-M._FILETYPE_TO_TREESITTER = { python = "python" }
-M._LSP_GROUP = vim.api.nvim_create_augroup("my.lsp.start", { clear = true })
-M._SNIPPET_AUGROUP = vim.api.nvim_create_augroup("my.snippet.completion", { clear = true })
-M._TERMINAL_GROUP = vim.api.nvim_create_augroup("my.terminal.behavior", { clear = true })
+M.FILETYPE_TO_TREESITTER = { python = "python" }
+M.LSP_GROUP = vim.api.nvim_create_augroup("my.lsp.start", { clear = true })
+M.SNIPPET_AUGROUP = vim.api.nvim_create_augroup("my.snippet.completion", { clear = true })
+M.TERMINAL_GROUP = vim.api.nvim_create_augroup("my.terminal.behavior", { clear = true })
 
-M._GIT_EXECUTABLE = os.getenv("NEOVIM_GIT_EXECUTABLE_PATH") or "git"
-M._RIPGREP_EXECUTABLE = os.getenv("NEOVIM_RIPGREP_EXECUTABLE_PATH") or "rg"
+M.GIT_EXECUTABLE = os.getenv("NEOVIM_GIT_EXECUTABLE_PATH") or "git"
+M.RIPGREP_EXECUTABLE = os.getenv("NEOVIM_RIPGREP_EXECUTABLE_PATH") or "rg"
 
 ---@type table<string, boolean>
 local _LANGUAGES_CACHE = {}
@@ -206,18 +206,18 @@ local _LANGUAGES_CACHE = {}
 ---@type table<string, _my.Snippet[]>
 local _SNIPPETS = {}
 
-M._SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
+M.SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
 
 -- NOTE: Don't mess with this variable unless you know what you're doing.
 ---@type table<string, _my.Snippet>
-M._TRIGGER_TO_SNIPPET_CACHE = {}
+M.TRIGGER_TO_SNIPPET_CACHE = {}
 
 -- NOTE: This is a normal Vim convention for session names.
-M._VIM_SESSION_FILE_NAME = "Session.vim"
+M.VIM_SESSION_FILE_NAME = "Session.vim"
 
-M._VIMSCRIPT_COMMENT_MARKER = '"'
+M.VIMSCRIPT_COMMENT_MARKER = '"'
 
-M._SESSIONX_NAME = "Sessionx.vim"
+M.SESSIONX_NAME = "Sessionx.vim"
 
 M.IS_NERDFONT_ALLOWED = true
 
@@ -640,7 +640,7 @@ end
 function M.compute_snippet_completion_options(data)
     -- NOTE: Re-populate the cache with snippets which match the completion menu
     ---@type table<string, _my.Snippet>
-    M._TRIGGER_TO_SNIPPET_CACHE = {}
+    M.TRIGGER_TO_SNIPPET_CACHE = {}
 
     local snippets = _SNIPPETS[data.file_type] or {}
 
@@ -654,7 +654,7 @@ function M.compute_snippet_completion_options(data)
                 kind = snippet.kind or "Snippet",
                 word = snippet.trigger,
             })
-            M._TRIGGER_TO_SNIPPET_CACHE[snippet.trigger] = snippet
+            M.TRIGGER_TO_SNIPPET_CACHE[snippet.trigger] = snippet
         end
     end
 
@@ -1464,13 +1464,13 @@ end
 ---    The full path to the Vim buffer.
 ---
 function M.iter_bookmarks()
-    local index = M._BOOKMARK_MINIMUM - 1
+    local index = M.BOOKMARK_MINIMUM - 1
 
     return function()
         while true do
             index = index + 1
 
-            if index > M._BOOKMARK_MAXIMUM then
+            if index > M.BOOKMARK_MAXIMUM then
                 return nil
             end
 
@@ -1513,7 +1513,7 @@ end
 function M.mark_current_buffer_as_next_bookmark()
     local maximum
 
-    for index = M._BOOKMARK_MINIMUM, M._BOOKMARK_MAXIMUM do
+    for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
         local mark = M.get_vim_mark_from_bookmark_index(index)
 
         if _P.is_mark_defined(mark) then
@@ -1524,7 +1524,7 @@ function M.mark_current_buffer_as_next_bookmark()
     local next_index = 1
 
     if maximum then
-        next_index = ((maximum + 1) % M._BOOKMARK_MAXIMUM) + 1
+        next_index = ((maximum + 1) % M.BOOKMARK_MAXIMUM) + 1
     end
 
     _P.mark_current_buffer_as_bookmark(M.get_vim_mark_from_bookmark_index(next_index))
@@ -1560,7 +1560,7 @@ function M.push_stash_by_name()
         end
 
         ---@type string[]
-        local command = { M._GIT_EXECUTABLE, "stash", "push", "--message", input }
+        local command = { M.GIT_EXECUTABLE, "stash", "push", "--message", input }
 
         if not M.exists_command(command[1]) then
             vim.notify("Cannot create state. No `git` command was found.", vim.log.levels.ERROR)
@@ -1708,7 +1708,7 @@ function _P.run_git_generic_command(command)
         end)
     end
 
-    vim.system({ M._GIT_EXECUTABLE, "-C", directory, command }, { text = true }, _notify_on_error)
+    vim.system({ M.GIT_EXECUTABLE, "-C", directory, command }, { text = true }, _notify_on_error)
 end
 
 --- Call `git pull` from the current working directory.
@@ -1724,7 +1724,7 @@ end
 --- Run `git add -p` in the current tab's `$PWD` in a new terminal.
 function M.run_git_add_p()
     vim.cmd.split()
-    vim.cmd.terminal(string.format("%s add -p", M._GIT_EXECUTABLE))
+    vim.cmd.terminal(string.format("%s add -p", M.GIT_EXECUTABLE))
     vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
 
     local terminal_buffer = vim.api.nvim_get_current_buf()
@@ -1735,7 +1735,7 @@ end
 --- Run `git checkout -p` in the current tab's `$PWD` in a new terminal.
 function M.run_git_checkout_p()
     vim.cmd.split()
-    vim.cmd.terminal(string.format("%s checkout -p", M._GIT_EXECUTABLE))
+    vim.cmd.terminal(string.format("%s checkout -p", M.GIT_EXECUTABLE))
     vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
 
     local terminal_buffer = vim.api.nvim_get_current_buf()
@@ -1801,7 +1801,7 @@ end
 ---@param command string[] A raw ripgrep command to run.
 ---@param options _my.ripgrep.Options? Options for quickfix display.
 ---
-function _P.run_ripgrep(command, options)
+function M.run_ripgrep(command, options)
     options = options or {}
     local cwd = vim.fn.getcwd()
     local display_root = options.display_root or cwd
@@ -1815,7 +1815,7 @@ function _P.run_ripgrep(command, options)
 
     ---@type string[]
     local commands = {
-        M._RIPGREP_EXECUTABLE,
+        M.RIPGREP_EXECUTABLE,
         "--vimgrep", -- Format: file:line:column:match
         "--smart-case",
         "--no-messages",
@@ -1895,14 +1895,6 @@ function _P.run_ripgrep(command, options)
     end)
 
     _CURRENT_RIPGREP_COMMAND = process.pid
-end
-
---- Run raw ripgrep `command`.
----
----@param command string[] A raw ripgrep command to run.
----@param options _my.ripgrep.Options? Options for quickfix display.
-function M.run_ripgrep(command, options)
-    _P.run_ripgrep(command, options)
 end
 
 --- Run `ripgrep` using Neovim.

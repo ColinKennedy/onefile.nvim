@@ -272,7 +272,7 @@ describe("modules.plugins.native_grapple", function()
         local file_path = vim.fs.joinpath(root, "notes.txt")
         local marks_path = vim.fs.joinpath(
             root,
-            core_helpers._SESSIONS_DIRECTORY_NAME,
+            core_helpers.SESSIONS_DIRECTORY_NAME,
             native_grapple._NO_GIT_BRANCH_NAME,
             ".nvim.marks.lua"
         )

@@ -36,7 +36,7 @@ end
 ---
 ---@param opts vim.api.keyset.create_user_command.command_args The user-command options to read from.
 local function _run_in_git(opts)
-    local command = M._build_git_command(require("modules.utilities.core_helpers")._GIT_EXECUTABLE, opts.fargs)
+    local command = M._build_git_command(require("modules.utilities.core_helpers").GIT_EXECUTABLE, opts.fargs)
 
     vim.cmd.split()
     vim.cmd.enew()

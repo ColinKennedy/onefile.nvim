@@ -1321,7 +1321,7 @@ end
 function M.mark_current_buffer_as_next_bookmark()
     local maximum
 
-    for index = M._BOOKMARK_MINIMUM, M._BOOKMARK_MAXIMUM do
+    for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
         local mark = M.get_vim_mark_from_bookmark_index(index)
 
         if _P.is_mark_defined(mark) then
@@ -1332,7 +1332,7 @@ function M.mark_current_buffer_as_next_bookmark()
     local next_index = 1
 
     if maximum then
-        next_index = ((maximum + 1) % M._BOOKMARK_MAXIMUM) + 1
+        next_index = ((maximum + 1) % M.BOOKMARK_MAXIMUM) + 1
     end
 
     _P.mark_current_buffer_as_bookmark(M.get_vim_mark_from_bookmark_index(next_index))
@@ -1532,7 +1532,7 @@ end
 --- Run `git checkout -p` in the current tab's `$PWD` in a new terminal.
 function M.run_git_checkout_p()
     vim.cmd.split()
-    vim.cmd.terminal(string.format("%s checkout -p", M.GIT_EXECUTABLE))
+    vim.cmd.terminal(string.format("%s add -p", M.GIT_EXECUTABLE))
     vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
 
     local terminal_buffer = vim.api.nvim_get_current_buf()
@@ -1540,8 +1540,11 @@ function M.run_git_checkout_p()
     M.close_terminal_afterwards(terminal_buffer)
 end
 
----@class _my.ripgrep.Options
----@field display_root string? Directory that quickfix paths should be displayed relative to.
+--- Run `git checkout -p` in the current tab's `$PWD` in a new terminal.
+function M.run_git_checkout_p()
+    vim.cmd.split()
+    vim.cmd.terminal(string.format("%s checkout -p", M.GIT_EXECUTABLE))
+    vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
 
 --- Check whether `path` is already absolute.
 ---
@@ -1696,7 +1699,7 @@ end
 ---@param command string[] A raw ripgrep command to run.
 ---@param options _my.ripgrep.Options? Options for quickfix display.
 ---
-function _P.run_ripgrep(command, options)
+function M.run_ripgrep(command, options)
     options = options or {}
     local cwd = vim.fn.getcwd()
     local display_root = options.display_root or cwd
@@ -1790,14 +1793,6 @@ function _P.run_ripgrep(command, options)
     end)
 
     _CURRENT_RIPGREP_COMMAND = process.pid
-end
-
---- Run raw ripgrep `command`.
----
----@param command string[] A raw ripgrep command to run.
----@param options _my.ripgrep.Options? Options for quickfix display.
-function M.run_ripgrep(command, options)
-    _P.run_ripgrep(command, options)
 end
 
 --- Run `ripgrep` using Neovim.

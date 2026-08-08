@@ -36,7 +36,7 @@ local _P = {}
 local function _get_git_branch(root)
     local core_helpers = require("modules.utilities.core_helpers")
     local result = vim.system({
-        core_helpers._GIT_EXECUTABLE,
+        core_helpers.GIT_EXECUTABLE,
         "-C",
         root,
         "rev-parse",

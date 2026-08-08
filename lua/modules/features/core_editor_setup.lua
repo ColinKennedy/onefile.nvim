@@ -1183,7 +1183,7 @@ end
 ---@param stash string The stash reference to inspect.
 ---@return integer # The number of added and removed lines in the stash.
 function M._get_stash_changed_line_count(stash)
-    local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--numstat", stash }):wait()
+    local process = vim.system({ core_helpers.GIT_EXECUTABLE, "stash", "show", "--numstat", stash }):wait()
 
     if process.code ~= 0 then
         return 0
@@ -1207,7 +1207,7 @@ end
 ---@param stash string The stash reference to inspect.
 ---@param callback fun(count: integer): nil The callback that receives the changed line count.
 function M._get_stash_changed_line_count_async(stash, callback)
-    vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--numstat", stash }, {}, function(process)
+    vim.system({ core_helpers.GIT_EXECUTABLE, "stash", "show", "--numstat", stash }, {}, function(process)
         local count = 0
 
         if process.code == 0 then
@@ -1231,7 +1231,7 @@ end
 ---@param stash string The stash reference to inspect.
 ---@return string[] # The preview lines to draw.
 function M._get_stash_preview_lines(stash)
-    local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }):wait()
+    local process = vim.system({ core_helpers.GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }):wait()
 
     if process.code ~= 0 then
         return { process.stderr ~= "" and process.stderr or "Could not preview stash." }
@@ -1245,7 +1245,7 @@ end
 ---@param stash string The stash reference to inspect.
 ---@param callback fun(lines: string[]): nil The callback that receives preview lines.
 function M._get_stash_preview_lines_async(stash, callback)
-    vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }, {}, function(process)
+    vim.system({ core_helpers.GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }, {}, function(process)
         ---@type string[]
         local lines_
 
@@ -1617,7 +1617,7 @@ end
 ---@return string? # The active Git branch, if one can be found.
 local function _get_git_branch(root)
     local result = vim.system({
-        core_helpers._GIT_EXECUTABLE,
+        core_helpers.GIT_EXECUTABLE,
         "-C",
         root,
         "rev-parse",
@@ -1832,7 +1832,7 @@ function SessionManager:write_current_session()
     vim.uv.fs_copyfile(sessionx_destination, root_destination)
 end
 
-M._SESSION_MANAGER = SessionManager.new()
+M.SESSION_MANAGER = SessionManager.new()
 
 --- Unset the bookmark if it is set or set it if it's not set.
 function _P.toggle_bookmark_in_current_buffer()
@@ -1895,7 +1895,7 @@ function _P.toggle_bookmark_in_current_buffer()
     _add_current_buffer_if_needed()
     _refresh_all_bookmark_values()
 
-    M._SESSION_MANAGER:write_current_session()
+    M.SESSION_MANAGER:write_current_session()
 end
 
 --- Open or close the QuickFix window (don't move the cursor to the window).

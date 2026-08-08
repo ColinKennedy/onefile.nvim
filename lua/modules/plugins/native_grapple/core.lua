@@ -146,7 +146,7 @@ end
 function _P.get_marks_path(root, branch)
     local core_helpers = require("modules.utilities.core_helpers")
 
-    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, _P.MARKS_FILE_NAME)
+    return vim.fs.joinpath(root, core_helpers.SESSIONS_DIRECTORY_NAME, branch, _P.MARKS_FILE_NAME)
 end
 
 --- Close one watched Git HEAD file.
@@ -273,7 +273,7 @@ end
 --- Delete every native grapple bookmark mark.
 function M._delete_all_bookmarks()
     for index = _P.BOOKMARK_MINIMUM, _P.BOOKMARK_MAXIMUM do
-        _P.delete_bookmark(index)
+        _P.clear_bookmark_mark(index)
     end
 end
 

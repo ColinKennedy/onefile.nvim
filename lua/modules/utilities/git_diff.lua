@@ -315,7 +315,7 @@ end
 ---@param details _my.git_diff.FileDetails The file details to query.
 ---@param callback fun(lines: string[], missing: boolean): nil Callback with the index lines.
 ---
-local function _fetch_index_lines_uncached(details, callback)
+function M.get_index_lines(details, callback)
     M.run_git(
         { "-C", details.repository, "show", ":" .. details.relative_path },
         details.repository,
@@ -899,13 +899,31 @@ function M.apply_cached_patch(details, patch, callback)
         return
     end
 
-    M.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository, nil, function(result)
-        pcall(vim.uv.fs_unlink, path)
+    M.run_git(
+        { "-C", details.repository, "apply", "--cached", "--check", path },
+        details.repository,
+        nil,
+        function(check)
+            if check.code ~= 0 then
+                pcall(vim.uv.fs_unlink, path)
 
         if result.code ~= 0 then
             callback(false, vim.trim(result.stderr))
 
-            return
+                return
+            end
+
+            M.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository, nil, function(result)
+                pcall(vim.uv.fs_unlink, path)
+
+                if result.code ~= 0 then
+                    callback(false, vim.trim(result.stderr))
+
+                    return
+                end
+
+                callback(true, nil)
+            end)
         end
 
         callback(true, nil)

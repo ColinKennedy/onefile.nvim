@@ -481,18 +481,18 @@ index 2222222..3333333 100644
         local home = vim.fn.fnamemodify("~", ":p"):gsub("[/\\]$", "")
 
         assert.equal(
-            vim.fs.joinpath("~", "repositories/example"),
+            "Git: " .. vim.fs.joinpath("~", "repositories/example"),
             git_hunk_navigation.get_quickfix_title(vim.fs.joinpath(home, "repositories/example"))
         )
 
         -- NOTE: The home directory itself collapses to a bare `~`.
-        assert.equal("~", git_hunk_navigation.get_quickfix_title(home))
+        assert.equal("Git: ~", git_hunk_navigation.get_quickfix_title(home))
     end)
 
     it("leaves a repository root outside the home directory unshortened", function()
         -- NOTE: `:~` only rewrites paths under the home directory, so a repository
         -- somewhere else keeps its full path rather than being mangled.
-        assert.equal("/opt/example/repository", git_hunk_navigation.get_quickfix_title("/opt/example/repository"))
+        assert.equal("Git: /opt/example/repository", git_hunk_navigation.get_quickfix_title("/opt/example/repository"))
     end)
 
     it("titles the quickfix list with the shortened repository root", function()

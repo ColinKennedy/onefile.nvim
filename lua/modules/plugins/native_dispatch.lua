@@ -14,6 +14,18 @@ local _MAXIMUM_TMUX_DISPLAY_HEIGHT = 15
 ---@field display _my.dispatch.DisplayMode Whether to show command output while it runs.
 ---@field jump_first boolean? Whether to jump to the first parsed quickfix item.
 
+---@class _my.dispatch.Defaults
+---@field display _my.dispatch.DisplayMode Whether to show command output while it runs.
+---@field jump_first boolean Whether to jump to the first parsed quickfix item.
+
+-- The flags that `:Dispatch` implies. They are what we want 90%+ of the time.
+---@type _my.dispatch.Defaults
+local _QUIET_DEFAULTS = { display = "on_error", jump_first = true }
+
+-- The flags that `:DispatchOutput` implies. Mirror output while the command runs.
+---@type _my.dispatch.Defaults
+local _OUTPUT_DEFAULTS = { display = "always", jump_first = false }
+
 ---@class _my.dispatch.Display
 ---@field write fun(lines: string[]): nil
 ---@field close fun(): nil
@@ -94,16 +106,18 @@ end
 --- Parse :Dispatch flags and command text.
 ---
 ---@param arguments string The user-command argument string.
+---@param defaults _my.dispatch.Defaults? The flags to assume when the user omits them.
 ---@return _my.dispatch.Options? options Parsed options.
 ---@return string? error_message A human-readable parse error.
-function _P.parse_arguments(arguments)
+function _P.parse_arguments(arguments, defaults)
+    defaults = defaults or _OUTPUT_DEFAULTS
     local argv = _P.parse_argv(arguments)
     ---@type string?
     local compiler = nil
     ---@type _my.dispatch.DisplayMode
-    local display = "always"
+    local display = defaults.display
     local command_start = 1
-    local jump_first = false
+    local jump_first = defaults.jump_first
 
     for index, argument in ipairs(argv) do
         if argument:sub(1, 2) ~= "--" then
@@ -113,6 +127,8 @@ function _P.parse_arguments(arguments)
 
         if argument == "--jump-first" then
             jump_first = true
+        elseif argument == "--no-jump-first" then
+            jump_first = false
         elseif argument:sub(1, 11) == "--compiler=" then
             compiler = argument:sub(12)
         elseif argument:sub(1, 10) == "--display=" then
@@ -334,7 +350,14 @@ function _P.complete(_, line)
     end
 
     if last:sub(1, 2) == "--" then
-        return { "--compiler=", "--display=always", "--display=on_error", "--display=never", "--jump-first" }
+        return {
+            "--compiler=",
+            "--display=always",
+            "--display=never",
+            "--display=on_error",
+            "--jump-first",
+            "--no-jump-first",
+        }
     end
 
     return vim.fn.getcompletion(last, "shellcmd")
@@ -550,11 +573,12 @@ function M.run(options)
     end
 end
 
---- Run :Dispatch from command-line options.
+--- Run a dispatch command from command-line options.
 ---
 ---@param command_options vim.api.keyset.create_user_command.command_args The command arguments.
-function M.dispatch(command_options)
-    local options, error_message = _P.parse_arguments(command_options.args)
+---@param defaults _my.dispatch.Defaults The flags to assume when the user omits them.
+function _P.dispatch(command_options, defaults)
+    local options, error_message = _P.parse_arguments(command_options.args, defaults)
 
     if not options then
         vim.notify(error_message, vim.log.levels.ERROR)
@@ -565,8 +589,28 @@ function M.dispatch(command_options)
     M.run(options)
 end
 
+--- Run :Dispatch from command-line options.
+---
+---@param command_options vim.api.keyset.create_user_command.command_args The command arguments.
+function M.dispatch(command_options)
+    _P.dispatch(command_options, _QUIET_DEFAULTS)
+end
+
+--- Run :DispatchOutput from command-line options.
+---
+---@param command_options vim.api.keyset.create_user_command.command_args The command arguments.
+function M.dispatch_output(command_options)
+    _P.dispatch(command_options, _OUTPUT_DEFAULTS)
+end
+
 vim.api.nvim_create_user_command("Dispatch", M.dispatch, {
-    desc = "Run a command and load its output into quickfix.",
+    desc = "Run a command quietly and load its output into quickfix.",
+    nargs = "+",
+    complete = _P.complete,
+})
+
+vim.api.nvim_create_user_command("DispatchOutput", M.dispatch_output, {
+    desc = "Run a command, mirror its output live, and load it into quickfix.",
     nargs = "+",
     complete = _P.complete,
 })

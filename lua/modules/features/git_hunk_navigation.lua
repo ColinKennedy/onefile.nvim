@@ -660,6 +660,11 @@ end
 
 --- Mark any cached repositories containing `buffer` as stale.
 ---
+--- CAVEAT: This duplicates the prefix comparison in
+--- `_get_relative_path_from_repository` instead of calling it, so it carries the
+--- same Windows separator and drive-letter-case bug documented there. Both sites
+--- need the same fix.
+---
 --- CAVEAT: Staleness is only ever driven by buffer edits, so repository changes
 --- made outside Neovim (`git checkout`, `rebase`, `stash`, another editor) leave
 --- the cache marked current. `[g` and `]g` then navigate hunks from the previous

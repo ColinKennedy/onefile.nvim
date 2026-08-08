@@ -82,13 +82,13 @@ describe("tmux navigation", function()
 
                 -- NOTE: Force "not in tmux" so neighbour detection stays purely
                 -- inside Neovim and never shells out, regardless of the host.
-                core_helpers.in_tmux = function()
+                rawset(core_helpers, "in_tmux", function()
                     return false
-                end
+                end)
             end)
 
             after_each(function()
-                core_helpers.in_tmux = original_in_tmux
+                rawset(core_helpers, "in_tmux", original_in_tmux)
                 vim.cmd("silent! only")
             end)
 
@@ -132,9 +132,14 @@ describe("tmux navigation", function()
                         tmux_navigation.resize(case.key)
                         local after = measure(win)
 
+                        -- NOTE: luassert accepts a failure message as the second
+                        -- argument but the LuaCATS/luassert meta declares only
+                        -- one parameter, so the message trips `redundant-parameter`.
                         if case.grows then
+                            ---@diagnostic disable-next-line: redundant-parameter
                             assert.is_true(after > before, string.format("expected %s to grow", case.cell))
                         else
+                            ---@diagnostic disable-next-line: redundant-parameter
                             assert.is_true(after < before, string.format("expected %s to shrink", case.cell))
                         end
                     end
@@ -213,15 +218,15 @@ describe("tmux navigation", function()
                 tmux_commands = {}
                 adjacent_pane = false
 
-                core_helpers.in_tmux = function()
+                rawset(core_helpers, "in_tmux", function()
                     return true
-                end
+                end)
 
                 -- NOTE: Answer `display-message` pane-edge queries with tmux's own
                 -- convention ("0" = a neighbouring pane exists, "1" = flush against
                 -- the edge). Those queries are not recorded, so assertions only see
                 -- the resize commands under test.
-                vim.fn.system = function(arguments)
+                rawset(vim.fn, "system", function(arguments)
                     local joined = table.concat(arguments, " ")
 
                     if joined:find("display-message", 1, true) then
@@ -231,12 +236,12 @@ describe("tmux navigation", function()
                     table.insert(tmux_commands, joined)
 
                     return ""
-                end
+                end)
             end)
 
             after_each(function()
-                core_helpers.in_tmux = original_in_tmux
-                vim.fn.system = original_system
+                rawset(core_helpers, "in_tmux", original_in_tmux)
+                rawset(vim.fn, "system", original_system)
                 vim.cmd("silent! only")
             end)
 

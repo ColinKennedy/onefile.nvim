@@ -480,15 +480,16 @@ function _P.finish(options, lines, code)
     end)
 
     if code == 0 and not first_valid_index then
-        vim.fn.setqflist({}, "r", {
-            title = "Dispatch: " .. options.raw_command,
-            items = {},
-        })
-        vim.cmd("silent! cclose")
+        _P.clear_previous_results(options)
         vim.notify(string.format("Dispatch passed: %s", options.raw_command), vim.log.levels.INFO)
 
         return
     end
+
+    vim.fn.setqflist({}, "r", {
+        title = _P.get_quickfix_title(options),
+        items = items,
+    })
 
     require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
         vim.cmd("silent copen")

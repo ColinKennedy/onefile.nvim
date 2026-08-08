@@ -61,6 +61,15 @@ end
 
 --- Get `path` relative to `repository`, if `path` is inside it.
 ---
+--- CAVEAT: This compares the two paths as raw strings, which is unreliable on
+--- Windows. `git rev-parse --show-toplevel` always reports forward slashes
+--- (`C:/Users/...`) while `fnamemodify(..., ":p")` reports backslashes unless
+--- 'shellslash' is set, and drive letters can differ in case (`C:` vs `c:`).
+--- Either mismatch fails the prefix test, which silently disables the cached
+--- repository lookup and the unsaved-buffer hunk merge rather than erroring.
+--- Normalizing separators and case before comparing would fix it. This is
+--- untested on Windows.
+---
 ---@param repository string The repository root.
 ---@param path string The absolute file path.
 ---@return string? # The repository-relative path, if `path` is inside `repository`.
@@ -121,6 +130,12 @@ end
 
 --- Build the command-line arguments for `git diff`.
 ---
+--- CAVEAT: These arguments do not pin the diff header format, so the user's Git
+--- configuration can change output that `_parse_diff_path` and
+--- `_unescape_diff_path` expect. Adding `--src-prefix=a/ --dst-prefix=b/
+--- --no-ext-diff` here, and `-c core.quotePath=false` before `diff` in the
+--- command list, normalizes every known case.
+---
 ---@param arguments string[] User-provided arguments after `:LoadGitDiff`.
 ---@return string[] # The complete Git arguments.
 local function _make_diff_arguments(arguments)
@@ -133,6 +148,13 @@ end
 
 --- Unescape a path parsed from a quoted Git diff header.
 ---
+--- CAVEAT: This only undoes `\"` and `\\`. It does not decode the octal escapes
+--- that `core.quotePath` (on by default) applies to non-ASCII paths, so `café.txt`
+--- arrives as `"caf\303\251.txt"` and yields an entry pointing at a file named
+--- literally `caf\303\251.txt`. Running the diff with `-c core.quotePath=false`
+--- avoids the escaping entirely. Paths containing spaces are not quoted by Git,
+--- so they are unaffected.
+---
 ---@param path string The escaped path to normalize.
 ---@return string # The unescaped path.
 local function _unescape_diff_path(path)
@@ -144,6 +166,12 @@ end
 --- Hunk target line numbers are relative to the `b/...` side of a diff. This
 --- matters for renames because jumping to the old `a/...` path can open an
 --- empty buffer and make otherwise-valid target line numbers out of range.
+---
+--- CAVEAT: Both patterns hard-code the default `a/` and `b/` prefixes, so a user
+--- with `diff.noprefix=true` (`diff --git file.txt file.txt`) or
+--- `diff.mnemonicPrefix=true` (`diff --git i/file.txt w/file.txt`) matches
+--- neither and gets zero hunks with no error. Passing explicit
+--- `--src-prefix=a/ --dst-prefix=b/` to `git diff` overrides both settings.
 ---
 ---@param line string The diff line to parse.
 ---@return string? # The target repository-relative path, if found.

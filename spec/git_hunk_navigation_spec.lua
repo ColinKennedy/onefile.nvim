@@ -604,6 +604,58 @@ index 2222222..3333333 100644
         end)
     end)
 
+    it("shows the nearest non-empty hunk line when the changed line is blank", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\n")
+            write_text(vim.fs.joinpath(root, "file.txt"), "one\n\n    \nADDED\ntwo\n")
+
+            local ok, err = pcall(function()
+                local items = load_quickfix_from(root, root)
+
+                assert.equal(1, #items)
+                assert.equal(2, items[1].lnum)
+
+                -- NOTE: A blank line says nothing about the change, so the
+                -- display text skips ahead to the next line with contents.
+                assert.equal("ADDED", items[1].text)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("shows the nearest non-empty file line when a whole hunk is blank", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\nKEEP ME\n")
+            write_text(vim.fs.joinpath(root, "file.txt"), "one\nKEEP ME\n\n")
+
+            local ok, err = pcall(function()
+                with_cwd(root, function()
+                    vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "file.txt")))
+                    assert.True(load_hunks())
+
+                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    assert.equal(1, #repository_state.entries)
+                    assert.equal("KEEP ME", repository_state.entries[1].text)
+                end)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
     it("shows unsaved buffer text as the display text", function()
         with_captured_notifications(function()
             local root = make_repo()

@@ -209,12 +209,43 @@ local function _get_hunk_range(hunk)
     return first, first + size - 1
 end
 
+--- Get the closest line to `index` in `lines` that has visible characters.
+---
+--- Later lines win ties because a blank line usually leads into the change that
+--- it belongs to, rather than trailing the change before it.
+---
+---@param lines string[]? The lines to search.
+---@param index integer The line to search around.
+---@return string? # The nearest non-empty line, if `lines` has one.
+local function _find_nearest_non_empty(lines, index)
+    if not lines then
+        return nil
+    end
+
+    for offset = 0, #lines do
+        local after = lines[index + offset]
+
+        if after and vim.trim(after) ~= "" then
+            return after
+        end
+
+        local before = lines[index - offset]
+
+        if before and vim.trim(before) ~= "" then
+            return before
+        end
+    end
+
+    return nil
+end
+
 --- Get the quickfix display text for `hunk`.
 ---
 --- The quickfix list already shows the file path and line number in its own
 --- columns, so the display text shows the changed line's contents instead.
 --- Delete-only hunks have no line left to show, so they fall back to the first
---- removed line.
+--- removed line. A whitespace-only line says nothing about the change, so those
+--- show the nearest non-empty line instead.
 ---
 ---@param hunk _my.git_diff.Hunk|_my.git_diff.SelectionHunk The parsed diff hunk.
 ---@param lnum integer The best target line for the hunk.
@@ -228,11 +259,11 @@ local function _get_entry_text(hunk, lnum, new_lines, old_lines)
     if hunk.new_count > 0 then
         ---@diagnostic disable-next-line: undefined-field
         local added = hunk.added
-        text = (added and added[1]) or (new_lines and new_lines[lnum])
+        text = _find_nearest_non_empty(added, 1) or _find_nearest_non_empty(new_lines, lnum)
     else
         ---@diagnostic disable-next-line: undefined-field
         local removed = hunk.removed
-        text = (removed and removed[1]) or (old_lines and old_lines[hunk.old_start])
+        text = _find_nearest_non_empty(removed, 1) or _find_nearest_non_empty(old_lines, hunk.old_start)
     end
 
     return vim.trim(text or "")

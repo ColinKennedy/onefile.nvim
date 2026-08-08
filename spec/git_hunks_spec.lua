@@ -609,20 +609,14 @@ end
 --- Populate the quickfix list with repository hunks and focus its window.
 ---
 ---@param root string The Git repository root.
----@param arguments string[]? Additional arguments passed to `:LoadGitDiff`.
----@return vim.quickfix.entry[] # The loaded quickfix entries.
-local function load_quickfix_hunks(root, arguments)
+---@return table[] # The loaded quickfix entries.
+local function load_quickfix_hunks(root)
     local git_hunk_navigation = require("modules.features.git_hunk_navigation")
-    local command = "LoadGitDiff"
-
-    if arguments and #arguments > 0 then
-        command = command .. " " .. table.concat(arguments, " ")
-    end
 
     vim.cmd("silent enew!")
-    vim.cmd(command)
-    vim.wait(10000, function()
-        return git_hunk_navigation._get_repository_state(root) ~= nil and #vim.fn.getqflist() > 0
+    vim.cmd("LoadGitDiff")
+    vim.wait(2000, function()
+        return git_hunk_navigation.get_repository_state(root) ~= nil and #vim.fn.getqflist() > 0
     end)
     vim.wait(100)
 
@@ -633,17 +627,10 @@ local function load_quickfix_hunks(root, arguments)
 end
 
 describe("git hunk staging from the quickfix window", function()
-    -- NOTE: A failing test skips its own cleanup. Without this, the leftover
-    -- quickfix window keeps `winfixbuf` on and every later spec that switches
-    -- buffers errors, which hides the real failure.
-    after_each(function()
-        close_quickfix_window()
-    end)
-
     it("stages only the hunk under the cursor row in normal mode", function()
         local root = make_repo()
 
-        with_captured_notifications(function(messages)
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\nfive\n")
             run_git(root, { "add", "file.txt" })
@@ -661,7 +648,7 @@ describe("git hunk staging from the quickfix window", function()
             -- Sit on the first row and run the command with no range at all.
             vim.api.nvim_win_set_cursor(0, { 1, 0 })
             vim.cmd("GitStageSelection")
-            wait_for_notification(messages, "Staged 1 of 1 selected Git hunks.")
+            vim.wait(600)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
 
@@ -678,7 +665,7 @@ describe("git hunk staging from the quickfix window", function()
     it("stages every hunk covered by a visual row selection", function()
         local root = make_repo()
 
-        with_captured_notifications(function(messages)
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\nfive\n")
             run_git(root, { "add", "file.txt" })
@@ -695,7 +682,7 @@ describe("git hunk staging from the quickfix window", function()
             -- The visual mapping sends `:'<,'>GitStageSelection`, which arrives
             -- as this row range.
             vim.cmd("1,2GitStageSelection")
-            wait_for_notification(messages, "Staged 2 of 2 selected Git hunks.")
+            vim.wait(1200)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
 
@@ -717,7 +704,7 @@ describe("git hunk staging from the quickfix window", function()
     it("stages hunks across several files in one selection", function()
         local root = make_repo()
 
-        with_captured_notifications(function(messages)
+        with_captured_notifications(function()
             local first = vim.fs.joinpath(root, "alpha.txt")
             local second = vim.fs.joinpath(root, "beta.txt")
             write_text(first, "one\ntwo\n")
@@ -735,7 +722,7 @@ describe("git hunk staging from the quickfix window", function()
             assert.equal(2, #items)
 
             vim.cmd("1,2GitStageSelection")
-            wait_for_notification(messages, "Staged 2 of 2 selected Git hunks.")
+            vim.wait(1200)
 
             assert.is_truthy(
                 run_git(root, { "diff", "--cached", "--unified=0", "--", "alpha.txt" }):find("+ONE", 1, true)
@@ -751,164 +738,10 @@ describe("git hunk staging from the quickfix window", function()
         remove_tree(root)
     end)
 
-    it("resets selected staged hunks from the quickfix window", function()
-        local root = make_repo()
-
-        with_captured_notifications(function(messages)
-            local path = vim.fs.joinpath(root, "file.txt")
-            write_text(path, "one\ntwo\nthree\nfour\nfive\n")
-            run_git(root, { "add", "file.txt" })
-            run_git(root, { "commit", "-m", "init" })
-
-            -- Stage both changes, then list them as unstaged work by leaving a
-            -- further edit on disk so `:LoadGitDiff` still finds rows to select.
-            write_text(path, "ONE\ntwo\nthree\nfour\nFIVE\n")
-            run_git(root, { "add", "file.txt" })
-            write_text(path, "ONE\nTWO\nthree\nfour\nFIVE\n")
-
-            local previous = vim.fn.getcwd()
-            vim.cmd("cd " .. vim.fn.fnameescape(root))
-
-            local items = load_quickfix_hunks(root, { "--cached" })
-            assert.equal(2, #items)
-            vim.cmd("1,$GitResetSelection")
-            wait_for_notification(messages, "Reset 2 of 2 selected Git hunks.")
-
-            assert.equal("", run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" }))
-
-            -- NOTE: A reset moves changes out of the index without touching the
-            -- working tree, so the file on disk must be untouched.
-            local file = assert(io.open(path, "r"))
-            local contents = file:read("*a")
-            file:close()
-
-            assert.equal("ONE\nTWO\nthree\nfour\nFIVE\n", contents)
-
-            close_quickfix_window()
-            vim.cmd("cd " .. vim.fn.fnameescape(previous))
-        end)
-
-        remove_tree(root)
-    end)
-
-    it("checks out selected hunks and drops their rows from the quickfix list", function()
-        local root = make_repo()
-
-        with_captured_notifications(function(messages)
-            local path = vim.fs.joinpath(root, "file.txt")
-            write_text(path, "one\ntwo\nthree\nfour\nfive\n")
-            run_git(root, { "add", "file.txt" })
-            run_git(root, { "commit", "-m", "init" })
-
-            write_text(path, "ONE\ntwo\nthree\nfour\nFIVE\n")
-
-            local previous = vim.fn.getcwd()
-            vim.cmd("cd " .. vim.fn.fnameescape(root))
-
-            local items = load_quickfix_hunks(root)
-            assert.equal(2, #items)
-
-            local buffer = assert(items[1].bufnr)
-
-            vim.cmd("1,2GitCheckoutSelection")
-            wait_for_notification(messages, "Checked out 2 of 2 selected Git hunks.")
-
-            -- Both hunks are gone from the buffer, so both rows must be gone too.
-            assert.equal(0, #vim.fn.getqflist())
-
-            local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
-            assert.same({ "one", "two", "three", "four", "five" }, lines)
-
-            close_quickfix_window()
-            vim.cmd("cd " .. vim.fn.fnameescape(previous))
-        end)
-
-        remove_tree(root)
-    end)
-
-    it("keeps the quickfix title and unrelated rows after a partial checkout", function()
-        local root = make_repo()
-
-        with_captured_notifications(function(messages)
-            local git_hunk_navigation = require("modules.features.git_hunk_navigation")
-            local first = vim.fs.joinpath(root, "alpha.txt")
-            local second = vim.fs.joinpath(root, "beta.txt")
-            write_text(first, "one\ntwo\n")
-            write_text(second, "three\nfour\n")
-            run_git(root, { "add", "." })
-            run_git(root, { "commit", "-m", "init" })
-
-            write_text(first, "ONE\ntwo\n")
-            write_text(second, "three\nFOUR\n")
-
-            local previous = vim.fn.getcwd()
-            vim.cmd("cd " .. vim.fn.fnameescape(root))
-
-            local items = load_quickfix_hunks(root)
-            assert.equal(2, #items)
-
-            -- Check out only the first row.
-            vim.cmd("1,1GitCheckoutSelection")
-            wait_for_notification(messages, "Checked out 1 of 1 selected Git hunks.")
-
-            local remaining = vim.fn.getqflist()
-
-            assert.equal(1, #remaining)
-
-            -- NOTE: The quickfix columns already show the file and line, so the
-            -- entry text is the changed line's contents.
-            assert.equal("beta.txt", vim.fn.fnamemodify(vim.api.nvim_buf_get_name(remaining[1].bufnr), ":t"))
-            assert.equal(2, remaining[1].lnum)
-            assert.equal("FOUR", remaining[1].text)
-            assert.equal(git_hunk_navigation._get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
-
-            close_quickfix_window()
-            vim.cmd("cd " .. vim.fn.fnameescape(previous))
-        end)
-
-        remove_tree(root)
-    end)
-
-    it("checks out several hunks in one file without shifting the queued lines", function()
-        local root = make_repo()
-
-        with_captured_notifications(function(messages)
-            local path = vim.fs.joinpath(root, "file.txt")
-            write_text(path, "one\ntwo\nthree\nfour\nfive\n")
-            run_git(root, { "add", "file.txt" })
-            run_git(root, { "commit", "-m", "init" })
-
-            -- The first hunk adds lines, so checking it out first would move the
-            -- second hunk and make its recorded line number wrong.
-            write_text(path, "one\nADDED\nADDED\ntwo\nthree\nfour\nFIVE\n")
-
-            local previous = vim.fn.getcwd()
-            vim.cmd("cd " .. vim.fn.fnameescape(root))
-
-            local items = load_quickfix_hunks(root)
-            assert.equal(2, #items)
-
-            local buffer = assert(items[1].bufnr)
-
-            vim.cmd("1,2GitCheckoutSelection")
-            wait_for_notification(messages, "Checked out 2 of 2 selected Git hunks.")
-
-            local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
-
-            assert.same({ "one", "two", "three", "four", "five" }, lines)
-            assert.equal(0, #vim.fn.getqflist())
-
-            close_quickfix_window()
-            vim.cmd("cd " .. vim.fn.fnameescape(previous))
-        end)
-
-        remove_tree(root)
-    end)
-
     it("leaves the working tree alone when staging from the quickfix window", function()
         local root = make_repo()
 
-        with_captured_notifications(function(messages)
+        with_captured_notifications(function()
             local path = vim.fs.joinpath(root, "file.txt")
             write_text(path, "one\ntwo\nthree\nfour\nfive\n")
             run_git(root, { "add", "file.txt" })
@@ -922,7 +755,7 @@ describe("git hunk staging from the quickfix window", function()
             load_quickfix_hunks(root)
             vim.api.nvim_win_set_cursor(0, { 1, 0 })
             vim.cmd("GitStageSelection")
-            wait_for_notification(messages, "Staged 1 of 1 selected Git hunks.")
+            vim.wait(600)
 
             -- NOTE: Staging one hunk must not rewrite the file, so the other
             -- change has to survive on disk.

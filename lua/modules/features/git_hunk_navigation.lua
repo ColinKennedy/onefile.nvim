@@ -947,19 +947,15 @@ end
 
 --- Get the quickfix title to show for `repository`.
 ---
---- The `Git: ` prefix says where the list came from. A bare path looks like any
---- other quickfix list, so it is impossible to tell Git hunks apart from, say, a
---- search whose results happen to sit under the same directory.
----
 --- `:~` collapses the home directory to `~` and leaves paths outside it alone,
 --- which keeps the title short without hiding where the repository is. `:.`
 --- is deliberately not used because it would shorten the repository root to `.`
 --- whenever the current directory already is that root.
 ---
 ---@param repository string The repository root.
----@return string # The labelled, shortened repository root.
-function M._get_quickfix_title(repository)
-    return "Git: " .. (vim.fn.fnamemodify(repository, ":~"):gsub("\\", "/"))
+---@return string # The shortened repository root.
+function M.get_quickfix_title(repository)
+    return vim.fn.fnamemodify(repository, ":~")
 end
 
 --- Load repository hunks into the cache and quickfix list.
@@ -987,13 +983,15 @@ function _P.load_quickfix(arguments)
 
             local title = M._get_quickfix_title(repository)
 
+            local title = M.get_quickfix_title(repository)
+
             if not repository_state or #repository_state.entries == 0 then
                 vim.fn.setqflist({}, "r", { items = {}, title = title })
 
                 return
             end
 
-            vim.fn.setqflist(M.to_quickfix(repository), "r")
+            vim.fn.setqflist({}, "r", { items = M.to_quickfix(repository), title = title })
             require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
                 vim.cmd.copen()
             end)

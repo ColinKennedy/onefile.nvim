@@ -186,8 +186,7 @@ local function _get_action_details(action, buffer, details, callback)
 end
 
 ---@class _my.git_hunks.ApplyOptions
----@field callback? fun(success: boolean, message: string?): nil Called once the action finishes.
----@field keep_navigation_cache? boolean If `true`, the caller updates the navigation cache itself.
+---@field callback fun(success: boolean, message: string?): nil? Called once the action finishes.
 ---@field quiet boolean? If `true`, report nothing. The caller summarizes instead.
 
 --- Run a hunk operation using already-resolved texts and range.
@@ -240,7 +239,7 @@ local function _apply_selection_from_details(action, buffer, data, diff, start_l
 
         _set_buffer_text(buffer, checkout_text)
         _report_success()
-        _refresh_git_views(buffer, options.keep_navigation_cache)
+        _refresh_git_views(buffer)
         callback(true, nil)
 
         return
@@ -268,7 +267,7 @@ local function _apply_selection_from_details(action, buffer, data, diff, start_l
                 end
 
                 _report_success()
-                _refresh_git_views(buffer, options.keep_navigation_cache)
+                _refresh_git_views(buffer)
                 callback(true, nil)
             end)
         end
@@ -554,26 +553,17 @@ function _P.is_quickfix_buffer()
     return vim.bo.buftype == "quickfix"
 end
 
---- Check whether `window` shows a location list rather than the quickfix list.
+--- Get the entries shown in the current quickfix or location list buffer.
 ---
 --- Location lists share the `quickfix` buftype but hold their own entries, so
---- the window decides which list to read and write.
+--- the window decides which list to read.
 ---
----@param window integer The window to inspect.
----@return boolean # If `true`, `window` shows a location list.
-local function _is_location_list(window)
+---@return table[] # The listed entries.
+local function _get_quickfix_items()
+    local window = vim.api.nvim_get_current_win()
     local info = vim.fn.getwininfo(window)[1]
 
-    return info ~= nil and info.loclist == 1
-end
-
---- Get the entries listed in `window`.
----
----@param window integer The window to read from.
----@param is_loclist boolean If `true`, read that window's location list.
----@return vim.quickfix.entry[] # The listed entries.
-local function _get_quickfix_items(window, is_loclist)
-    if is_loclist then
+    if info and info.loclist == 1 then
         return vim.fn.getloclist(window)
     end
 
@@ -583,24 +573,21 @@ end
 ---@class _my.git_hunks.QuickfixTarget
 ---@field buffer integer The buffer holding the hunk.
 ---@field lnum integer The hunk's line within that buffer.
----@field rows integer[] The list rows that named this hunk.
 
 --- Collect the unique hunks named by a range of quickfix rows.
 ---
----@param window integer The window holding the list.
----@param is_loclist boolean If `true`, read that window's location list.
 ---@param start_row integer The first selected quickfix row.
 ---@param end_row integer The last selected quickfix row.
----@return _my.git_hunks.QuickfixTarget[] # The referenced hunks, highest line first per file.
-local function _get_quickfix_targets(window, is_loclist, start_row, end_row)
+---@return _my.git_hunks.QuickfixTarget[] # The referenced hunks, in row order.
+local function _get_quickfix_targets(start_row, end_row)
     if start_row > end_row then
         start_row, end_row = end_row, start_row
     end
 
-    local items = _get_quickfix_items(window, is_loclist)
+    local items = _get_quickfix_items()
     ---@type _my.git_hunks.QuickfixTarget[]
     local targets = {}
-    ---@type table<string, _my.git_hunks.QuickfixTarget>
+    ---@type table<string, boolean>
     local seen = {}
 
     for row = start_row, end_row do
@@ -608,87 +595,15 @@ local function _get_quickfix_targets(window, is_loclist, start_row, end_row)
 
         if item and item.bufnr and item.bufnr ~= 0 and item.lnum and item.lnum > 0 then
             local key = string.format("%s:%s", item.bufnr, item.lnum)
-            local target = seen[key]
 
-            if not target then
-                target = { buffer = item.bufnr, lnum = item.lnum, rows = {} }
-                seen[key] = target
-                table.insert(targets, target)
+            if not seen[key] then
+                seen[key] = true
+                table.insert(targets, { buffer = item.bufnr, lnum = item.lnum })
             end
-
-            table.insert(target.rows, row)
         end
     end
-
-    -- NOTE: Checking out a hunk rewrites the buffer, which shifts every line
-    -- below it. Taking the highest line in each file first keeps the recorded
-    -- lines of the hunks still queued for that file correct. Staging and
-    -- resetting never touch the buffer, so the order is harmless for them.
-    table.sort(targets, function(left, right)
-        if left.buffer ~= right.buffer then
-            return left.buffer < right.buffer
-        end
-
-        return left.lnum > right.lnum
-    end)
 
     return targets
-end
-
---- Drop entries naming `removed` hunks from the list shown in `window`.
----
---- Rows are matched by their position in the list, not by buffer and line.
---- Neovim tracks the entries of a loaded buffer with extmarks, so checking out
---- one hunk shifts the recorded lines of that file's remaining rows and they no
---- longer match the lines that `_get_quickfix_targets` captured.
----
---- CAVEAT: Only the checked-out rows are dropped. A file whose buffer is not
---- loaded gets no extmark tracking, so the rows still listing its other hunks
---- keep their original line numbers and will be stale until `:LoadGitDiff`
---- rebuilds the list.
----
----@param window integer The window holding the list.
----@param is_loclist boolean If `true`, rewrite that window's location list.
----@param removed _my.git_hunks.QuickfixTarget[] The hunks that no longer exist.
-local function _remove_quickfix_entries(window, is_loclist, removed)
-    if #removed == 0 or not vim.api.nvim_win_is_valid(window) then
-        return
-    end
-
-    ---@type table<integer, boolean>
-    local dropped = {}
-
-    for _, target in ipairs(removed) do
-        for _, row in ipairs(target.rows) do
-            dropped[row] = true
-        end
-    end
-
-    local items = _get_quickfix_items(window, is_loclist)
-    ---@type vim.quickfix.entry[]
-    local kept = {}
-
-    for row, item in ipairs(items) do
-        if not dropped[row] then
-            table.insert(kept, item)
-        end
-    end
-
-    if #kept == #items then
-        return
-    end
-
-    -- NOTE: Replacing the items would otherwise discard the repository title
-    -- that `:LoadGitDiff` set.
-    local title = is_loclist and vim.fn.getloclist(window, { title = 0 }).title or vim.fn.getqflist({ title = 0 }).title
-
-    if is_loclist then
-        vim.fn.setloclist(window, {}, "r", { items = kept, title = title })
-
-        return
-    end
-
-    vim.fn.setqflist({}, "r", { items = kept, title = title })
 end
 
 --- Run `action` on the single hunk that `target` names.
@@ -783,9 +698,7 @@ local _ACTION_LABELS = {
 ---@param start_row integer The first selected quickfix row.
 ---@param end_row integer The last selected quickfix row.
 function _P.apply_quickfix_selection(action, start_row, end_row)
-    local window = vim.api.nvim_get_current_win()
-    local is_loclist = _is_location_list(window)
-    local targets = _get_quickfix_targets(window, is_loclist, start_row, end_row)
+    local targets = _get_quickfix_targets(start_row, end_row)
 
     if #targets == 0 then
         vim.notify("No Git hunks were selected.", vim.log.levels.INFO)
@@ -794,8 +707,7 @@ function _P.apply_quickfix_selection(action, start_row, end_row)
     end
 
     local index = 1
-    ---@type _my.git_hunks.QuickfixTarget[]
-    local applied = {}
+    local applied = 0
     ---@type string[]
     local failures = {}
 
@@ -805,15 +717,9 @@ function _P.apply_quickfix_selection(action, start_row, end_row)
         index = index + 1
 
         if not target then
-            if #applied > 0 then
-                -- NOTE: Only a checkout takes the hunk back out of the buffer.
-                -- Staged and reset hunks are still present, so their rows stay.
-                if action == "checkout" then
-                    _remove_quickfix_entries(window, is_loclist, applied)
-                end
-
+            if applied > 0 then
                 vim.notify(
-                    string.format("%s %s of %s selected Git hunks.", _ACTION_LABELS[action], #applied, #targets),
+                    string.format("%s %s of %s selected Git hunks.", _ACTION_LABELS[action], applied, #targets),
                     vim.log.levels.INFO
                 )
             end
@@ -829,7 +735,7 @@ function _P.apply_quickfix_selection(action, start_row, end_row)
 
         _apply_quickfix_target(action, target, function(success, message)
             if success then
-                table.insert(applied, target)
+                applied = applied + 1
             else
                 table.insert(failures, message or "unknown error")
             end
@@ -958,9 +864,19 @@ end
 
 --- Stage a ranged Git hunk selection.
 ---
+--- In a quickfix buffer the range counts listed rows rather than file lines, so
+--- each selected row stages the hunk it points at. Without a range Vim supplies
+--- the cursor row, which stages just the hunk under the cursor.
+---
 ---@param options _my.git_hunks.RangeCommandOptions The command range details.
 local function _stage_selection_command(options)
-    _apply_range_command("stage", options)
+    if _P.is_quickfix_buffer() then
+        _P.apply_quickfix_selection("stage", options.line1, options.line2)
+
+        return
+    end
+
+    _P.apply_selection("stage", options.line1, options.line2)
 end
 
 --- Reset a ranged Git hunk selection from the index.
@@ -995,7 +911,14 @@ vim.api.nvim_create_user_command("GitCheckoutSelection", _checkout_selection_com
 vim.keymap.set("x", "<leader>gah", ":GitStageSelection<CR>", { desc = "Stage selected Git hunk lines." })
 
 vim.keymap.set("n", "<leader>gah", function()
-    _apply_cursor_hunk("stage")
+    if _P.is_quickfix_buffer() then
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        _P.apply_quickfix_selection("stage", row, row)
+
+        return
+    end
+
+    _P.apply_closest_hunk("stage")
 end, { desc = "Stage closest Git hunk." })
 
 vim.keymap.set("x", "<leader>grh", ":GitResetSelection<CR>", {

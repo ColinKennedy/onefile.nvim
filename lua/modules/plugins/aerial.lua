@@ -1108,26 +1108,6 @@ end
 function M._get_refresh_debounce_ms(source_buffer)
     local core_helpers = require("modules.utilities.core_helpers")
     local filetype = vim.bo[source_buffer].filetype
-    local language = core_helpers.FILETYPE_TO_TREESITTER[filetype] or filetype
-
-    if
-        language ~= ""
-        and _get_treesitter_query(language) ~= nil
-        and _has_treesitter_parser(source_buffer, language)
-    then
-        return _TREESITTER_REFRESH_DEBOUNCE_MS
-    end
-
-    return _FALLBACK_REFRESH_DEBOUNCE_MS
-end
-
---- Get the refresh debounce delay for `source_buffer`.
----
----@param source_buffer integer The source buffer whose outline will be refreshed.
----@return integer # The debounce delay in milliseconds.
-function M.get_refresh_debounce_ms(source_buffer)
-    local core_helpers = require("modules.utilities.core_helpers")
-    local filetype = vim.bo[source_buffer].filetype
     local language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
 
     if
@@ -1161,7 +1141,7 @@ function _P.schedule_refresh_source_buffer(source_buffer)
         state.refresh_timer:stop()
     end
 
-    state.refresh_timer:start(M.get_refresh_debounce_ms(source_buffer), 0, function()
+    state.refresh_timer:start(M._get_refresh_debounce_ms(source_buffer), 0, function()
         vim.schedule(function()
             local current = _STATE_BY_SOURCE_BUFFER[source_buffer]
 
@@ -1595,7 +1575,7 @@ end
 ---@param entries _my.aerial.SessionEntry[] The session sidebars to restore.
 function M.restore_session(entries)
     local previous_window = vim.api.nvim_get_current_win()
-    local stale_entries = M.get_stale_session_entries()
+    local stale_entries = M._get_stale_session_entries()
 
     -- The placeholders in the freshly sourced Session.vim describe the
     -- current layout. Prefer them over a sidecar that may be older.
@@ -1722,7 +1702,7 @@ function _P.setup()
                         _SOURCE_BUFFER_BY_AERIAL_BUFFER[state.aerial_buffer] = replacement_buffer
                         vim.b[state.aerial_buffer].aerial_source_buffer = replacement_buffer
                         _rename_aerial_buffer(state.aerial_buffer, replacement_buffer)
-                        M.refresh_source_buffer(replacement_buffer)
+                        _P.refresh_source_buffer(replacement_buffer)
 
                         return
                     end
@@ -1737,7 +1717,7 @@ function _P.setup()
 
     local core_editor_setup = require("modules.features.core_editor_setup")
 
-    core_editor_setup.SESSION_MANAGER:register_session_write_pre_callback(".aerial.lua", function()
+    core_editor_setup._SESSION_MANAGER:register_session_write_pre_callback(".aerial.lua", function()
         local code = M._serialize_session_restore()
 
         if code == "" then

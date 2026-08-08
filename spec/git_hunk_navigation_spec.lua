@@ -174,7 +174,7 @@ local function load_quickfix_from(root, directory)
         vim.cmd("silent enew!")
         vim.cmd("LoadGitDiff")
         vim.wait(1000, function()
-            return git_hunk_navigation.get_repository_state(root) ~= nil and has_quickfix_window()
+            return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
         end)
 
         items = vim.fn.getqflist()
@@ -480,7 +480,7 @@ index 2222222..3333333 100644
             local ok, err = pcall(function()
                 with_cwd(root, function()
                     vim.cmd("LoadGitDiff")
-                    vim.wait(10000, function()
+                    vim.wait(1000, function()
                         return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
                     end)
 
@@ -503,17 +503,17 @@ index 2222222..3333333 100644
 
         assert.equal(
             "Git: " .. vim.fs.joinpath("~", "repositories/example"),
-            git_hunk_navigation.get_quickfix_title(vim.fs.joinpath(home, "repositories/example"))
+            git_hunk_navigation._get_quickfix_title(vim.fs.joinpath(home, "repositories/example"))
         )
 
         -- NOTE: The home directory itself collapses to a bare `~`.
-        assert.equal("Git: ~", git_hunk_navigation.get_quickfix_title(home))
+        assert.equal("Git: ~", git_hunk_navigation._get_quickfix_title(home))
     end)
 
     it("leaves a repository root outside the home directory unshortened", function()
         -- NOTE: `:~` only rewrites paths under the home directory, so a repository
         -- somewhere else keeps its full path rather than being mangled.
-        assert.equal("Git: /opt/example/repository", git_hunk_navigation.get_quickfix_title("/opt/example/repository"))
+        assert.equal("Git: /opt/example/repository", git_hunk_navigation._get_quickfix_title("/opt/example/repository"))
     end)
 
     it("titles the quickfix list with the shortened repository root", function()
@@ -526,7 +526,7 @@ index 2222222..3333333 100644
             local ok, err = pcall(function()
                 load_quickfix_from(root, root)
 
-                assert.equal(git_hunk_navigation.get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
+                assert.equal(git_hunk_navigation._get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
             end)
 
             remove_tree(root)
@@ -549,7 +549,7 @@ index 2222222..3333333 100644
                 load_quickfix_from(root, root)
 
                 assert.equal(0, #vim.fn.getqflist())
-                assert.equal(git_hunk_navigation.get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
+                assert.equal(git_hunk_navigation._get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
             end)
 
             remove_tree(root)
@@ -663,7 +663,7 @@ index 2222222..3333333 100644
                     vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "file.txt")))
                     assert.True(load_hunks())
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(1, #repository_state.entries)
                     assert.equal("KEEP ME", repository_state.entries[1].text)
                 end)
@@ -689,7 +689,7 @@ index 2222222..3333333 100644
                     vim.api.nvim_buf_set_lines(0, 1, 2, false, { "    unsaved text" })
                     assert.True(load_hunks())
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(1, #repository_state.entries)
                     assert.equal("unsaved text", repository_state.entries[1].text)
                 end)

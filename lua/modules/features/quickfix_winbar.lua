@@ -50,7 +50,7 @@ end
 --- Show the quickfix title in the winbar of `window`, if it is a quickfix window.
 ---
 ---@param window integer The window to modify.
-function M.sync_quickfix_winbar(window)
+function _P.sync_quickfix_winbar(window)
     if not M.is_quickfix_window(window) then
         return
     end
@@ -70,7 +70,7 @@ vim.api.nvim_create_autocmd({ "BufWinEnter", "FileType", "WinEnter" }, {
             return
         end
 
-        M.sync_quickfix_winbar(window)
+        _P.sync_quickfix_winbar(window)
     end,
 })
 

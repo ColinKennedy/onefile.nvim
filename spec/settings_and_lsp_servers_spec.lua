@@ -5,7 +5,7 @@ describe("settings and LSP servers", function()
         local configured = {}
         local enabled = {}
 
-        settings_and_lsp_servers.configure_lsp_servers(function(name, config)
+        settings_and_lsp_servers._configure_lsp_servers(function(name, config)
             configured[name] = config
         end, function(name)
             table.insert(enabled, name)

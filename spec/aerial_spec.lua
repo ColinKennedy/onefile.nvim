@@ -455,7 +455,7 @@ describe("modules.plugins.aerial", function()
             "",
         })
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_buffer = vim.api.nvim_get_current_buf()
 
         assert.are.same({ "Nothing found. Define a class or function." }, get_lines(aerial_buffer))
@@ -614,12 +614,12 @@ describe("modules.plugins.aerial", function()
 
         assert.is_truthy(table.concat(get_lines(followed_aerial_buffer), "\n"):find("thing", 1, true))
 
-        local code = aerial.serialize_session_restore()
+        local code = aerial._serialize_session_restore()
 
         assert.is_truthy(code:find(second_path, 1, true))
         assert.is_nil(code:find(first_path, 1, true))
 
-        aerial.close_all()
+        aerial._close_all()
         vim.cmd("silent edit " .. vim.fn.fnameescape(second_path))
         vim.api.nvim_set_current_win(source_window)
         loadstring(code)()
@@ -822,7 +822,7 @@ describe("modules.plugins.aerial", function()
 
         vim.bo[source_buffer].filetype = ""
 
-        assert.equal(350, aerial.get_refresh_debounce_ms(source_buffer))
+        assert.equal(350, aerial._get_refresh_debounce_ms(source_buffer))
     end)
 
     it("follows the original source window when it switches buffers", function()

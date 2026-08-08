@@ -3,6 +3,7 @@
 local core_helpers = require("modules.utilities.core_helpers")
 
 local M = {}
+local _P = {}
 
 ---@class _my.python_docstring_folds.Range
 ---@field first integer 1-indexed start line.
@@ -106,7 +107,7 @@ end
 ---@field filetypes string[]?
 
 ---@param options _my.python_docstring_folds.Options?
-function M.setup(options)
+function _P.setup(options)
     if not options or not options.filetypes then
         return
     end
@@ -120,7 +121,7 @@ end
 
 ---@param buffer integer
 ---@return boolean
-function M.is_enabled_filetype(buffer)
+function _P.is_enabled_filetype(buffer)
     return _ALLOWED_FILETYPES[vim.bo[buffer].filetype] == true
 end
 
@@ -141,18 +142,18 @@ end
 
 ---@param buffer integer?
 ---@param should_refresh boolean?
-function M.apply_to_current_window(buffer, should_refresh)
+function _P.apply_to_current_window(buffer, should_refresh)
     buffer = buffer or vim.api.nvim_get_current_buf()
 
     if not vim.api.nvim_buf_is_valid(buffer) then
         return
     end
 
-    if M.is_enabled_filetype(buffer) then
+    if _P.is_enabled_filetype(buffer) then
         _install_for_current_window()
 
         if should_refresh then
-            M.refresh(buffer)
+            M._refresh(buffer)
         end
     else
         _uninstall_from_current_window()
@@ -180,7 +181,7 @@ end
 
 ---@param buffer integer
 ---@return _my.python_docstring_folds.Range[]?
-function M.get_treesitter_docstring_ranges(buffer)
+function _P.get_treesitter_docstring_ranges(buffer)
     if not core_helpers.has_treesitter_parser("python") then
         return nil
     end
@@ -329,7 +330,7 @@ end
 
 ---@param lines string[]
 ---@return _my.python_docstring_folds.Range[]
-function M.get_fallback_docstring_ranges(lines)
+function M._get_fallback_docstring_ranges(lines)
     ---@type _my.python_docstring_folds.Range[]
     local ranges = {}
 
@@ -365,21 +366,21 @@ end
 
 ---@param buffer integer
 ---@return _my.python_docstring_folds.Range[]
-function M.get_docstring_ranges(buffer)
-    local ranges = M.get_treesitter_docstring_ranges(buffer)
+function _P.get_docstring_ranges(buffer)
+    local ranges = _P.get_treesitter_docstring_ranges(buffer)
 
     if ranges then
         return ranges
     end
 
-    return M.get_fallback_docstring_ranges(vim.api.nvim_buf_get_lines(buffer, 0, -1, false))
+    return M._get_fallback_docstring_ranges(vim.api.nvim_buf_get_lines(buffer, 0, -1, false))
 end
 
 ---@param buffer integer?
-function M.refresh(buffer)
+function M._refresh(buffer)
     buffer = buffer or vim.api.nvim_get_current_buf()
 
-    if not vim.api.nvim_buf_is_valid(buffer) or not M.is_enabled_filetype(buffer) then
+    if not vim.api.nvim_buf_is_valid(buffer) or not _P.is_enabled_filetype(buffer) then
         return
     end
 
@@ -389,7 +390,7 @@ function M.refresh(buffer)
         local view = vim.fn.winsaveview()
         local cursor = vim.api.nvim_win_get_cursor(0)
 
-        _save_ranges_to_cache(buffer, M.get_docstring_ranges(buffer))
+        _save_ranges_to_cache(buffer, _P.get_docstring_ranges(buffer))
 
         if _is_insert_like_mode() then
             return
@@ -404,7 +405,7 @@ end
 
 ---@param buffer integer?
 ---@param delay integer?
-function M.schedule_refresh(buffer, delay)
+function M._schedule_refresh(buffer, delay)
     buffer = buffer or vim.api.nvim_get_current_buf()
     delay = delay or 500
 
@@ -422,7 +423,7 @@ function M.schedule_refresh(buffer, delay)
                 _REFRESH_TIMERS[buffer]:stop()
             end
 
-            M.refresh(buffer)
+            M._refresh(buffer)
         end)
     )
 end
@@ -432,7 +433,7 @@ end
 function M.foldexpr(lnum)
     local buffer = vim.api.nvim_get_current_buf()
 
-    if not M.is_enabled_filetype(buffer) then
+    if not _P.is_enabled_filetype(buffer) then
         return 0
     end
 
@@ -453,7 +454,7 @@ end
 ---@param first_line integer
 ---@param last_line integer
 ---@return string
-function M.get_summary(buffer, first_line, last_line)
+function M._get_summary(buffer, first_line, last_line)
     local lines = vim.api.nvim_buf_get_lines(buffer, first_line - 1, last_line, false)
 
     for _, line in ipairs(lines) do
@@ -482,7 +483,7 @@ end
 function M.foldtext()
     local buffer = vim.api.nvim_get_current_buf()
 
-    if not M.is_enabled_filetype(buffer) then
+    if not _P.is_enabled_filetype(buffer) then
         return vim.fn.foldtext()
     end
 
@@ -493,7 +494,7 @@ function M.foldtext()
     local suffix = string.format("[%d lines]>", line_count)
     local prefix = indent .. "<"
     local summary_width = math.max(1, _FOLD_TEXT_WIDTH - #prefix - #suffix - 1)
-    local summary = _truncate(M.get_summary(buffer, first_line, last_line), summary_width)
+    local summary = _truncate(M._get_summary(buffer, first_line, last_line), summary_width)
     local dot_count = math.max(1, _FOLD_TEXT_WIDTH - #prefix - #summary - #suffix)
 
     return prefix .. summary .. string.rep("·", dot_count) .. suffix
@@ -503,36 +504,36 @@ vim.api.nvim_create_autocmd("FileType", {
     group = _AUGROUP,
     pattern = "*",
     callback = function(event)
-        M.apply_to_current_window(event.buf, true)
+        _P.apply_to_current_window(event.buf, true)
     end,
 })
 
 vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
     group = _AUGROUP,
     callback = function(event)
-        M.apply_to_current_window(event.buf)
+        _P.apply_to_current_window(event.buf)
     end,
 })
 
 vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "InsertLeave", "BufWritePost" }, {
     group = _AUGROUP,
     callback = function(event)
-        if not M.is_enabled_filetype(event.buf) then
+        if not _P.is_enabled_filetype(event.buf) then
             return
         end
 
-        M.schedule_refresh(event.buf, 500)
+        M._schedule_refresh(event.buf, 500)
     end,
 })
 
 vim.api.nvim_create_autocmd("FileChangedShellPost", {
     group = _AUGROUP,
     callback = function(event)
-        if not M.is_enabled_filetype(event.buf) then
+        if not _P.is_enabled_filetype(event.buf) then
             return
         end
 
-        M.refresh(event.buf)
+        M._refresh(event.buf)
     end,
 })
 

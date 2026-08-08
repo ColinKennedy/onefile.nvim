@@ -1,20 +1,21 @@
 --- Turn an AI question list plus rough answers into a formatted response.
 
 local M = {}
+local _P = {}
 
 ---@class _my.ai_question_response.Link
 ---@field source_tab integer
 ---@field source_buf integer
 
 ---@type table<integer, integer>
-M.original_buffers_by_tab = {}
+M._original_buffers_by_tab = {}
 
 ---@type table<integer, _my.ai_question_response.Link>
-M.answer_links_by_buf = {}
+M._answer_links_by_buf = {}
 
-M.command_environment_variable = "NEOVIM_AI_QUESTION_RESPONSE_COMMAND"
+M._command_environment_variable = "NEOVIM_AI_QUESTION_RESPONSE_COMMAND"
 
-M.answer_sheet_hint = "<!-- This is the answer sheet, write your responses here-->"
+M._answer_sheet_hint = "<!-- This is the answer sheet, write your responses here-->"
 
 local INSTRUCTION = table.concat({
     "Here is a structured list of questions from an AI and an unstructured,",
@@ -30,7 +31,7 @@ local INSTRUCTION = table.concat({
 ---
 ---@param buffer integer
 ---@return string
-function M.get_buffer_text(buffer)
+function _P.get_buffer_text(buffer)
     return table.concat(vim.api.nvim_buf_get_lines(buffer, 0, -1, false), "\n")
 end
 
@@ -38,10 +39,10 @@ end
 ---
 ---@param buffer integer
 ---@return string
-function M.get_answer_text(buffer)
+function _P.get_answer_text(buffer)
     local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
 
-    if lines[1] == M.answer_sheet_hint then
+    if lines[1] == M._answer_sheet_hint then
         table.remove(lines, 1)
     end
 
@@ -57,7 +58,7 @@ end
 ---@param questions string
 ---@param answers string
 ---@return string
-function M.build_prompt(questions, answers)
+function _P.build_prompt(questions, answers)
     return table.concat({
         INSTRUCTION,
         "",
@@ -74,8 +75,8 @@ end
 ---Return the argv used to run the AI formatter.
 ---
 ---@return string[]
-function M.get_formatter_command()
-    local command = vim.env[M.command_environment_variable]
+function M._get_formatter_command()
+    local command = vim.env[M._command_environment_variable]
 
     if command and command ~= "" then
         return { vim.o.shell, vim.o.shellcmdflag, command }
@@ -87,30 +88,30 @@ end
 ---Check whether the fallback formatter is available.
 ---
 ---@return boolean # If the fallback formatter is available, return `true`.
-function M.is_fallback_formatter_available()
+function _P.is_fallback_formatter_available()
     return vim.fn.executable("claude") == 1
 end
 
 ---Return whether the configured formatter can be started.
 ---
 ---@return boolean
-function M.can_start_formatter()
-    local command = vim.env[M.command_environment_variable]
+function _P.can_start_formatter()
+    local command = vim.env[M._command_environment_variable]
 
-    return command ~= nil and command ~= "" or M.is_fallback_formatter_available()
+    return command ~= nil and command ~= "" or _P.is_fallback_formatter_available()
 end
 
 ---Start an answer scratch buffer for the current buffer.
 ---
 ---@return integer # The answer buffer number.
-function M.start()
+function M._start()
     local source_tab = vim.fn.tabpagenr()
     local source_buf = vim.api.nvim_get_current_buf()
 
-    M.original_buffers_by_tab[source_tab] = source_buf
+    M._original_buffers_by_tab[source_tab] = source_buf
 
     local answer_buf = vim.api.nvim_create_buf(false, true)
-    M.answer_links_by_buf[answer_buf] = {
+    M._answer_links_by_buf[answer_buf] = {
         source_tab = source_tab,
         source_buf = source_buf,
     }
@@ -120,7 +121,7 @@ function M.start()
     vim.bo[answer_buf].swapfile = false
     vim.bo[answer_buf].filetype = "markdown"
     vim.api.nvim_buf_set_name(answer_buf, "AI Question Responses")
-    vim.api.nvim_buf_set_lines(answer_buf, 0, -1, false, { M.answer_sheet_hint, "" })
+    vim.api.nvim_buf_set_lines(answer_buf, 0, -1, false, { M._answer_sheet_hint, "" })
 
     vim.cmd.tabnew()
     vim.api.nvim_set_current_buf(source_buf)
@@ -134,7 +135,7 @@ end
 ---
 ---@param buffer integer
 ---@param text string
-function M.replace_buffer_text(buffer, text)
+function _P.replace_buffer_text(buffer, text)
     local lines = vim.split(text:gsub("\r\n", "\n"):gsub("\r", "\n"), "\n", { plain = true })
 
     if #lines > 1 and lines[#lines] == "" then
@@ -148,10 +149,10 @@ end
 ---
 ---@param answer_buf? integer
 ---@return boolean # If submission started, return `true`.
-function M.submit(answer_buf)
+function M._submit(answer_buf)
     answer_buf = answer_buf or vim.api.nvim_get_current_buf()
 
-    local link = M.answer_links_by_buf[answer_buf]
+    local link = M._answer_links_by_buf[answer_buf]
     if not link then
         return false
     end
@@ -161,17 +162,17 @@ function M.submit(answer_buf)
         return false
     end
 
-    if not M.can_start_formatter() then
+    if not _P.can_start_formatter() then
         vim.notify("Cannot format answers because `claude -p` is not available.", vim.log.levels.ERROR)
         return false
     end
 
-    local answers = M.get_answer_text(answer_buf)
-    local questions = M.get_buffer_text(link.source_buf)
-    local prompt = M.build_prompt(questions, answers)
-    local command = M.get_formatter_command()
+    local answers = _P.get_answer_text(answer_buf)
+    local questions = _P.get_buffer_text(link.source_buf)
+    local prompt = _P.build_prompt(questions, answers)
+    local command = M._get_formatter_command()
 
-    M.answer_links_by_buf[answer_buf] = nil
+    M._answer_links_by_buf[answer_buf] = nil
 
     if vim.api.nvim_get_current_buf() == answer_buf then
         pcall(function()
@@ -197,7 +198,7 @@ function M.submit(answer_buf)
                 return
             end
 
-            M.replace_buffer_text(link.source_buf, result.stdout or "")
+            _P.replace_buffer_text(link.source_buf, result.stdout or "")
             vim.notify("Formatting succeeded.", vim.log.levels.INFO)
         end)
     end)
@@ -208,18 +209,18 @@ end
 ---Start an answer buffer, or submit the current answer buffer.
 ---
 ---@return boolean # If the mapping handled the current buffer, return `true`.
-function M.toggle()
+function M._toggle()
     local current_buf = vim.api.nvim_get_current_buf()
 
-    if M.answer_links_by_buf[current_buf] then
-        return M.submit(current_buf)
+    if M._answer_links_by_buf[current_buf] then
+        return M._submit(current_buf)
     end
 
-    M.start()
+    M._start()
     return true
 end
 
-vim.keymap.set("n", "<leader>aa", M.toggle, {
+vim.keymap.set("n", "<leader>aa", M._toggle, {
     desc = "[a]sk [a]i questions in a scratch buffer, then add the responses to the current buffer.",
 })
 

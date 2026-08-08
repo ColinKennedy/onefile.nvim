@@ -50,6 +50,7 @@ local _P = {}
 ---@field auto_fetch_interval integer
 ---@field git_status_timeout integer
 
+---@type _my.git_status.Options
 _P.opts = {
     auto_fetch_interval = 30000,
     git_status_timeout = 1000,

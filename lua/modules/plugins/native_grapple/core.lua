@@ -146,7 +146,7 @@ end
 function _P.get_marks_path(root, branch)
     local core_helpers = require("modules.utilities.core_helpers")
 
-    return vim.fs.joinpath(root, core_helpers.SESSIONS_DIRECTORY_NAME, branch, _P.MARKS_FILE_NAME)
+    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, _P.MARKS_FILE_NAME)
 end
 
 --- Close one watched Git HEAD file.
@@ -273,7 +273,7 @@ end
 --- Delete every native grapple bookmark mark.
 function M._delete_all_bookmarks()
     for index = _P.BOOKMARK_MINIMUM, _P.BOOKMARK_MAXIMUM do
-        _P.clear_bookmark_mark(index)
+        _P.delete_bookmark(index)
     end
 end
 
@@ -297,7 +297,6 @@ end
 ---@param line integer?
 ---@param column integer?
 function _P.reset_bookmark(mark, buffer, line, column)
-    ---@type integer
     local buffer_number
 
     if type(buffer) == "number" then
@@ -310,6 +309,25 @@ function _P.reset_bookmark(mark, buffer, line, column)
 
     vim.fn.bufload(buffer_number)
     vim.api.nvim_buf_set_mark(buffer_number, mark, line or 1, column or 0, {})
+end
+
+--- Mark the current buffer as the next available bookmark.
+function _P.mark_current_buffer_as_next_bookmark()
+    local maximum
+
+    for index = _P.BOOKMARK_MINIMUM, _P.BOOKMARK_MAXIMUM do
+        if _P.is_mark_defined(M.get_mark_from_index(index)) then
+            maximum = index
+        end
+    end
+
+    local next_index = 1
+
+    if maximum then
+        next_index = (maximum % _P.BOOKMARK_MAXIMUM) + 1
+    end
+
+    M.mark_current_buffer_as_bookmark(M.get_mark_from_index(next_index))
 end
 
 ---@param offset integer The number of bookmarks to jump.
@@ -671,6 +689,11 @@ end
 ---@return string? # The current storage root.
 function M.get_current_root()
     return _STATE.root
+end
+
+---@return string? # The current branch or non-Git namespace.
+function _P.get_current_branch()
+    return _STATE.branch
 end
 
 --- Reset native grapple state for focused tests.

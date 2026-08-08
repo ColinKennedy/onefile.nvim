@@ -679,7 +679,9 @@ function M.mark_stale_for_buffer(buffer)
     end
 
     for repository in pairs(_STATE.repositories) do
-        if _get_relative_path_from_repository(repository, path) then
+        local repository_prefix = vim.fn.fnamemodify(repository, ":p")
+
+        if path:sub(1, #repository_prefix) == repository_prefix then
             _P.mark_stale(repository)
         end
     end
@@ -958,7 +960,7 @@ end
 ---
 ---@param repository string The repository root.
 ---@return string # The labelled, shortened repository root.
-function M.get_quickfix_title(repository)
+function M._get_quickfix_title(repository)
     return "Git: " .. vim.fn.fnamemodify(repository, ":~")
 end
 
@@ -987,15 +989,13 @@ function _P.load_quickfix(arguments)
 
             local title = M._get_quickfix_title(repository)
 
-            local title = M.get_quickfix_title(repository)
-
             if not repository_state or #repository_state.entries == 0 then
                 vim.fn.setqflist({}, "r", { items = {}, title = title })
 
                 return
             end
 
-            vim.fn.setqflist({}, "r", { items = M.to_quickfix(repository), title = title })
+            vim.fn.setqflist({}, "r", { items = _P.to_quickfix(repository), title = title })
             require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
                 vim.cmd.copen()
             end)

@@ -406,7 +406,9 @@ function _P.restore_window_layout(layout, total_lines)
     -- Already back at the original height (the in-editor split fallback, or the
     -- tmux resize has already settled): restore now, no need to watch for more.
     if vim.o.lines >= total_lines then
-        pcall(vim.cmd, layout)
+        pcall(function()
+            vim.cmd(layout)
+        end)
 
         return
     end
@@ -421,7 +423,9 @@ function _P.restore_window_layout(layout, total_lines)
                 return
             end
 
-            pcall(vim.cmd, layout)
+            pcall(function()
+                vim.cmd(layout)
+            end)
 
             if autocmd_id then
                 pcall(vim.api.nvim_del_autocmd, autocmd_id)

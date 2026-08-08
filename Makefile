@@ -1,4 +1,4 @@
-.PHONY: api-documentation download-dependencies llscheck luacheck stylua test
+.PHONY: api-documentation check-stylua download-dependencies llscheck luacheck privata stylua test
 
 # Git will error if the repository already exists. We ignore the error.
 # NOTE: We still print out that we did the clone to the user so that they know.
@@ -11,6 +11,10 @@ endif
 
 CONFIGURATION = .luarc.json
 ARGUMENTS ?=
+
+# Where the privata checkout lives. Override on the command line to point at a
+# different working copy: make privata PRIVATA=/path/to/privata
+PRIVATA ?= $(HOME)/repositories/privata
 
 download-dependencies:
 	git clone git@github.com:Bilal2453/luvit-meta.git .dependencies/luvit-meta $(IGNORE_EXISTING)
@@ -25,6 +29,9 @@ luacheck:
 
 check-stylua:
 	stylua init.lua lua spec --color always --check
+
+privata:
+	LUA_PATH="$(PRIVATA)/lua/?.lua;$(PRIVATA)/lua/?/init.lua;;" lua "$(PRIVATA)/bin/privata.lua" . $(ARGUMENTS)
 
 stylua:
 	stylua init.lua lua spec

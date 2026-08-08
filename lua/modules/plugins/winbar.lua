@@ -656,20 +656,19 @@ end
 ---@param row integer? The 1-or-more cursor row. Defaults to the window cursor.
 ---@return string[] # The indentation context from shallowest to deepest.
 function _P.get_indentation_scope_names(buffer, row)
-    row = row or vim.api.nvim_win_get_cursor(0)[1]
-    row = _find_nearest_nonblank_row(buffer, row)
+    local start_row = _find_nearest_nonblank_row(buffer, row or vim.api.nvim_win_get_cursor(0)[1])
 
-    if not row then
+    if not start_row then
         return {}
     end
 
-    local line = vim.api.nvim_buf_get_lines(buffer, row - 1, row, false)[1] or ""
+    local line = vim.api.nvim_buf_get_lines(buffer, start_row - 1, start_row, false)[1] or ""
     local tabstop = vim.bo[buffer].tabstop
     local maximum_indent = _P.get_line_indent(line, tabstop)
     ---@type string[]
     local names = {}
 
-    for index = row - 1, 1, -1 do
+    for index = start_row - 1, 1, -1 do
         line = vim.api.nvim_buf_get_lines(buffer, index - 1, index, false)[1] or ""
 
         if line:match("%S") then

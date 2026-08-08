@@ -76,6 +76,7 @@ end
 --- Change `p` into a text-object-aware operator and revert later.
 ---
 ---@param caller fun(type_: string): nil Some custom operatorfunc behavior.
+---@return fun(): string # A `expr=true` mapping that starts the operator.
 ---
 function _P.wrap_operatorfunc(caller)
     return function()

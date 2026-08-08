@@ -98,6 +98,15 @@ end
 
 --- Get `path` relative to `repository`, if `path` is inside it.
 ---
+--- CAVEAT: This compares the two paths as raw strings, which is unreliable on
+--- Windows. `git rev-parse --show-toplevel` always reports forward slashes
+--- (`C:/Users/...`) while `fnamemodify(..., ":p")` reports backslashes unless
+--- 'shellslash' is set, and drive letters can differ in case (`C:` vs `c:`).
+--- Either mismatch fails the prefix test, which silently disables the cached
+--- repository lookup and the unsaved-buffer hunk merge rather than erroring.
+--- Normalizing separators and case before comparing would fix it. This is
+--- untested on Windows.
+---
 ---@param repository string The repository root.
 ---@param path string The absolute file path.
 ---@return string? # The repository-relative path, if `path` is inside `repository`.

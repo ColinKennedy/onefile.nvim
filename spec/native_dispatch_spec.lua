@@ -157,6 +157,130 @@ describe("native dispatch", function()
         assert.equal("plain teardown log", quickfix.items[3].text)
     end)
 
+    it("keeps only the first of each run of repeated locations", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "lua/example.lua:7:3:found needle",
+            "lua/example.lua:7:3:found needle",
+            -- NOTE: A different message is still the same location.
+            "lua/example.lua:7:3:some other message",
+            "lua/example.lua:8:3:found needle",
+        })
+
+        local quickfix = vim.fn.getqflist({ items = true })
+
+        assert.equal(2, #quickfix.items)
+        assert.equal(7, quickfix.items[1].lnum)
+        assert.equal("found needle", quickfix.items[1].text)
+        assert.equal(8, quickfix.items[2].lnum)
+    end)
+
+    it("keeps a repeated location when it comes back later in the output", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "lua/example.lua:7:3:first report",
+            "lua/other.lua:2:1:something else",
+            "lua/example.lua:7:3:second report",
+        })
+
+        local quickfix = vim.fn.getqflist({ items = true })
+
+        assert.equal(3, #quickfix.items)
+        assert.equal("first report", quickfix.items[1].text)
+        assert.equal("something else", quickfix.items[2].text)
+        assert.equal("second report", quickfix.items[3].text)
+    end)
+
+    it("treats the same line in different files as different locations", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "lua/example.lua:7:3:found needle",
+            "lua/other.lua:7:3:found needle",
+        })
+
+        assert.equal(2, #vim.fn.getqflist())
+    end)
+
+    it("treats the same line in different columns as different locations", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "lua/example.lua:7:3:found needle",
+            "lua/example.lua:7:9:found needle",
+        })
+
+        assert.equal(2, #vim.fn.getqflist())
+    end)
+
+    it("never treats repeated unparsed output lines as duplicates", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "plain log",
+            "plain log",
+            "lua/example.lua:7:3:found needle",
+        })
+
+        local quickfix = vim.fn.getqflist({ items = true })
+
+        assert.equal(3, #quickfix.items)
+        assert.equal("plain log", quickfix.items[1].text)
+        assert.equal("plain log", quickfix.items[2].text)
+    end)
+
+    it("keeps every repeated location when allow-duplicates is set", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+            allow_duplicates = true,
+        }, {
+            "lua/example.lua:7:3:found needle",
+            "lua/example.lua:7:3:found needle",
+            "lua/example.lua:7:3:some other message",
+        })
+
+        assert.equal(3, #vim.fn.getqflist())
+    end)
+
+    it("parses allow-duplicates as a dispatch flag", function()
+        local options = assert(native_dispatch._P.parse_arguments("--allow-duplicates make test"))
+
+        assert.is_true(options.allow_duplicates)
+        assert.are.same({ "make", "test" }, options.command)
+    end)
+
+    it("removes duplicate locations by default", function()
+        local options = assert(native_dispatch._P.parse_arguments("make test"))
+
+        assert.is_false(options.allow_duplicates)
+    end)
+
     it("jumps to the first parsed quickfix item when requested", function()
         local path = vim.fn.tempname() .. ".lua"
 

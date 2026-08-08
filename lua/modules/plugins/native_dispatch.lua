@@ -13,6 +13,7 @@ local _MAXIMUM_TMUX_DISPLAY_HEIGHT = 15
 ---@field compiler string? The compiler to use while parsing output.
 ---@field display _my.dispatch.DisplayMode Whether to show command output while it runs.
 ---@field jump_first boolean? Whether to jump to the first parsed quickfix item.
+---@field allow_duplicates boolean? Whether to keep back-to-back repeats of one location.
 
 ---@class _my.dispatch.Defaults
 ---@field display _my.dispatch.DisplayMode Whether to show command output while it runs.
@@ -118,6 +119,7 @@ function _P.parse_arguments(arguments, defaults)
     local display = defaults.display
     local command_start = 1
     local jump_first = defaults.jump_first
+    local allow_duplicates = false
 
     for index, argument in ipairs(argv) do
         if argument:sub(1, 2) ~= "--" then
@@ -129,6 +131,8 @@ function _P.parse_arguments(arguments, defaults)
             jump_first = true
         elseif argument == "--no-jump-first" then
             jump_first = false
+        elseif argument == "--allow-duplicates" then
+            allow_duplicates = true
         elseif argument:sub(1, 11) == "--compiler=" then
             compiler = argument:sub(12)
         elseif argument:sub(1, 10) == "--display=" then
@@ -163,6 +167,7 @@ function _P.parse_arguments(arguments, defaults)
         compiler = compiler,
         display = display,
         jump_first = jump_first,
+        allow_duplicates = allow_duplicates,
     },
         nil
 end
@@ -229,6 +234,55 @@ function _P.lines_to_quickfix(lines)
     })
 
     return result.items or {}
+end
+
+--- Get the location that `item` points at, if it points at one at all.
+---
+--- Only entries that name a real file and line have a location. Unparsed output
+--- lines all share an empty location, so they report `nil` and are never treated
+--- as repeats of each other.
+---
+---@param item vim.quickfix.entry The quickfix entry to inspect.
+---@return string? # The `buffer:line:column` location, if `item` has one.
+function _P.get_entry_location(item)
+    local buffer = item.bufnr or 0
+    local line = item.lnum or 0
+
+    if item.valid ~= 1 or buffer == 0 or line == 0 then
+        return nil
+    end
+
+    return string.format("%d:%d:%d", buffer, line, item.col or 0)
+end
+
+--- Drop entries that repeat the location of the entry right before them.
+---
+--- Some tools report the same file, line, and column many times in a row. Only
+--- the first of each run is worth showing. The same location later in the output
+--- is kept because something else came between the two.
+---
+--- The entry text is deliberately ignored. Two reports of one location are
+--- repeats even when their messages differ.
+---
+---@param items vim.quickfix.entry[] The parsed quickfix entries.
+---@return vim.quickfix.entry[] # The entries, minus back-to-back repeats.
+function _P.remove_consecutive_duplicates(items)
+    ---@type vim.quickfix.entry[]
+    local output = {}
+    ---@type string?
+    local previous = nil
+
+    for _, item in ipairs(items) do
+        local location = _P.get_entry_location(item)
+
+        if location == nil or location ~= previous then
+            table.insert(output, item)
+        end
+
+        previous = location
+    end
+
+    return output
 end
 
 --- Open a Neovim scratch output split.
@@ -351,6 +405,7 @@ function _P.complete(_, line)
 
     if last:sub(1, 2) == "--" then
         return {
+            "--allow-duplicates",
             "--compiler=",
             "--display=always",
             "--display=never",
@@ -399,6 +454,10 @@ function _P.finish(options, lines, code)
 
     _P.with_compiler(options.compiler, function()
         items = _P.lines_to_quickfix(lines)
+
+        if not options.allow_duplicates then
+            items = _P.remove_consecutive_duplicates(items)
+        end
 
         for index, item in ipairs(items) do
             if item.valid == 1 then

@@ -72,6 +72,64 @@ describe("native dispatch", function()
         assert.are.same({ "rg", "needle" }, options.command)
     end)
 
+    it("makes :Dispatch quiet and jump-first by default", function()
+        local original_run = native_dispatch.run
+        ---@type _my.dispatch.Options?
+        local captured = nil
+
+        rawset(native_dispatch, "run", function(options)
+            captured = options
+        end)
+
+        native_dispatch.dispatch(make_command_args("make luacheck"))
+
+        rawset(native_dispatch, "run", original_run)
+
+        local options = assert(captured)
+
+        assert.equal("on_error", options.display)
+        assert.is_true(options.jump_first)
+        assert.are.same({ "make", "luacheck" }, options.command)
+    end)
+
+    it("lets explicit :Dispatch flags override the defaults", function()
+        local original_run = native_dispatch.run
+        ---@type _my.dispatch.Options?
+        local captured = nil
+
+        rawset(native_dispatch, "run", function(options)
+            captured = options
+        end)
+
+        native_dispatch.dispatch(make_command_args("--display=always --no-jump-first make luacheck"))
+
+        rawset(native_dispatch, "run", original_run)
+
+        local options = assert(captured)
+
+        assert.equal("always", options.display)
+        assert.is_false(options.jump_first)
+    end)
+
+    it("makes :DispatchOutput mirror output and stay put by default", function()
+        local original_run = native_dispatch.run
+        ---@type _my.dispatch.Options?
+        local captured = nil
+
+        rawset(native_dispatch, "run", function(options)
+            captured = options
+        end)
+
+        native_dispatch.dispatch_output(make_command_args("make luacheck"))
+
+        rawset(native_dispatch, "run", original_run)
+
+        local options = assert(captured)
+
+        assert.equal("always", options.display)
+        assert.is_false(options.jump_first)
+    end)
+
     it("loads parsed and unparsed output into quickfix with a dispatch title", function()
         vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
 

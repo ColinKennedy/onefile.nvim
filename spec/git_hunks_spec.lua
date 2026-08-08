@@ -597,6 +597,13 @@ local function load_quickfix_hunks(root)
 end
 
 describe("git hunk staging from the quickfix window", function()
+    -- NOTE: A failing test skips its own cleanup. Without this, the leftover
+    -- quickfix window keeps `winfixbuf` on and every later spec that switches
+    -- buffers errors, which hides the real failure.
+    after_each(function()
+        close_quickfix_window()
+    end)
+
     it("stages only the hunk under the cursor row in normal mode", function()
         local root = make_repo()
 
@@ -808,7 +815,12 @@ describe("git hunk staging from the quickfix window", function()
             local remaining = vim.fn.getqflist()
 
             assert.equal(1, #remaining)
-            assert.equal("beta.txt:2", remaining[1].text)
+
+            -- NOTE: The quickfix columns already show the file and line, so the
+            -- entry text is the changed line's contents.
+            assert.equal("beta.txt", vim.fn.fnamemodify(vim.api.nvim_buf_get_name(remaining[1].bufnr), ":t"))
+            assert.equal(2, remaining[1].lnum)
+            assert.equal("FOUR", remaining[1].text)
             assert.equal(git_hunk_navigation.get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
 
             close_quickfix_window()

@@ -209,13 +209,44 @@ local function _get_hunk_range(hunk)
     return first, first + size - 1
 end
 
+--- Get the quickfix display text for `hunk`.
+---
+--- The quickfix list already shows the file path and line number in its own
+--- columns, so the display text shows the changed line's contents instead.
+--- Delete-only hunks have no line left to show, so they fall back to the first
+--- removed line.
+---
+---@param hunk _my.git_diff.Hunk|_my.git_diff.SelectionHunk The parsed diff hunk.
+---@param lnum integer The best target line for the hunk.
+---@param new_lines string[]? The current file lines, when they are known.
+---@param old_lines string[]? The indexed file lines, when they are known.
+---@return string # The changed line's contents, if any could be found.
+local function _get_entry_text(hunk, lnum, new_lines, old_lines)
+    ---@type string?
+    local text
+
+    if hunk.new_count > 0 then
+        ---@diagnostic disable-next-line: undefined-field
+        local added = hunk.added
+        text = (added and added[1]) or (new_lines and new_lines[lnum])
+    else
+        ---@diagnostic disable-next-line: undefined-field
+        local removed = hunk.removed
+        text = (removed and removed[1]) or (old_lines and old_lines[hunk.old_start])
+    end
+
+    return vim.trim(text or "")
+end
+
 --- Convert a parsed diff hunk into a cached navigation entry.
 ---
 ---@param repository string The repository root.
 ---@param relative_path string The repository-relative file path.
 ---@param hunk _my.git_diff.Hunk|_my.git_diff.SelectionHunk The parsed diff hunk.
+---@param new_lines string[]? The current file lines, when they are known.
+---@param old_lines string[]? The indexed file lines, when they are known.
 ---@return _my.git_hunk_navigation.Entry # The cached entry.
-local function _make_entry(repository, relative_path, hunk)
+local function _make_entry(repository, relative_path, hunk, new_lines, old_lines)
     local lnum, end_lnum = _get_hunk_range(hunk)
 
     return {
@@ -227,7 +258,7 @@ local function _make_entry(repository, relative_path, hunk)
         old_count = hunk.old_count,
         old_start = hunk.old_start,
         relative_path = relative_path,
-        text = string.format("%s:%s", relative_path, lnum),
+        text = _get_entry_text(hunk, lnum, new_lines, old_lines),
     }
 end
 
@@ -295,7 +326,7 @@ local function _make_buffer_entries(repository, buffer, callback)
             local entries = {}
 
             for _, hunk in ipairs(git_diff.compute_hunks(old_lines, new_lines)) do
-                table.insert(entries, _make_entry(repository, details.relative_path, hunk))
+                table.insert(entries, _make_entry(repository, details.relative_path, hunk, new_lines, old_lines))
             end
 
             callback(entries, details.relative_path)

@@ -568,10 +568,58 @@ index 2222222..3333333 100644
                 )
                 assert.equal(2, items[2].lnum)
 
-                -- NOTE: The display text stays repository-relative so that hunk
-                -- labels do not change when the current directory changes.
-                assert.equal("docs/beta.txt:3", items[1].text)
-                assert.equal("src/deep/nested/alpha.txt:2", items[2].text)
+                -- NOTE: The quickfix columns already show the file and line, so
+                -- the display text shows the changed line's contents.
+                assert.equal("C", items[1].text)
+                assert.equal("TWO", items[2].text)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("shows the removed line as the display text for delete-only hunks", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\nthree\n")
+            write_text(vim.fs.joinpath(root, "file.txt"), "one\nthree\n")
+
+            local ok, err = pcall(function()
+                local items = load_quickfix_from(root, root)
+
+                assert.equal(1, #items)
+                assert.equal("two", items[1].text)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("shows unsaved buffer text as the display text", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\nthree\n")
+
+            local ok, err = pcall(function()
+                with_cwd(root, function()
+                    vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "file.txt")))
+                    vim.api.nvim_buf_set_lines(0, 1, 2, false, { "    unsaved text" })
+                    assert.True(load_hunks())
+
+                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    assert.equal(1, #repository_state.entries)
+                    assert.equal("unsaved text", repository_state.entries[1].text)
+                end)
             end)
 
             remove_tree(root)

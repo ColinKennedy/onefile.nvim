@@ -363,6 +363,30 @@ function _P.complete(_, line)
     return vim.fn.getcompletion(last, "shellcmd")
 end
 
+--- Get the quickfix title that a dispatch run claims as its own.
+---
+---@param options _my.dispatch.Options The dispatch options.
+---@return string # The title to write onto the quickfix list.
+function _P.get_quickfix_title(options)
+    return "Dispatch: " .. options.raw_command
+end
+
+--- Drop a passing run's stale results, but only if they are that run's own.
+---
+--- A passing command has nothing to show. Whatever is in quickfix belongs to
+--- somebody else (a `:Ripgrep` search, a diff, an earlier command) unless this
+--- exact command put it there, so leave it alone rather than clobbering it.
+---
+---@param options _my.dispatch.Options The dispatch options.
+function _P.clear_previous_results(options)
+    if vim.fn.getqflist({ title = true }).title ~= _P.get_quickfix_title(options) then
+        return
+    end
+
+    vim.fn.setqflist({}, "r", { title = _P.get_quickfix_title(options), items = {} })
+    vim.cmd("silent! cclose")
+end
+
 --- Finish a dispatch run by loading quickfix and opening it.
 ---
 ---@param options _my.dispatch.Options The dispatch options.
@@ -382,23 +406,19 @@ function _P.finish(options, lines, code)
                 break
             end
         end
-
-        vim.fn.setqflist({}, "r", {
-            title = "Dispatch: " .. options.raw_command,
-            items = items,
-        })
     end)
 
     if code == 0 and not first_valid_index then
-        vim.fn.setqflist({}, "r", {
-            title = "Dispatch: " .. options.raw_command,
-            items = {},
-        })
-        vim.cmd("silent! cclose")
+        _P.clear_previous_results(options)
         vim.notify(string.format("Dispatch passed: %s", options.raw_command), vim.log.levels.INFO)
 
         return
     end
+
+    vim.fn.setqflist({}, "r", {
+        title = _P.get_quickfix_title(options),
+        items = items,
+    })
 
     require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
         vim.cmd("silent copen")

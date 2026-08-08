@@ -203,13 +203,51 @@ describe("native dispatch", function()
             "Checking lua/modules/example.lua OK",
         }, 0)
 
+        assert.are.same({}, vim.fn.getqflist())
+        assert.equal(vim.log.levels.INFO, notifications[1].level)
+        assert.equal("Dispatch passed: make luacheck", notifications[1].message)
+        assert.Not.equal("qf", vim.bo.filetype)
+    end)
+
+    it("keeps somebody else's quickfix list when a dispatch command passes", function()
+        vim.fn.setqflist({}, "r", {
+            title = "Ripgrep: needle",
+            items = { { filename = "lua/example.lua", lnum = 3, text = "found needle" } },
+        })
+
+        native_dispatch._P.finish({
+            command = { "make", "luacheck" },
+            raw_command = "make luacheck",
+            display = "on_error",
+        }, {
+            "Checking lua/modules/example.lua OK",
+        }, 0)
+
+        local quickfix = vim.fn.getqflist({ title = true, items = true })
+
+        assert.equal("Ripgrep: needle", quickfix.title)
+        assert.equal(1, #quickfix.items)
+        assert.equal("found needle", quickfix.items[1].text)
+    end)
+
+    it("drops its own stale results when a re-run of the same command passes", function()
+        vim.fn.setqflist({}, "r", {
+            title = "Dispatch: make luacheck",
+            items = { { filename = "lua/example.lua", lnum = 3, text = "old failure" } },
+        })
+
+        native_dispatch._P.finish({
+            command = { "make", "luacheck" },
+            raw_command = "make luacheck",
+            display = "on_error",
+        }, {
+            "Checking lua/modules/example.lua OK",
+        }, 0)
+
         local quickfix = vim.fn.getqflist({ title = true, items = true })
 
         assert.equal("Dispatch: make luacheck", quickfix.title)
         assert.are.same({}, quickfix.items)
-        assert.equal(vim.log.levels.INFO, notifications[1].level)
-        assert.equal("Dispatch passed: make luacheck", notifications[1].message)
-        assert.Not.equal("qf", vim.bo.filetype)
     end)
 
     it("uses ad-hoc compilers and restores compiler options afterward", function()

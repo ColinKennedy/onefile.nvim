@@ -940,7 +940,21 @@ function _P.sync_window_winbar(window)
 
     local buffer = vim.api.nvim_win_get_buf(window)
 
-    if _P.is_excluded(window, buffer) then
+    if _P.is_window_excluded(window) then
+        vim.wo[window].winbar = ""
+
+        return
+    end
+
+    local quickfix_winbar = require("modules.features.quickfix_winbar")
+
+    if quickfix_winbar.is_quickfix_window(window) then
+        vim.wo[window].winbar = quickfix_winbar.WINBAR_EXPRESSION
+
+        return
+    end
+
+    if _P.is_buffer_excluded(buffer) then
         vim.wo[window].winbar = ""
 
         return

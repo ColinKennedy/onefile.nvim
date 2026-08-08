@@ -3,6 +3,7 @@
 --- (It's https://github.com/andrewferrier/debugprint.nvim, basically)
 
 local _COUNTER = 1
+local M = {}
 local _P = {}
 
 ---@return string? # Get the visual selection, if it is in visual mode.
@@ -104,4 +105,7 @@ vim.keymap.set({ "n", "v" }, "<leader>iV", function()
     _P.print_word_under_cursor("above")
 end, { noremap = true, desc = "Print the current word above the cursor line." })
 
-return _P
+--- Expose the private namespace so the specs can reach it.
+M._P = _P
+
+return M

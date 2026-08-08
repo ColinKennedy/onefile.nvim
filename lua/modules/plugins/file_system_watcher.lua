@@ -94,7 +94,7 @@ end
 ---
 ---@param buffer integer A Neovim buffer handle.
 ---@return boolean # If a reload happened, return `true`.
-function M.reload_if_changed(buffer)
+function M._reload_if_changed(buffer)
     local watch = _WATCHES[buffer]
 
     if not watch then
@@ -104,7 +104,7 @@ function M.reload_if_changed(buffer)
     local signature = _P.get_file_signature(watch.path)
 
     if not signature then
-        M.stop_buffer(buffer)
+        _P.stop_buffer(buffer)
 
         return false
     end
@@ -134,7 +134,7 @@ function _P.schedule_reload(buffer)
 
     watch.reload_timer:start(_OPTIONS.reload_debounce_ms or 100, 0, function()
         vim.schedule(function()
-            M.reload_if_changed(buffer)
+            M._reload_if_changed(buffer)
         end)
     end)
 end
@@ -142,7 +142,7 @@ end
 --- Stop watching a single buffer.
 ---
 ---@param buffer integer A Neovim buffer handle.
-function M.stop_buffer(buffer)
+function _P.stop_buffer(buffer)
     local watch = _WATCHES[buffer]
 
     if not watch then
@@ -163,16 +163,16 @@ end
 ---
 ---@param buffer integer A Neovim buffer handle.
 ---@return boolean # If `buffer` is being watched, return `true`.
-function M.is_watching(buffer)
+function M._is_watching(buffer)
     return _WATCHES[buffer] ~= nil
 end
 
 --- Start watching `buffer` if it is a listed file buffer.
 ---
 ---@param buffer integer A Neovim buffer handle.
-function M.watch_buffer(buffer)
+function M._watch_buffer(buffer)
     if not _P.is_watchable_buffer(buffer) then
-        M.stop_buffer(buffer)
+        _P.stop_buffer(buffer)
 
         return
     end
@@ -186,7 +186,7 @@ function M.watch_buffer(buffer)
         return
     end
 
-    M.stop_buffer(buffer)
+    _P.stop_buffer(buffer)
 
     local poller = assert(vim.uv.new_fs_poll())
 
@@ -206,41 +206,41 @@ function M.watch_buffer(buffer)
 end
 
 --- Start watchers for every currently-listed file buffer.
-function M.refresh_watches()
+function _P.refresh_watches()
     for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
         if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].buflisted then
-            M.watch_buffer(buffer)
+            M._watch_buffer(buffer)
         end
     end
 end
 
 --- Stop every active file watcher.
-function M.stop_all()
+function _P.stop_all()
     for buffer, _ in pairs(_WATCHES) do
-        M.stop_buffer(buffer)
+        _P.stop_buffer(buffer)
     end
 end
 
 --- Remove watcher autocommands and stop every active watcher.
-function M.teardown()
-    M.stop_all()
+function M._teardown()
+    _P.stop_all()
     pcall(vim.api.nvim_del_augroup_by_name, _GROUP_NAME)
 end
 
 --- Install file-system watcher autocommands.
 ---
 ---@param options _my.file_system_watcher.Options?
-function M.setup(options)
+function M._setup(options)
     _OPTIONS = vim.tbl_deep_extend("force", _OPTIONS, options or {})
 
-    M.stop_all()
+    _P.stop_all()
 
     local group = vim.api.nvim_create_augroup(_GROUP_NAME, { clear = true })
 
     vim.api.nvim_create_autocmd({ "BufAdd", "BufEnter", "BufFilePost" }, {
         group = group,
         callback = function(event)
-            M.watch_buffer(event.buf)
+            M._watch_buffer(event.buf)
         end,
         desc = "Watch listed file buffers for external changes.",
     })
@@ -253,7 +253,7 @@ function M.setup(options)
             if watch then
                 watch.signature = _P.get_file_signature(watch.path)
             else
-                M.watch_buffer(event.buf)
+                M._watch_buffer(event.buf)
             end
         end,
         desc = "Refresh file watcher metadata after saving a buffer.",
@@ -262,18 +262,18 @@ function M.setup(options)
     vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
         group = group,
         callback = function(event)
-            M.stop_buffer(event.buf)
+            _P.stop_buffer(event.buf)
         end,
         desc = "Stop watching deleted or wiped buffers.",
     })
 
     vim.api.nvim_create_autocmd("VimLeavePre", {
         group = group,
-        callback = M.stop_all,
+        callback = _P.stop_all,
         desc = "Stop all file watchers before Neovim exits.",
     })
 
-    M.refresh_watches()
+    _P.refresh_watches()
 end
 
 --- Check if Neovim is running the Busted test harness.
@@ -286,7 +286,7 @@ function _P.is_running_busted()
 end
 
 if not _P.is_running_busted() then
-    M.setup()
+    M._setup()
 end
 
 return M

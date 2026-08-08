@@ -39,12 +39,12 @@ describe("modules.plugins.file_system_watcher", function()
         pcall(vim.cmd.stopinsert)
         ---@type integer[]
         _BUFFERS = {}
-        file_system_watcher.setup({ poll_interval_ms = 50, reload_debounce_ms = 10 })
+        file_system_watcher._setup({ poll_interval_ms = 50, reload_debounce_ms = 10 })
     end)
 
     after_each(function()
         pcall(vim.cmd.stopinsert)
-        file_system_watcher.teardown()
+        file_system_watcher._teardown()
 
         for _, buffer in ipairs(_BUFFERS) do
             if vim.api.nvim_buf_is_valid(buffer) then
@@ -58,9 +58,9 @@ describe("modules.plugins.file_system_watcher", function()
     it("watches listed buffers that point to files on disk", function()
         local buffer, _ = create_file_buffer({ "original" })
 
-        file_system_watcher.watch_buffer(buffer)
+        file_system_watcher._watch_buffer(buffer)
 
-        assert.True(file_system_watcher.is_watching(buffer))
+        assert.True(file_system_watcher._is_watching(buffer))
     end)
 
     it("does not watch unlisted scratch buffers", function()
@@ -68,19 +68,19 @@ describe("modules.plugins.file_system_watcher", function()
 
         table.insert(_BUFFERS, buffer)
         vim.api.nvim_set_current_buf(buffer)
-        file_system_watcher.watch_buffer(buffer)
+        file_system_watcher._watch_buffer(buffer)
 
-        assert.False(file_system_watcher.is_watching(buffer))
+        assert.False(file_system_watcher._is_watching(buffer))
     end)
 
     it("reloads a watched buffer after an external file change", function()
         local buffer, path = create_file_buffer({ "original" })
 
-        file_system_watcher.watch_buffer(buffer)
+        file_system_watcher._watch_buffer(buffer)
         write_external_file(path, { "changed" })
 
         assert.True(vim.wait(1000, function()
-            return file_system_watcher.reload_if_changed(buffer)
+            return file_system_watcher._reload_if_changed(buffer)
                 or vim.api.nvim_buf_get_lines(buffer, 0, 1, false)[1] == "changed"
         end, 20))
 
@@ -101,11 +101,11 @@ describe("modules.plugins.file_system_watcher", function()
         })
 
         vim.bo[buffer].filetype = "lua"
-        file_system_watcher.watch_buffer(buffer)
+        file_system_watcher._watch_buffer(buffer)
         write_external_file(path, { "local value = 2" })
 
         assert.True(vim.wait(1000, function()
-            return file_system_watcher.reload_if_changed(buffer)
+            return file_system_watcher._reload_if_changed(buffer)
                 or vim.api.nvim_buf_get_lines(buffer, 0, 1, false)[1] == "local value = 2"
         end, 20))
 
@@ -116,11 +116,11 @@ describe("modules.plugins.file_system_watcher", function()
     it("does not overwrite unsaved buffer edits", function()
         local buffer, path = create_file_buffer({ "original" })
 
-        file_system_watcher.watch_buffer(buffer)
+        file_system_watcher._watch_buffer(buffer)
         vim.api.nvim_buf_set_lines(buffer, 0, 1, false, { "unsaved" })
         write_external_file(path, { "external" })
 
-        assert.False(file_system_watcher.reload_if_changed(buffer))
+        assert.False(file_system_watcher._reload_if_changed(buffer))
         assert.equal("unsaved", vim.api.nvim_buf_get_lines(buffer, 0, 1, false)[1])
     end)
 end)

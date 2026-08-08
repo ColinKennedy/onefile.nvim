@@ -1,6 +1,7 @@
 --- Configure editor options and collect built-in LSP server definitions.
 
 local M = {}
+local _P = {}
 
 ---------- Saver [Start] ----------
 -- NOTE: Create the :AsyncWrite command (for writing without blocking Neovim)
@@ -84,7 +85,7 @@ vim.o.exrc = true
 vim.opt.shell = os.getenv("NEOVIM_SHELL_COMMAND") or vim.opt.shell
 
 ---@type _my.lsp.ServerDefinition[]
-M.servers = {
+_P.servers = {
     {
         name = "ty",
         config = {
@@ -111,7 +112,7 @@ M.servers = {
 ---
 ---@param config_lsp? fun(name: string, config: vim.lsp.Config): nil Test seam for `vim.lsp.config`.
 ---@param enable_lsp? fun(name: string): nil Test seam for `vim.lsp.enable`.
-function M.configure_lsp_servers(config_lsp, enable_lsp)
+function M._configure_lsp_servers(config_lsp, enable_lsp)
     config_lsp = config_lsp or function(name, config)
         vim.lsp.config(name, config)
     end
@@ -119,7 +120,7 @@ function M.configure_lsp_servers(config_lsp, enable_lsp)
         vim.lsp.enable(name)
     end
 
-    for _, server in ipairs(M.servers) do
+    for _, server in ipairs(_P.servers) do
         ---@type vim.lsp.Config
         local config
 
@@ -137,18 +138,18 @@ end
 --- Check if Neovim is running the Busted test harness.
 ---
 ---@return boolean # If this process is running Busted, return `true`.
-function M.is_running_busted()
+function _P.is_running_busted()
     local arguments = _G.arg or {}
 
     return tostring(arguments[0] or ""):match("busted") ~= nil
 end
 
 ---@type boolean
-M.auto_configured_lsp_servers = false
+_P.auto_configured_lsp_servers = false
 
-if not M.is_running_busted() then
-    M.auto_configured_lsp_servers = true
-    M.configure_lsp_servers()
+if not _P.is_running_busted() then
+    _P.auto_configured_lsp_servers = true
+    M._configure_lsp_servers()
 end
 
 return M

@@ -48,7 +48,7 @@ local _P = {}
 ---@field git_status_timeout integer
 
 ---@type _my.git_status.Options
-M.opts = {
+_P.opts = {
     auto_fetch_interval = 30000,
     git_status_timeout = 1000,
 }
@@ -407,7 +407,7 @@ local function _watch_git_dir(entry)
         end
 
         vim.schedule(function()
-            M.refresh()
+            M._refresh()
         end)
     end)
 
@@ -432,7 +432,7 @@ local function _run_status(entry)
         "--untracked-files=all",
     }, {
         text = true,
-        timeout = M.opts.git_status_timeout,
+        timeout = _P.opts.git_status_timeout,
     }, function(process)
         vim.defer_fn(function()
             entry.in_flight = false
@@ -464,7 +464,7 @@ local function _run_status(entry)
 end
 
 ---@param path string?
-function M.refresh(path)
+function M._refresh(path)
     if not _is_git_available() then
         return
     end
@@ -500,7 +500,7 @@ function M.refresh(path)
     end)
 end
 
-function M.fetch()
+function _P.fetch()
     if not _is_git_available() then
         return
     end
@@ -517,7 +517,7 @@ function M.fetch()
         function(process)
             if process.code == 0 then
                 vim.schedule(function()
-                    M.refresh()
+                    M._refresh()
                 end)
             end
         end
@@ -572,7 +572,7 @@ function M.get_statusline(path)
     local now = vim.uv.now()
 
     if entry.checked_at == 0 or (now - entry.checked_at) > _GIT_STATUS_REFRESH_INTERVAL then
-        M.refresh(path)
+        M._refresh(path)
     end
 
     if not entry.status then
@@ -613,20 +613,20 @@ function M.setup()
         { "BufEnter", "BufFilePost", "BufWritePost", "DirChanged", "FileChangedShellPost", "FocusGained" },
         {
             callback = function()
-                M.refresh()
+                M._refresh()
             end,
         }
     )
 
-    M.refresh()
+    M._refresh()
 
-    if M.opts.auto_fetch_interval and M.opts.auto_fetch_interval > 0 then
-        local interval = math.max(M.opts.auto_fetch_interval, 1000)
+    if _P.opts.auto_fetch_interval and _P.opts.auto_fetch_interval > 0 then
+        local interval = math.max(_P.opts.auto_fetch_interval, 1000)
         _FETCH_TIMER = vim.uv.new_timer()
 
         if _FETCH_TIMER then
             _FETCH_TIMER:start(interval, interval, function()
-                vim.schedule(M.fetch)
+                vim.schedule(_P.fetch)
             end)
         end
     end

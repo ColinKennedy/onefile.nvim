@@ -83,7 +83,7 @@ describe("better escape", function()
     end)
 
     it("can be set up more than once without failing", function()
-        better_escape.setup()
+        better_escape._setup()
 
         assert.is_true(vim.fn.maparg("j", "i") ~= "")
         assert.is_true(vim.fn.maparg("j", "t") ~= "")

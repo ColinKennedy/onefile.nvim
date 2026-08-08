@@ -821,7 +821,7 @@ describe("selector UI", function()
     end)
 
     it("shortens selector directory headers with home and parent abbreviations", function()
-        local header = core_editor_setup.shorten_selector_directory_path(
+        local header = core_editor_setup._shorten_selector_directory_path(
             "/home/selecaoone/repositories/personal/.config/noplugins",
             "/home/selecaoone"
         )
@@ -830,7 +830,7 @@ describe("selector UI", function()
     end)
 
     it("shortens Windows selector directory headers with home and parent abbreviations", function()
-        local header = core_editor_setup.shorten_selector_directory_path(
+        local header = core_editor_setup._shorten_selector_directory_path(
             [[C:\Users\selecaoone\repositories\personal\.config\noplugins]],
             [[c:\users\selecaoone]]
         )
@@ -839,7 +839,7 @@ describe("selector UI", function()
     end)
 
     it("shortens Windows drive paths when they are outside home", function()
-        local header = core_editor_setup.shorten_selector_directory_path(
+        local header = core_editor_setup._shorten_selector_directory_path(
             [[D:\work\repositories\personal\noplugins]],
             [[C:\Users\selecaoone]]
         )
@@ -848,7 +848,7 @@ describe("selector UI", function()
     end)
 
     it("keeps single-segment selector directory headers readable", function()
-        local header = core_editor_setup.shorten_selector_directory_path("/tmp", "/home/selecaoone")
+        local header = core_editor_setup._shorten_selector_directory_path("/tmp", "/home/selecaoone")
 
         assert.are.same("/tmp", header)
     end)
@@ -1002,8 +1002,8 @@ describe("selector UI", function()
         local core_helpers = require("modules.utilities.core_helpers")
         local original_exists_command = core_helpers.exists_command
         local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
-        local original_get_stash_changed_line_count_async = core_editor_setup.get_stash_changed_line_count_async
-        local original_get_stash_preview_lines_async = core_editor_setup.get_stash_preview_lines_async
+        local original_get_stash_changed_line_count_async = core_editor_setup._get_stash_changed_line_count_async
+        local original_get_stash_preview_lines_async = core_editor_setup._get_stash_preview_lines_async
         ---@type _my.selector_gui.entry.Selection[]
         local stashes = {}
         local on_update
@@ -1019,11 +1019,11 @@ describe("selector UI", function()
             return stashes
         end
         ---@diagnostic disable-next-line: duplicate-set-field
-        core_editor_setup.get_stash_changed_line_count_async = function(_, callback)
+        core_editor_setup._get_stash_changed_line_count_async = function(_, callback)
             callback(20)
         end
         ---@diagnostic disable-next-line: duplicate-set-field
-        core_editor_setup.get_stash_preview_lines_async = function(_, callback)
+        core_editor_setup._get_stash_preview_lines_async = function(_, callback)
             callback({ "diff --git a/file b/file" })
         end
 
@@ -1068,8 +1068,8 @@ describe("selector UI", function()
 
         core_helpers.exists_command = original_exists_command
         core_helpers.get_deferred_shell_command_results = original_get_deferred_results
-        core_editor_setup.get_stash_changed_line_count_async = original_get_stash_changed_line_count_async
-        core_editor_setup.get_stash_preview_lines_async = original_get_stash_preview_lines_async
+        core_editor_setup._get_stash_changed_line_count_async = original_get_stash_changed_line_count_async
+        core_editor_setup._get_stash_preview_lines_async = original_get_stash_preview_lines_async
 
         assert.is_true(found_stash_text)
     end)
@@ -1078,8 +1078,8 @@ describe("selector UI", function()
         local core_helpers = require("modules.utilities.core_helpers")
         local original_exists_command = core_helpers.exists_command
         local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
-        local original_get_stash_changed_line_count = core_editor_setup.get_stash_changed_line_count
-        local original_get_stash_preview_lines = core_editor_setup.get_stash_preview_lines
+        local original_get_stash_changed_line_count = core_editor_setup._get_stash_changed_line_count
+        local original_get_stash_preview_lines = core_editor_setup._get_stash_preview_lines
 
         ---@diagnostic disable-next-line: duplicate-set-field
         core_helpers.exists_command = function()
@@ -1090,11 +1090,11 @@ describe("selector UI", function()
             return { "stash@{0}: On main: important stash" }
         end
         ---@diagnostic disable-next-line: duplicate-set-field
-        core_editor_setup.get_stash_changed_line_count = function()
+        core_editor_setup._get_stash_changed_line_count = function()
             error("stash line counts must not be computed synchronously", 0)
         end
         ---@diagnostic disable-next-line: duplicate-set-field
-        core_editor_setup.get_stash_preview_lines = function()
+        core_editor_setup._get_stash_preview_lines = function()
             error("stash previews must not be computed synchronously", 0)
         end
 
@@ -1105,8 +1105,8 @@ describe("selector UI", function()
 
         core_helpers.exists_command = original_exists_command
         core_helpers.get_deferred_shell_command_results = original_get_deferred_results
-        core_editor_setup.get_stash_changed_line_count = original_get_stash_changed_line_count
-        core_editor_setup.get_stash_preview_lines = original_get_stash_preview_lines
+        core_editor_setup._get_stash_changed_line_count = original_get_stash_changed_line_count
+        core_editor_setup._get_stash_preview_lines = original_get_stash_preview_lines
     end)
 
     it("<Space>B uses multi-select buffer selection", function()

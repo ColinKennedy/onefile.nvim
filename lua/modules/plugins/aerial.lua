@@ -1,6 +1,7 @@
 --- A tiny aerial.nvim-like outline sidebar for the current buffer.
 
 local M = {}
+local _P = {}
 
 ---@alias _my.aerial.SymbolKind "class" | "function" | "fallback"
 
@@ -428,7 +429,7 @@ local function _get_fallback_highlight_segments(buffer, line_count, line, start_
         return {}
     end
 
-    return M.get_highlight_segments(buffer, line, start_column, end_column)
+    return _P.get_highlight_segments(buffer, line, start_column, end_column)
 end
 
 --- Build a stable key for an outline symbol.
@@ -471,7 +472,7 @@ end
 ---@param row integer The 0-or-more source row.
 ---@param column integer The 0-or-more source column.
 ---@return string? # The highlight group at the position, if one exists.
-function M.get_position_highlight_group(buffer, row, column)
+function _P.get_position_highlight_group(buffer, row, column)
     if vim.inspect_pos == nil then
         return nil
     end
@@ -519,7 +520,7 @@ end
 ---@param start_column integer The 0-or-more inclusive source start column.
 ---@param end_column integer The 0-or-more exclusive source end column.
 ---@return _my.aerial.HighlightSegment[] # Highlight segments relative to `start_column`.
-function M.get_highlight_segments(buffer, line, start_column, end_column)
+function _P.get_highlight_segments(buffer, line, start_column, end_column)
     ---@type _my.aerial.HighlightSegment[]
     local segments = {}
     ---@type string?
@@ -527,7 +528,7 @@ function M.get_highlight_segments(buffer, line, start_column, end_column)
     local current_start = nil
 
     for column = start_column, end_column - 1 do
-        local group = M.get_position_highlight_group(buffer, line - 1, column)
+        local group = _P.get_position_highlight_group(buffer, line - 1, column)
 
         if group ~= current_group then
             if current_group ~= nil and current_start ~= nil then
@@ -674,7 +675,7 @@ end
 ---
 ---@param symbols _my.aerial.Symbol[] Flat source-ordered symbols.
 ---@return _my.aerial.Symbol[] # Root symbols with children assigned.
-function M.nest_symbols(symbols)
+function M._nest_symbols(symbols)
     table.sort(symbols, _sort_symbols)
 
     ---@type _my.aerial.Symbol[]
@@ -708,7 +709,7 @@ end
 ---
 ---@param buffer integer The source buffer.
 ---@return _my.aerial.Symbol[]? # Root symbols, or `nil` if Tree-sitter cannot be used.
-function M.get_treesitter_symbols(buffer)
+function _P.get_treesitter_symbols(buffer)
     local language = _get_language(vim.bo[buffer].filetype)
     local query = _get_treesitter_query(language)
 
@@ -749,7 +750,7 @@ function M.get_treesitter_symbols(buffer)
                 if text ~= "" then
                     if name_start_row == name_end_row then
                         highlights =
-                            M.get_highlight_segments(buffer, name_start_row + 1, name_start_column, name_end_column)
+                            _P.get_highlight_segments(buffer, name_start_row + 1, name_start_column, name_end_column)
                     end
 
                     table.insert(
@@ -761,14 +762,14 @@ function M.get_treesitter_symbols(buffer)
         end
     end
 
-    return M.nest_symbols(symbols)
+    return M._nest_symbols(symbols)
 end
 
 --- Build indentation fallback symbols.
 ---
 ---@param buffer integer The source buffer.
 ---@return _my.aerial.Symbol[] # Root fallback symbols.
-function M.get_indentation_symbols(buffer)
+function M._get_indentation_symbols(buffer)
     local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
     local line_count = #lines
     local tabstop = vim.bo[buffer].tabstop
@@ -845,8 +846,8 @@ end
 ---
 ---@param buffer integer The source buffer.
 ---@return _my.aerial.Symbol[] # Root outline symbols.
-function M.get_symbols(buffer)
-    return M.get_treesitter_symbols(buffer) or M.get_indentation_symbols(buffer)
+function _P.get_symbols(buffer)
+    return _P.get_treesitter_symbols(buffer) or M._get_indentation_symbols(buffer)
 end
 
 --- Get the visible prefix for a symbol kind.
@@ -890,7 +891,7 @@ end
 ---@param symbols _my.aerial.Symbol[] The symbols to render.
 ---@param collapsed table<string, boolean> Collapsed symbol keys.
 ---@return _my.aerial.Row[] # Visible rows.
-function M.get_rows(symbols, collapsed)
+function M._get_rows(symbols, collapsed)
     ---@type _my.aerial.Row[]
     local rows = {}
 
@@ -921,7 +922,7 @@ end
 ---@param symbols _my.aerial.Symbol[] The symbols to search.
 ---@param line integer The 1-or-more source line.
 ---@return _my.aerial.Symbol? # The containing symbol, if any.
-function M.find_symbol_at_line(symbols, line)
+function _P.find_symbol_at_line(symbols, line)
     ---@type _my.aerial.Symbol?
     local found = nil
 
@@ -986,8 +987,12 @@ end
 
 --- Get the source window for the current aerial buffer.
 ---
+--- NOTE: `modules.features.core_editor_setup` reads this through
+--- `pcall(require, ...)`, which privata cannot resolve, so the symbol is public
+--- even though privata reports it as unread.
+---
 ---@return integer? # The source window, if the current buffer is an aerial buffer.
-function M.get_current_source_window()
+function M.get_current_source_window() -- privata: ignore
     local state = _get_current_aerial_state()
 
     if state == nil or not vim.api.nvim_win_is_valid(state.source_window) then
@@ -1052,7 +1057,7 @@ end
 ---
 ---@param state _my.aerial.State The state to update.
 ---@param move_aerial_cursor boolean? If true, move the aerial cursor to the active row.
-function M.update_active_row(state, move_aerial_cursor)
+function _P.update_active_row(state, move_aerial_cursor)
     if not vim.api.nvim_win_is_valid(state.source_window) or not vim.api.nvim_buf_is_valid(state.aerial_buffer) then
         return
     end
@@ -1060,7 +1065,7 @@ function M.update_active_row(state, move_aerial_cursor)
     vim.api.nvim_buf_clear_namespace(state.aerial_buffer, state.namespace, 0, -1)
 
     local line = vim.api.nvim_win_get_cursor(state.source_window)[1]
-    local symbol = M.find_symbol_at_line(state.symbols, line)
+    local symbol = _P.find_symbol_at_line(state.symbols, line)
     local row = _find_row_for_symbol(state.rows, symbol)
 
     if row == nil then
@@ -1080,7 +1085,7 @@ end
 --- Refresh one source buffer's outline.
 ---
 ---@param source_buffer integer The source buffer to refresh.
-function M.refresh_source_buffer(source_buffer)
+function _P.refresh_source_buffer(source_buffer)
     local state = _STATE_BY_SOURCE_BUFFER[source_buffer]
 
     if state == nil or not vim.api.nvim_buf_is_valid(state.aerial_buffer) then
@@ -1088,17 +1093,17 @@ function M.refresh_source_buffer(source_buffer)
     end
 
     _stop_refresh_timer(state)
-    state.symbols = M.get_symbols(source_buffer)
-    state.rows = M.get_rows(state.symbols, state.collapsed)
+    state.symbols = _P.get_symbols(source_buffer)
+    state.rows = M._get_rows(state.symbols, state.collapsed)
     _set_aerial_lines(state)
-    M.update_active_row(state)
+    _P.update_active_row(state)
 end
 
 --- Get the refresh debounce delay for `source_buffer`.
 ---
 ---@param source_buffer integer The source buffer whose outline will be refreshed.
 ---@return integer # The debounce delay in milliseconds.
-function M.get_refresh_debounce_ms(source_buffer)
+function M._get_refresh_debounce_ms(source_buffer)
     local core_helpers = require("modules.utilities.core_helpers")
     local filetype = vim.bo[source_buffer].filetype
     local language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
@@ -1117,7 +1122,7 @@ end
 --- Debounce an outline refresh for a changed source buffer.
 ---
 ---@param source_buffer integer The source buffer to refresh later.
-function M.schedule_refresh_source_buffer(source_buffer)
+function _P.schedule_refresh_source_buffer(source_buffer)
     local state = _STATE_BY_SOURCE_BUFFER[source_buffer]
 
     if state == nil or not vim.api.nvim_buf_is_valid(state.aerial_buffer) then
@@ -1134,7 +1139,7 @@ function M.schedule_refresh_source_buffer(source_buffer)
         state.refresh_timer:stop()
     end
 
-    state.refresh_timer:start(M.get_refresh_debounce_ms(source_buffer), 0, function()
+    state.refresh_timer:start(M._get_refresh_debounce_ms(source_buffer), 0, function()
         vim.schedule(function()
             local current = _STATE_BY_SOURCE_BUFFER[source_buffer]
 
@@ -1142,7 +1147,7 @@ function M.schedule_refresh_source_buffer(source_buffer)
                 return
             end
 
-            M.refresh_source_buffer(source_buffer)
+            _P.refresh_source_buffer(source_buffer)
         end)
     end)
 end
@@ -1203,7 +1208,7 @@ end
 --- Close one aerial state.
 ---
 ---@param state _my.aerial.State The state to close.
-function M.close_state(state)
+function _P.close_state(state)
     _stop_refresh_timer(state)
 
     if vim.api.nvim_win_is_valid(state.aerial_window) then
@@ -1216,7 +1221,7 @@ function M.close_state(state)
 end
 
 --- Close every open aerial state.
-function M.close_all()
+function M._close_all()
     ---@type _my.aerial.State[]
     local states = {}
 
@@ -1225,7 +1230,7 @@ function M.close_all()
     end
 
     for _, state in ipairs(states) do
-        M.close_state(state)
+        _P.close_state(state)
     end
 end
 
@@ -1233,7 +1238,7 @@ end
 ---
 ---@param state _my.aerial.State The state to reassign.
 ---@param source_buffer integer The new source buffer to outline.
-function M.follow_source_buffer(state, source_buffer)
+function _P.follow_source_buffer(state, source_buffer)
     if source_buffer == state.source_buffer or vim.bo[source_buffer].filetype == _AERIAL_FILETYPE then
         return
     end
@@ -1241,7 +1246,7 @@ function M.follow_source_buffer(state, source_buffer)
     local existing = _STATE_BY_SOURCE_BUFFER[source_buffer]
 
     if existing ~= nil and existing ~= state then
-        M.close_state(existing)
+        _P.close_state(existing)
     end
 
     _STATE_BY_SOURCE_BUFFER[state.source_buffer] = nil
@@ -1252,14 +1257,14 @@ function M.follow_source_buffer(state, source_buffer)
     _SOURCE_BUFFER_BY_AERIAL_BUFFER[state.aerial_buffer] = source_buffer
     vim.b[state.aerial_buffer].aerial_source_buffer = source_buffer
     _rename_aerial_buffer(state.aerial_buffer, source_buffer)
-    M.refresh_source_buffer(source_buffer)
+    _P.refresh_source_buffer(source_buffer)
 end
 
 --- Open the aerial sidebar for a source window.
 ---
 ---@param source_window integer The source window to outline.
 ---@param focus_aerial boolean? If false, restore the previously-current window after opening.
-function M.open_for_window(source_window, focus_aerial)
+function M._open_for_window(source_window, focus_aerial)
     if not vim.api.nvim_win_is_valid(source_window) then
         return
     end
@@ -1287,7 +1292,7 @@ function M.open_for_window(source_window, focus_aerial)
     vim.b[aerial_buffer].aerial_source_buffer = source_buffer
     _open_aerial_window(state)
     state.source_window = source_window
-    M.refresh_source_buffer(source_buffer)
+    _P.refresh_source_buffer(source_buffer)
 
     if focus_aerial == false and vim.api.nvim_win_is_valid(previous_window) then
         vim.api.nvim_set_current_win(previous_window)
@@ -1295,16 +1300,16 @@ function M.open_for_window(source_window, focus_aerial)
 end
 
 --- Open the aerial sidebar for the current buffer.
-function M.open()
-    M.open_for_window(vim.api.nvim_get_current_win(), true)
+function _P.open()
+    M._open_for_window(vim.api.nvim_get_current_win(), true)
 end
 
 --- Toggle the aerial sidebar for the current source buffer.
-function M.toggle()
+function M._toggle()
     local current_aerial_state = _get_current_aerial_state()
 
     if current_aerial_state ~= nil then
-        M.close_state(current_aerial_state)
+        _P.close_state(current_aerial_state)
 
         return
     end
@@ -1312,18 +1317,18 @@ function M.toggle()
     local state = _STATE_BY_SOURCE_BUFFER[vim.api.nvim_get_current_buf()]
 
     if state ~= nil then
-        M.close_state(state)
+        _P.close_state(state)
 
         return
     end
 
-    M.open()
+    _P.open()
 end
 
 --- Jump the source window to the selected aerial row.
 ---
 ---@param keep_aerial_focus boolean If true, keep the cursor in aerial after jumping.
-function M.jump_to_selected(keep_aerial_focus)
+function M._jump_to_selected(keep_aerial_focus)
     local state = _get_current_aerial_state()
     local aerial_window = vim.api.nvim_get_current_win()
 
@@ -1348,11 +1353,11 @@ function M.jump_to_selected(keep_aerial_focus)
         vim.api.nvim_set_current_win(aerial_window)
     end
 
-    M.update_active_row(state)
+    _P.update_active_row(state)
 end
 
 --- Collapse the selected aerial row, if it has children.
-function M.collapse_selected()
+function M._collapse_selected()
     local state = _get_current_aerial_state()
 
     if state == nil then
@@ -1366,9 +1371,9 @@ function M.collapse_selected()
     end
 
     state.collapsed[row.symbol.key] = true
-    state.rows = M.get_rows(state.symbols, state.collapsed)
+    state.rows = M._get_rows(state.symbols, state.collapsed)
     _set_aerial_lines(state)
-    M.update_active_row(state, false)
+    _P.update_active_row(state, false)
 end
 
 --- Remove collapsed state for `symbol` and its descendants.
@@ -1384,7 +1389,7 @@ local function _expand_symbol_recursive(collapsed, symbol)
 end
 
 --- Expand the selected aerial row recursively.
-function M.expand_selected()
+function M._expand_selected()
     local state = _get_current_aerial_state()
 
     if state == nil then
@@ -1398,9 +1403,9 @@ function M.expand_selected()
     end
 
     _expand_symbol_recursive(state.collapsed, row.symbol)
-    state.rows = M.get_rows(state.symbols, state.collapsed)
+    state.rows = M._get_rows(state.symbols, state.collapsed)
     _set_aerial_lines(state)
-    M.update_active_row(state, false)
+    _P.update_active_row(state, false)
 end
 
 --- Refresh every open aerial window for a source buffer, if needed.
@@ -1408,7 +1413,7 @@ end
 ---@param buffer integer The source buffer that changed.
 local function _refresh_if_open(buffer)
     if _STATE_BY_SOURCE_BUFFER[buffer] ~= nil then
-        M.schedule_refresh_source_buffer(buffer)
+        _P.schedule_refresh_source_buffer(buffer)
     end
 end
 
@@ -1449,7 +1454,7 @@ local function _sync_current_source_window()
         for _, candidate in pairs(_STATE_BY_AERIAL_BUFFER) do
             if candidate.source_window == window then
                 state = candidate
-                M.follow_source_buffer(state, buffer)
+                _P.follow_source_buffer(state, buffer)
 
                 return
             end
@@ -1459,13 +1464,13 @@ local function _sync_current_source_window()
     end
 
     state.source_window = window
-    M.update_active_row(state)
+    _P.update_active_row(state)
 end
 
 --- Get aerial sidebars that should survive a session write.
 ---
 ---@return _my.aerial.SessionEntry[] # Restorable sidebars keyed by source file path.
-function M.get_session_entries()
+function _P.get_session_entries()
     ---@type _my.aerial.SessionEntry[]
     local entries = {}
     ---@type table<string, boolean>
@@ -1528,7 +1533,7 @@ end
 --- Get stale aerial session entries from windows restored by `:mksession`.
 ---
 ---@return _my.aerial.SessionEntry[] # Restorable sidebars found in visible stale aerial buffers.
-function M.get_stale_session_entries()
+function M._get_stale_session_entries()
     ---@type _my.aerial.SessionEntry[]
     local entries = {}
     ---@type table<string, boolean>
@@ -1560,7 +1565,7 @@ end
 ---@param entries _my.aerial.SessionEntry[] The session sidebars to restore.
 function M.restore_session(entries)
     local previous_window = vim.api.nvim_get_current_win()
-    local stale_entries = M.get_stale_session_entries()
+    local stale_entries = M._get_stale_session_entries()
 
     -- The placeholders in the freshly sourced Session.vim describe the
     -- current layout. Prefer them over a sidecar that may be older.
@@ -1579,7 +1584,7 @@ function M.restore_session(entries)
                 local state = _STATE_BY_SOURCE_BUFFER[source_buffer]
 
                 if state == nil then
-                    M.open_for_window(source_window, false)
+                    M._open_for_window(source_window, false)
                 else
                     state.source_window = source_window
 
@@ -1587,7 +1592,7 @@ function M.restore_session(entries)
                         _open_aerial_window(state)
                     end
 
-                    M.refresh_source_buffer(source_buffer)
+                    _P.refresh_source_buffer(source_buffer)
                 end
             end
         end
@@ -1599,8 +1604,8 @@ function M.restore_session(entries)
 end
 
 --- Reopen sidebars from stale `aerial://` windows created by `:mksession`.
-function M.restore_stale_session_windows()
-    local entries = M.get_stale_session_entries()
+function M._restore_stale_session_windows()
+    local entries = M._get_stale_session_entries()
 
     if #entries == 0 then
         return
@@ -1612,8 +1617,8 @@ end
 --- Serialize the current aerial sidebars as Lua session restore code.
 ---
 ---@return string # Lua code to restore aerial sidebars after a session load.
-function M.serialize_session_restore()
-    local entries = M.get_session_entries()
+function M._serialize_session_restore()
+    local entries = _P.get_session_entries()
 
     if #entries == 0 then
         return ""
@@ -1623,11 +1628,11 @@ function M.serialize_session_restore()
 end
 
 --- Define highlights, keymaps, and autocommands.
-function M.setup()
+function _P.setup()
     vim.api.nvim_set_hl(0, "AerialClass", { default = true, link = "Type" })
     vim.api.nvim_set_hl(0, "AerialFunction", { default = true, link = "Function" })
 
-    vim.keymap.set("n", "<Space>SS", M.toggle, { desc = "Toggle the current buffer outline sidebar." })
+    vim.keymap.set("n", "<Space>SS", M._toggle, { desc = "Toggle the current buffer outline sidebar." })
 
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "WinEnter", "BufEnter" }, {
         group = _GROUP,
@@ -1680,7 +1685,7 @@ function M.setup()
                         _SOURCE_BUFFER_BY_AERIAL_BUFFER[state.aerial_buffer] = replacement_buffer
                         vim.b[state.aerial_buffer].aerial_source_buffer = replacement_buffer
                         _rename_aerial_buffer(state.aerial_buffer, replacement_buffer)
-                        M.refresh_source_buffer(replacement_buffer)
+                        _P.refresh_source_buffer(replacement_buffer)
 
                         return
                     end
@@ -1696,7 +1701,7 @@ function M.setup()
     local core_editor_setup = require("modules.features.core_editor_setup")
 
     core_editor_setup._SESSION_MANAGER:register_session_write_pre_callback(".aerial.lua", function()
-        local code = M.serialize_session_restore()
+        local code = M._serialize_session_restore()
 
         if code == "" then
             return ""
@@ -1709,7 +1714,7 @@ function M.setup()
         group = _GROUP,
         desc = "Restore aerial sidebars from session-created buffers.",
         callback = function()
-            vim.schedule(M.restore_stale_session_windows)
+            vim.schedule(M._restore_stale_session_windows)
         end,
     })
 
@@ -1718,7 +1723,7 @@ function M.setup()
         desc = "Restore aerial sidebars after startup session loading.",
         callback = function()
             if vim.v.this_session ~= "" then
-                vim.schedule(M.restore_stale_session_windows)
+                vim.schedule(M._restore_stale_session_windows)
             end
         end,
     })
@@ -1732,18 +1737,18 @@ function M.setup()
             local options = { buffer = event.buf }
 
             vim.keymap.set("n", "<CR>", function()
-                M.jump_to_selected(false)
+                M._jump_to_selected(false)
             end, vim.tbl_extend("force", options, { desc = "Jump to the selected outline item." }))
             vim.keymap.set("n", "<Space>", function()
-                M.jump_to_selected(true)
+                M._jump_to_selected(true)
             end, vim.tbl_extend("force", options, { desc = "Preview the selected outline item." }))
             vim.keymap.set("n", "<C-l>", function()
-                M.jump_to_selected(true)
+                M._jump_to_selected(true)
             end, vim.tbl_extend("force", options, { desc = "Preview the selected outline item." }))
             vim.keymap.set(
                 "n",
                 "h",
-                M.collapse_selected,
+                M._collapse_selected,
                 vim.tbl_extend("force", options, {
                     desc = "Collapse the selected outline item.",
                 })
@@ -1751,7 +1756,7 @@ function M.setup()
             vim.keymap.set(
                 "n",
                 "l",
-                M.expand_selected,
+                M._expand_selected,
                 vim.tbl_extend("force", options, {
                     desc = "Expand the selected outline item.",
                 })
@@ -1760,6 +1765,6 @@ function M.setup()
     })
 end
 
-M.setup()
+_P.setup()
 
 return M

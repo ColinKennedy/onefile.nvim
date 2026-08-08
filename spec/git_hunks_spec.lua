@@ -586,7 +586,7 @@ local function load_quickfix_hunks(root)
     vim.cmd("silent enew!")
     vim.cmd("LoadGitDiff")
     vim.wait(2000, function()
-        return git_hunk_navigation.get_repository_state(root) ~= nil and #vim.fn.getqflist() > 0
+        return git_hunk_navigation._get_repository_state(root) ~= nil and #vim.fn.getqflist() > 0
     end)
     vim.wait(100)
 
@@ -821,7 +821,7 @@ describe("git hunk staging from the quickfix window", function()
             assert.equal("beta.txt", vim.fn.fnamemodify(vim.api.nvim_buf_get_name(remaining[1].bufnr), ":t"))
             assert.equal(2, remaining[1].lnum)
             assert.equal("FOUR", remaining[1].text)
-            assert.equal(git_hunk_navigation.get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
+            assert.equal(git_hunk_navigation._get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
 
             close_quickfix_window()
             vim.cmd("cd " .. vim.fn.fnameescape(previous))

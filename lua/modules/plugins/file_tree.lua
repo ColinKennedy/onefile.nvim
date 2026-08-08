@@ -469,7 +469,7 @@ local function _edit_in_source_window(state, path)
 end
 
 --- Expand the directory under the cursor.
-function M.expand()
+function M._expand()
     local state = _get_state()
 
     if not state then
@@ -485,7 +485,7 @@ function M.expand()
 end
 
 --- Collapse the directory under the cursor.
-function M.collapse()
+function _P.collapse()
     local state = _get_state()
 
     if not state then
@@ -524,7 +524,7 @@ local function _set_directory_expanded_recursively(state, path, expanded)
 end
 
 --- Expand the directory under the cursor and all of its descendants.
-function M.expand_all()
+function M._expand_all()
     local state = _get_state()
 
     if not state then
@@ -540,7 +540,7 @@ function M.expand_all()
 end
 
 --- Collapse the directory under the cursor and all of its descendants.
-function M.collapse_all()
+function M._collapse_all()
     local state = _get_state()
 
     if not state then
@@ -556,7 +556,7 @@ function M.collapse_all()
 end
 
 --- Open the file or directory under the cursor in the source window.
-function M.open_entry()
+function M._open_entry()
     local state = _get_state()
 
     if not state then
@@ -571,7 +571,7 @@ function M.open_entry()
 end
 
 --- Toggle ignored/non-Git-visible files in the current tree.
-function M.toggle_show_all()
+function M._toggle_show_all()
     local state = _get_state()
 
     if not state then
@@ -599,7 +599,7 @@ local function _set_keymaps(buffer)
     vim.keymap.set(
         "n",
         "h",
-        M.collapse,
+        _P.collapse,
         vim.tbl_extend("force", options, {
             desc = "Collapse directory.",
         })
@@ -607,7 +607,7 @@ local function _set_keymaps(buffer)
     vim.keymap.set(
         "n",
         "l",
-        M.expand,
+        M._expand,
         vim.tbl_extend("force", options, {
             desc = "Expand directory.",
         })
@@ -615,14 +615,19 @@ local function _set_keymaps(buffer)
     vim.keymap.set(
         "n",
         "H",
-        M.collapse_all,
+        M._collapse_all,
         vim.tbl_extend("force", options, { desc = "Collapse directory recursively." })
     )
-    vim.keymap.set("n", "L", M.expand_all, vim.tbl_extend("force", options, { desc = "Expand directory recursively." }))
+    vim.keymap.set(
+        "n",
+        "L",
+        M._expand_all,
+        vim.tbl_extend("force", options, { desc = "Expand directory recursively." })
+    )
     vim.keymap.set(
         "n",
         "<CR>",
-        M.open_entry,
+        M._open_entry,
         vim.tbl_extend("force", options, {
             desc = "Open file tree entry.",
         })
@@ -630,12 +635,12 @@ local function _set_keymaps(buffer)
     vim.keymap.set(
         "n",
         "<leader>sa",
-        M.toggle_show_all,
+        M._toggle_show_all,
         vim.tbl_extend("force", options, {
             desc = "Toggle showing all file tree entries.",
         })
     )
-    vim.keymap.set("n", "q", M.close, vim.tbl_extend("force", options, { desc = "Close file tree." }))
+    vim.keymap.set("n", "q", _P.close, vim.tbl_extend("force", options, { desc = "Close file tree." }))
 end
 
 ---@param state _my.file_tree.State
@@ -648,7 +653,7 @@ local function _open_window(state)
 end
 
 ---@param root string?
-function M.open(root)
+function M._open(root)
     root = _normalize(root or vim.fn.getcwd())
 
     local source_window = vim.api.nvim_get_current_win()
@@ -674,7 +679,7 @@ function M.open(root)
 end
 
 --- Close the current file tree window.
-function M.close()
+function _P.close()
     local state = _get_state()
 
     if state and _can_focus_window(state.window) then
@@ -733,7 +738,7 @@ end
 
 ---@param session_root string? Only include trees under this session root.
 ---@return _my.file_tree.SessionEntry[]
-function M.get_session_entries(session_root)
+function M._get_session_entries(session_root)
     ---@type _my.file_tree.SessionEntry[]
     local entries = {}
 
@@ -764,7 +769,7 @@ function M.get_session_entries(session_root)
 end
 
 ---@return _my.file_tree.SessionEntry[]
-function M.get_stale_session_entries()
+function M._get_stale_session_entries()
     ---@type _my.file_tree.SessionEntry[]
     local entries = {}
     ---@type table<string, boolean>
@@ -826,7 +831,7 @@ function M.restore_session(entries)
                 vim.api.nvim_set_current_win(source_window)
             end
 
-            M.open(entry.root)
+            M._open(entry.root)
 
             local state = _get_state()
 
@@ -856,8 +861,8 @@ end
 
 ---@param session_root string? Only include trees under this session root.
 ---@return string
-function M.serialize_session_restore(session_root)
-    local entries = M.get_session_entries(session_root)
+function M._serialize_session_restore(session_root)
+    local entries = M._get_session_entries(session_root)
 
     if #entries == 0 then
         return ""
@@ -867,8 +872,8 @@ function M.serialize_session_restore(session_root)
 end
 
 --- Reopen file trees from stale `filetree://` windows created by `:mksession`.
-function M.restore_stale_session_windows()
-    local entries = M.get_stale_session_entries()
+function M._restore_stale_session_windows()
+    local entries = M._get_stale_session_entries()
 
     if #entries == 0 then
         return
@@ -878,7 +883,7 @@ function M.restore_stale_session_windows()
 end
 
 --- Toggle a file tree for the current working directory.
-function M.toggle()
+function M._toggle()
     for buffer, state in pairs(_STATE_BY_BUFFER) do
         if vim.api.nvim_buf_is_valid(buffer) and _can_focus_window(state.window) then
             local current_window = vim.api.nvim_get_current_win()
@@ -893,7 +898,7 @@ function M.toggle()
         end
     end
 
-    M.open(vim.fn.getcwd())
+    M._open(vim.fn.getcwd())
 end
 
 vim.api.nvim_create_autocmd("BufWipeout", {
@@ -918,14 +923,14 @@ core_editor_setup._SESSION_MANAGER:register_session_write_pre_callback(".file_tr
         return ""
     end
 
-    return M.serialize_session_restore(root)
+    return M._serialize_session_restore(root)
 end)
 
 vim.api.nvim_create_autocmd("SessionLoadPost", {
     group = _GROUP,
     desc = "Restore file trees from session-created buffers.",
     callback = function()
-        vim.schedule(M.restore_stale_session_windows)
+        vim.schedule(M._restore_stale_session_windows)
     end,
 })
 
@@ -934,15 +939,15 @@ vim.api.nvim_create_autocmd("VimEnter", {
     desc = "Restore file trees after startup session loading.",
     callback = function()
         if vim.v.this_session ~= "" then
-            vim.schedule(M.restore_stale_session_windows)
+            vim.schedule(M._restore_stale_session_windows)
         end
     end,
 })
 
-vim.api.nvim_create_user_command("FileTreeToggle", M.toggle, {
+vim.api.nvim_create_user_command("FileTreeToggle", M._toggle, {
     desc = "Toggle the minimal file tree browser.",
 })
 
-vim.keymap.set("n", "<Space>F", M.toggle, { desc = "Toggle/Show the [f]ile tree." })
+vim.keymap.set("n", "<Space>F", M._toggle, { desc = "Toggle/Show the [f]ile tree." })
 
 return M

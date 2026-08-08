@@ -5,22 +5,22 @@ describe("tmux navigation", function()
         it("builds a tmux send-keys command for adjacent panes", function()
             assert.are.same(
                 { "tmux", "send-keys", "-t", "{left-of}", "tttt" },
-                tmux_navigation.get_send_text_arguments("left", "tttt")
+                tmux_navigation._get_send_text_arguments("left", "tttt")
             )
             assert.are.same(
                 { "tmux", "send-keys", "-t", "{right-of}", "tttt" },
-                tmux_navigation.get_send_text_arguments("right", "tttt")
+                tmux_navigation._get_send_text_arguments("right", "tttt")
             )
         end)
 
         it("converts literal CR markers into enter keys", function()
             assert.are.same(
                 { "tmux", "send-keys", "-t", "{left-of}", "tttt", "Enter" },
-                tmux_navigation.get_send_text_arguments("left", "tttt<CR>")
+                tmux_navigation._get_send_text_arguments("left", "tttt<CR>")
             )
             assert.are.same(
                 { "tmux", "send-keys", "-t", "{left-of}", "foo", "Enter", "bar" },
-                tmux_navigation.get_send_text_arguments("left", "foo<CR>bar")
+                tmux_navigation._get_send_text_arguments("left", "foo<CR>bar")
             )
         end)
 
@@ -129,7 +129,7 @@ describe("tmux navigation", function()
                         vim.api.nvim_set_current_win(win)
 
                         local before = measure(win)
-                        tmux_navigation.resize(case.key)
+                        tmux_navigation._resize(case.key)
                         local after = measure(win)
 
                         -- NOTE: luassert accepts a failure message as the second
@@ -153,7 +153,7 @@ describe("tmux navigation", function()
                 local b_before = vim.api.nvim_win_get_height(grid.B)
                 local c_before = vim.api.nvim_win_get_height(grid.C)
 
-                tmux_navigation.resize("j")
+                tmux_navigation._resize("j")
 
                 -- A's row-mates grow with it.
                 assert.is_true(vim.api.nvim_win_get_height(grid.B) > b_before)
@@ -167,7 +167,7 @@ describe("tmux navigation", function()
                 local d_before = vim.api.nvim_win_get_width(grid.D)
                 local g_before = vim.api.nvim_win_get_width(grid.G)
 
-                tmux_navigation.resize("l")
+                tmux_navigation._resize("l")
 
                 -- The cells below A (same column, other rows) are untouched.
                 assert.are.equal(d_before, vim.api.nvim_win_get_width(grid.D))
@@ -253,7 +253,7 @@ describe("tmux navigation", function()
 
                 local starting_height = vim.api.nvim_win_get_height(bottom)
 
-                tmux_navigation.resize("j")
+                tmux_navigation._resize("j")
 
                 assert.are.same({ "tmux resize-pane -D 3" }, tmux_commands)
                 assert.are.equal(starting_height, vim.api.nvim_win_get_height(bottom))
@@ -267,7 +267,7 @@ describe("tmux navigation", function()
 
                 local starting_height = vim.api.nvim_win_get_height(bottom)
 
-                tmux_navigation.resize("j")
+                tmux_navigation._resize("j")
 
                 assert.are.same({}, tmux_commands)
                 assert.is_true(vim.api.nvim_win_get_height(bottom) < starting_height)
@@ -282,10 +282,10 @@ describe("tmux navigation", function()
 
                 local starting_width = vim.api.nvim_win_get_width(right)
 
-                tmux_navigation.resize("l")
+                tmux_navigation._resize("l")
                 assert.are.same({ "tmux resize-pane -R 3" }, tmux_commands)
 
-                tmux_navigation.resize("h")
+                tmux_navigation._resize("h")
                 assert.are.same({ "tmux resize-pane -R 3", "tmux resize-pane -L 3" }, tmux_commands)
 
                 assert.are.equal(starting_width, vim.api.nvim_win_get_width(right))
@@ -294,8 +294,8 @@ describe("tmux navigation", function()
             it("resizes the surrounding tmux pane for a lone window", function()
                 adjacent_pane = true
 
-                tmux_navigation.resize("j")
-                tmux_navigation.resize("k")
+                tmux_navigation._resize("j")
+                tmux_navigation._resize("k")
 
                 assert.are.same({ "tmux resize-pane -D 3", "tmux resize-pane -U 3" }, tmux_commands)
             end)
@@ -304,7 +304,7 @@ describe("tmux navigation", function()
                 adjacent_pane = false
 
                 local starting_height = vim.api.nvim_win_get_height(0)
-                tmux_navigation.resize("j")
+                tmux_navigation._resize("j")
 
                 assert.are.same({}, tmux_commands)
                 assert.are.equal(starting_height, vim.api.nvim_win_get_height(0))

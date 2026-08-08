@@ -1,6 +1,7 @@
 --- Navigate cached repository Git hunks without using the quickfix list.
 
 local M = {}
+local _P = {}
 
 local _AUGROUP = vim.api.nvim_create_augroup("my.git_hunk_navigation", { clear = true })
 
@@ -404,7 +405,7 @@ end
 ---@param repository string The repository root.
 ---@param diff string The unified diff text.
 ---@return _my.git_hunk_navigation.Entry[] # The parsed entries.
-function M.parse_diff(repository, diff)
+function M._parse_diff(repository, diff)
     local git_diff = require("modules.utilities.git_diff")
 
     ---@type _my.git_hunk_navigation.Entry[]
@@ -458,7 +459,7 @@ end
 ---@param repository string The repository root.
 ---@param arguments string[] The Git diff arguments used.
 ---@param entries _my.git_hunk_navigation.Entry[] The hunks to cache.
-function M.set_state(repository, arguments, entries)
+function _P.set_state(repository, arguments, entries)
     _STATE.active_repository = repository
     _sort_cached_entries(entries)
     _STATE.repositories[repository] = {
@@ -473,7 +474,7 @@ end
 --- Get the cached Git hunk state.
 ---
 ---@return _my.git_hunk_navigation.State # The current state.
-function M.get_state()
+function M._get_state()
     return _STATE
 end
 
@@ -481,7 +482,7 @@ end
 ---
 ---@param repository string? The repository root. Defaults to the active repository.
 ---@return _my.git_hunk_navigation.RepositoryState? # The cached repository state, if present.
-function M.get_repository_state(repository)
+function M._get_repository_state(repository)
     repository = repository or _STATE.active_repository
 
     if not repository then
@@ -494,8 +495,8 @@ end
 --- Mark a cached repository as stale.
 ---
 ---@param repository string The repository root to mark stale.
-function M.mark_stale(repository)
-    local repository_state = M.get_repository_state(repository)
+function _P.mark_stale(repository)
+    local repository_state = M._get_repository_state(repository)
 
     if repository_state then
         repository_state.stale = true
@@ -526,7 +527,7 @@ function M.mark_stale_for_buffer(buffer)
         local repository_prefix = vim.fn.fnamemodify(repository, ":p")
 
         if path:sub(1, #repository_prefix) == repository_prefix then
-            M.mark_stale(repository)
+            _P.mark_stale(repository)
         end
     end
 end
@@ -535,7 +536,7 @@ end
 ---
 ---@param arguments string[]? User-provided arguments after `:LoadGitDiff`.
 ---@param callback fun(success: boolean): nil Callback with whether hunks loaded.
-function M.load(arguments, callback)
+function M._load(arguments, callback)
     local git_diff = require("modules.utilities.git_diff")
 
     arguments = arguments or {}
@@ -562,10 +563,10 @@ function M.load(arguments, callback)
                 return
             end
 
-            local entries = M.parse_diff(repository, diff.stdout)
+            local entries = M._parse_diff(repository, diff.stdout)
 
             _merge_loaded_buffer_hunks(repository, entries, function()
-                M.set_state(repository, arguments, entries)
+                _P.set_state(repository, arguments, entries)
                 vim.notify(string.format("Loaded %s Git hunks.", #entries), vim.log.levels.INFO)
 
                 callback(true)
@@ -706,7 +707,7 @@ end
 --- Jump to the next or previous cached hunk.
 ---
 ---@param direction 1 | -1 The direction to move.
-function M.jump(direction)
+function _P.jump(direction)
     local cached_repository, cached_state, cached_relative_path = _get_current_cached_repository()
 
     if cached_state and #cached_state.entries > 0 then
@@ -731,7 +732,7 @@ function M.jump(direction)
             return
         end
 
-        local repository_state = M.get_repository_state(repository)
+        local repository_state = M._get_repository_state(repository)
         local arguments = repository_state and repository_state.arguments or {}
 
         --- Finish jumping after the cache is current.
@@ -742,7 +743,7 @@ function M.jump(direction)
                 return
             end
 
-            repository_state = M.get_repository_state(repository)
+            repository_state = M._get_repository_state(repository)
 
             if not repository_state or #repository_state.entries == 0 then
                 vim.notify("No Git hunks loaded.", vim.log.levels.INFO)
@@ -758,7 +759,7 @@ function M.jump(direction)
         end
 
         if not repository_state or repository_state.stale then
-            M.load(arguments, _finish)
+            M._load(arguments, _finish)
 
             return
         end
@@ -771,10 +772,10 @@ end
 ---
 ---@param repository string? The repository root. Defaults to the active repository.
 ---@return vim.quickfix.entry[] # The quickfix entries.
-function M.to_quickfix(repository)
+function _P.to_quickfix(repository)
     ---@type vim.quickfix.entry[]
     local items = {}
-    local repository_state = M.get_repository_state(repository)
+    local repository_state = M._get_repository_state(repository)
 
     if not repository_state then
         return items
@@ -804,14 +805,14 @@ end
 ---
 ---@param repository string The repository root.
 ---@return string # The labelled, shortened repository root.
-function M.get_quickfix_title(repository)
+function M._get_quickfix_title(repository)
     return "Git: " .. vim.fn.fnamemodify(repository, ":~")
 end
 
 --- Load repository hunks into the cache and quickfix list.
 ---
 ---@param arguments string[]? User-provided arguments after `:LoadGitDiff`.
-function M.load_quickfix(arguments)
+function _P.load_quickfix(arguments)
     _get_repository(_get_current_path(), function(repository, repository_error)
         if not repository then
             vim.notify(string.format("Cannot load Git hunks: %s", repository_error or ""), vim.log.levels.ERROR)
@@ -819,7 +820,7 @@ function M.load_quickfix(arguments)
             return
         end
 
-        local repository_state = M.get_repository_state(repository)
+        local repository_state = M._get_repository_state(repository)
 
         --- Finish loading the quickfix list.
         ---
@@ -829,9 +830,9 @@ function M.load_quickfix(arguments)
                 return
             end
 
-            repository_state = M.get_repository_state(repository)
+            repository_state = M._get_repository_state(repository)
 
-            local title = M.get_quickfix_title(repository)
+            local title = M._get_quickfix_title(repository)
 
             if not repository_state or #repository_state.entries == 0 then
                 vim.fn.setqflist({}, "r", { items = {}, title = title })
@@ -839,14 +840,14 @@ function M.load_quickfix(arguments)
                 return
             end
 
-            vim.fn.setqflist({}, "r", { items = M.to_quickfix(repository), title = title })
+            vim.fn.setqflist({}, "r", { items = _P.to_quickfix(repository), title = title })
             require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
                 vim.cmd.copen()
             end)
         end
 
         if arguments or not repository_state or repository_state.stale then
-            M.load(arguments or (repository_state and repository_state.arguments or {}), _finish)
+            M._load(arguments or (repository_state and repository_state.arguments or {}), _finish)
 
             return
         end
@@ -856,7 +857,7 @@ function M.load_quickfix(arguments)
 end
 
 vim.api.nvim_create_user_command("LoadGitDiff", function(options)
-    M.load_quickfix(options.fargs)
+    _P.load_quickfix(options.fargs)
 end, {
     complete = "file",
     desc = "Load repository Git hunks into the quickfix list.",
@@ -864,19 +865,19 @@ end, {
 })
 
 vim.api.nvim_create_user_command("GitDiffNext", function()
-    M.jump(1)
+    _P.jump(1)
 end, { desc = "Jump to the next cached Git hunk." })
 
 vim.api.nvim_create_user_command("GitDiffPrevious", function()
-    M.jump(-1)
+    _P.jump(-1)
 end, { desc = "Jump to the previous cached Git hunk." })
 
 vim.keymap.set("n", "]g", function()
-    M.jump(1)
+    _P.jump(1)
 end, { desc = "Jump to the next cached Git hunk." })
 
 vim.keymap.set("n", "[g", function()
-    M.jump(-1)
+    _P.jump(-1)
 end, { desc = "Jump to the previous cached Git hunk." })
 
 vim.api.nvim_create_autocmd({ "BufWritePost", "TextChanged", "TextChangedI" }, {

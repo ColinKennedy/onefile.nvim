@@ -1,6 +1,7 @@
 --- Define a linewise text object for contiguous comment blocks.
 
 local M = {}
+local _P = {}
 
 ---@class _my.comment_text_object.Range
 ---@field start_line integer The first 1-or-more line in the comment block.
@@ -96,7 +97,7 @@ end
 ---@param buffer integer The buffer to inspect.
 ---@param cursor_line integer The 1-or-more cursor line.
 ---@return _my.comment_text_object.Range? # The comment block range, if any.
-function M.get_range(buffer, cursor_line)
+function M._get_range(buffer, cursor_line)
     local leader = _get_comment_leader(buffer)
 
     if leader == nil then
@@ -114,10 +115,10 @@ function M.get_range(buffer, cursor_line)
 end
 
 --- Select the comment block under the cursor as a linewise text object.
-function M.select()
+function _P.select()
     local buffer = vim.api.nvim_get_current_buf()
     local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
-    local range = M.get_range(buffer, cursor_line)
+    local range = M._get_range(buffer, cursor_line)
 
     if range == nil then
         return
@@ -126,7 +127,7 @@ function M.select()
     vim.cmd(string.format("normal! %dGV%dG", range.start_line, range.end_line))
 end
 
-vim.keymap.set({ "o", "x" }, "ic", M.select, {
+vim.keymap.set({ "o", "x" }, "ic", _P.select, {
     desc = "Select the contiguous comment block around the cursor.",
 })
 

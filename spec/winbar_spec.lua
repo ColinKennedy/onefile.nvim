@@ -1,4 +1,4 @@
-local winbar = require("modules.plugins.winbar")
+local winbar = require("modules.plugins.winbar")._P
 
 --- Create a scratch buffer with `lines`.
 ---

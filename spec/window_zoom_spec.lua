@@ -18,7 +18,7 @@ local function reset_layout()
     vim.cmd("silent! only!")
     vim.cmd("enew!")
     vim.bo.buflisted = true
-    window_zoom.reset_for_tests()
+    window_zoom._reset_for_tests()
 end
 
 --- Create a listed scratch buffer with `name` and `lines`.
@@ -87,10 +87,10 @@ describe("window zoom", function()
         assert.equal(2, current_tab_window_count())
         assert.equal(1, #vim.api.nvim_list_tabpages())
 
-        window_zoom.toggle()
+        window_zoom._toggle()
 
         assert.equal(2, #vim.api.nvim_list_tabpages())
-        assert.is_true(window_zoom.is_zoomed_tab())
+        assert.is_true(window_zoom._is_zoomed_tab())
         assert.equal(1, current_tab_window_count())
         assert.equal(first_buffer, vim.api.nvim_get_current_buf())
         assert.equal(0, vim.o.showtabline)
@@ -98,7 +98,7 @@ describe("window zoom", function()
         vim.cmd("split")
         assert.equal(2, current_tab_window_count())
 
-        window_zoom.toggle()
+        window_zoom._toggle()
 
         assert.equal(1, #vim.api.nvim_list_tabpages())
         assert.equal(source_window, vim.api.nvim_get_current_win())
@@ -108,11 +108,11 @@ describe("window zoom", function()
     end)
 
     it("does nothing when there is only one window", function()
-        window_zoom.toggle()
+        window_zoom._toggle()
 
         assert.equal(1, #vim.api.nvim_list_tabpages())
         assert.equal(1, current_tab_window_count())
-        assert.is_false(window_zoom.is_zoomed_tab())
+        assert.is_false(window_zoom._is_zoomed_tab())
     end)
 
     it("notifies once when the original tab cannot be restored", function()
@@ -130,16 +130,16 @@ describe("window zoom", function()
         vim.cmd("vsplit")
         vim.api.nvim_win_set_buf(0, second_buffer)
 
-        window_zoom.toggle()
-        assert.is_true(window_zoom.is_zoomed_tab())
+        window_zoom._toggle()
+        assert.is_true(window_zoom._is_zoomed_tab())
 
         vim.cmd("tabclose! 1")
-        window_zoom.toggle()
+        window_zoom._toggle()
 
         assert.equal(1, #notifications)
         assert.equal("Cannot restore zoomed window: original tab no longer exists.", notifications[1].message)
         assert.equal(vim.log.levels.ERROR, notifications[1].level)
         assert.equal(1, #vim.api.nvim_list_tabpages())
-        assert.is_true(window_zoom.is_zoomed_tab())
+        assert.is_true(window_zoom._is_zoomed_tab())
     end)
 end)

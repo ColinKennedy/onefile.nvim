@@ -409,7 +409,7 @@ end
 ---@param direction _my.directional_put.Direction Where to insert relative to the cursor line.
 ---@param mode _my.directional_put.IndentMode How to indent the pasted block.
 ---
-function M.put_linewise(direction, mode)
+function M._put_linewise(direction, mode)
     local row = vim.api.nvim_win_get_cursor(0)[1]
     local insert_index = direction == "above" and (row - 1) or row
     local lines = _apply_indent(_dedent_common_indent(_get_register_lines()), _get_target_indent(mode))
@@ -423,7 +423,7 @@ function M.put_linewise(direction, mode)
 end
 
 --- Select the last region inserted by a custom put mapping.
-function M.select_last_put()
+function M._select_last_put()
     local current_buffer = vim.api.nvim_get_current_buf()
     local region = _LAST_PUT_REGION
 
@@ -457,29 +457,29 @@ function M.select_last_put()
 end
 
 vim.keymap.set("n", "[p", function()
-    M.put_linewise("above", "same")
+    M._put_linewise("above", "same")
 end, { desc = "Paste line above with the current indentation." })
 vim.keymap.set("n", "]p", function()
-    M.put_linewise("below", "same")
+    M._put_linewise("below", "same")
 end, { desc = "Paste line below with the current indentation." })
 vim.keymap.set("n", "=p", function()
-    M.put_linewise("below", "same")
+    M._put_linewise("below", "same")
 end, { desc = "Paste line below with the current indentation." })
 vim.keymap.set("n", "=P", function()
-    M.put_linewise("above", "same")
+    M._put_linewise("above", "same")
 end, { desc = "Paste line above with the current indentation." })
 vim.keymap.set("n", ">p", function()
-    M.put_linewise("below", "indent")
+    M._put_linewise("below", "indent")
 end, { desc = "Paste line below and add one indentation level." })
 vim.keymap.set("n", ">P", function()
-    M.put_linewise("above", "indent")
+    M._put_linewise("above", "indent")
 end, { desc = "Paste line above and add one indentation level." })
 vim.keymap.set("n", "<p", function()
-    M.put_linewise("below", "dedent")
+    M._put_linewise("below", "dedent")
 end, { desc = "Paste line below and remove one indentation level." })
 vim.keymap.set("n", "<P", function()
-    M.put_linewise("above", "dedent")
+    M._put_linewise("above", "dedent")
 end, { desc = "Paste line above and remove one indentation level." })
-vim.keymap.set("n", "gp", M.select_last_put, { desc = "Select the last custom put region." })
+vim.keymap.set("n", "gp", M._select_last_put, { desc = "Select the last custom put region." })
 
 return M

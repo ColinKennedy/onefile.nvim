@@ -108,7 +108,7 @@ end
 ---@param start_line integer The first 1-or-more entry line to remove.
 ---@param end_line integer The last 1-or-more entry line to remove.
 ---@return integer # The number of entries that were removed.
-function M.delete_entries(window, start_line, end_line)
+function _P.delete_entries(window, start_line, end_line)
     if not vim.api.nvim_win_is_valid(window) then
         return 0
     end
@@ -163,7 +163,7 @@ function _P.delete_from_normal_mode()
     local window = vim.api.nvim_get_current_win()
     local line = vim.fn.line(".")
 
-    M.delete_entries(window, line, line + count - 1)
+    _P.delete_entries(window, line, line + count - 1)
 end
 
 --- Delete every entry that the current visual selection touches.
@@ -173,13 +173,13 @@ function _P.delete_from_visual_mode()
 
     vim.api.nvim_feedkeys(vim.keycode("<Esc>"), "nx", false)
 
-    M.delete_entries(window, start_line, end_line)
+    _P.delete_entries(window, start_line, end_line)
 end
 
 --- Add the entry-deletion mappings to `buffer`.
 ---
 ---@param buffer integer The quickfix or location list buffer to modify.
-function M.setup_mappings(buffer)
+function _P.setup_mappings(buffer)
     vim.keymap.set("n", "d", _P.delete_from_normal_mode, {
         buffer = buffer,
         desc = "Delete [count] quickfix entries, as in `dd` or `d2d`.",
@@ -196,7 +196,7 @@ end
 vim.api.nvim_create_autocmd("FileType", {
     pattern = "qf",
     callback = function(arguments)
-        M.setup_mappings(arguments.buf)
+        _P.setup_mappings(arguments.buf)
     end,
 })
 

@@ -71,7 +71,7 @@ end
 ---@param path string The directory path to display.
 ---@param home string? The home directory to replace with `~`.
 ---@return string # A compact display-only path.
-function M.shorten_selector_directory_path(path, home)
+function M._shorten_selector_directory_path(path, home)
     path = _normalize_display_path(path)
     home = _normalize_display_path(home or vim.uv.os_homedir() or "")
 
@@ -307,7 +307,7 @@ function M.select_file_in_directory(root)
 
     refresh_selector = M.select_from_options(options, {
         header = {
-            { text = M.shorten_selector_directory_path(root), highlight = "Directory" },
+            { text = M._shorten_selector_directory_path(root), highlight = "Directory" },
         },
         multiple_selection = true,
         preview = {
@@ -1017,7 +1017,7 @@ end
 ---@param directory string? The folder on-disk where all mark files will be relative to.
 ---@return string[] # All of the Lua source-code.
 ---
-function M.serialize_mark_code(directory)
+function _P.serialize_mark_code(directory)
     ---@type string?
     local expanded_directory = nil
 
@@ -1142,7 +1142,7 @@ function M.set_text_object_marks(start_line, start_column, end_line, end_column)
 end
 
 --- Load current bookmarks into the quickfix list.
-function M.show_bookmarks()
+function _P.show_bookmarks()
     ---@type vim.quickfix.entry[]
     local quickfix_entries = {}
 
@@ -1176,7 +1176,7 @@ end
 ---
 ---@param stash string The stash reference to inspect.
 ---@return integer # The number of added and removed lines in the stash.
-function M.get_stash_changed_line_count(stash)
+function M._get_stash_changed_line_count(stash)
     local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--numstat", stash }):wait()
 
     if process.code ~= 0 then
@@ -1200,7 +1200,7 @@ end
 ---
 ---@param stash string The stash reference to inspect.
 ---@param callback fun(count: integer): nil The callback that receives the changed line count.
-function M.get_stash_changed_line_count_async(stash, callback)
+function M._get_stash_changed_line_count_async(stash, callback)
     vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--numstat", stash }, {}, function(process)
         local count = 0
 
@@ -1224,7 +1224,7 @@ end
 ---
 ---@param stash string The stash reference to inspect.
 ---@return string[] # The preview lines to draw.
-function M.get_stash_preview_lines(stash)
+function M._get_stash_preview_lines(stash)
     local process = vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }):wait()
 
     if process.code ~= 0 then
@@ -1238,7 +1238,7 @@ end
 ---
 ---@param stash string The stash reference to inspect.
 ---@param callback fun(lines: string[]): nil The callback that receives preview lines.
-function M.get_stash_preview_lines_async(stash, callback)
+function M._get_stash_preview_lines_async(stash, callback)
     vim.system({ core_helpers._GIT_EXECUTABLE, "stash", "show", "--patch", "--stat", stash }, {}, function(process)
         ---@type string[]
         local lines_
@@ -1259,7 +1259,7 @@ end
 ---
 ---@param value string A line from `git stash list`.
 ---@return {index: string, name: string} # Parsed stash index and display name.
-function M.parse_stash_list_entry(value)
+function _P.parse_stash_list_entry(value)
     local separator = ":"
     local parts = vim.fn.split(value, separator)
 
@@ -1343,7 +1343,7 @@ function M.show_git_stashes()
         end
 
         is_counting_stash_lines = true
-        M.get_stash_changed_line_count_async(stash, function(count)
+        M._get_stash_changed_line_count_async(stash, function(count)
             changed_line_count_by_stash[stash] = count
             is_counting_stash_lines = false
             schedule_refresh()
@@ -1370,7 +1370,7 @@ function M.show_git_stashes()
 
     refresh_selector = M.select_from_options(options, {
         deserialize = function(value)
-            local parsed = M.parse_stash_list_entry(value)
+            local parsed = _P.parse_stash_list_entry(value)
             local name = parsed.name
             local index = parsed.index
             local changed_line_count = changed_line_count_by_stash[index]
@@ -1395,7 +1395,7 @@ function M.show_git_stashes()
                 if not preview_lines then
                     if not preview_in_flight_by_stash[stash] then
                         preview_in_flight_by_stash[stash] = true
-                        M.get_stash_preview_lines_async(stash, function(lines_)
+                        M._get_stash_preview_lines_async(stash, function(lines_)
                             preview_lines_by_stash[stash] = lines_
                             preview_in_flight_by_stash[stash] = nil
                             schedule_refresh()
@@ -1816,7 +1816,7 @@ end
 M._SESSION_MANAGER = SessionManager.new()
 
 --- Unset the bookmark if it is set or set it if it's not set.
-function M.toggle_bookmark_in_current_buffer()
+function _P.toggle_bookmark_in_current_buffer()
     --- Delete and re-add all bookmarks.
     ---
     --- Bookmarks can sometimes become internally messy and tis function just
@@ -2055,7 +2055,7 @@ end
 ---
 ---@param branch string The raw branch name.
 ---@return string # The display branch name.
-function M.elide_git_branch_name(branch)
+function M._elide_git_branch_name(branch)
     if #branch <= _GIT_BRANCH_ELIDE_LENGTH then
         return branch
     end
@@ -2113,7 +2113,7 @@ end
 ---@param path string? Use this path to find the git repository. If not provided, we use Vim's own $PWD instead.
 ---@return string? # Get the current Git branch, if any.
 ---
-function M.get_git_branch_safe(path)
+function _P.get_git_branch_safe(path)
     if not _is_git_available() then
         return nil
     end
@@ -2138,7 +2138,7 @@ end
 --- Refresh the cached git branch for `path` without waiting.
 ---
 ---@param path string? Use this path to find the git repository. If not provided, use the current buffer.
-function M.refresh_git_branch_safe(path)
+function _P.refresh_git_branch_safe(path)
     if not _is_git_available() then
         return
     end
@@ -2160,7 +2160,7 @@ function M.get_git_branch_label_safe()
         return "<No git command>"
     end
 
-    local branch = M.get_git_branch_safe(_get_git_branch_reference_path())
+    local branch = _P.get_git_branch_safe(_get_git_branch_reference_path())
 
     if not branch then
         return "<No git branch found>"
@@ -2172,7 +2172,7 @@ function M.get_git_branch_label_safe()
         git_prefix = " "
     end
 
-    return git_prefix .. M.elide_git_branch_name(branch)
+    return git_prefix .. M._elide_git_branch_name(branch)
 end
 
 ---@return string # Get the position in the current file.
@@ -2207,7 +2207,7 @@ vim.g.mapleader = ","
 vim.cmd("set shortmess-=F")
 
 ---------- Auto-Commands [Start] ----------
-is_ignoring_syntax_events = function()
+local is_ignoring_syntax_events = function()
     for _, value in pairs(vim.opt.eventignore) do
         if value == "Syntax" then
             return true
@@ -2254,7 +2254,7 @@ vim.api.nvim_create_autocmd("FileType", {
 -- :argdo and :bufdo, which disable the Syntax autocmd event to speed up
 -- processing.
 --
-_SYNTAX_HIGHLIGHTING_GROUP = vim.api.nvim_create_augroup("my.highlighter", { clear = true })
+local _SYNTAX_HIGHLIGHTING_GROUP = vim.api.nvim_create_augroup("my.highlighter", { clear = true })
 
 vim.api.nvim_create_autocmd({ "BufWinEnter", "WinEnter" }, {
     callback = function()
@@ -2327,7 +2327,7 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 })
 
 --- @return boolean # Check if the current buffer is an fzf prompt
-is_fzf_terminal = function()
+local is_fzf_terminal = function()
     local name = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
     local ending = ";#FZF"
 

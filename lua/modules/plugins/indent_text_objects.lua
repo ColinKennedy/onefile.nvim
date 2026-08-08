@@ -1,6 +1,7 @@
 --- Define indentation-aware text objects.
 
 local M = {}
+local _P = {}
 
 ---@alias _my.indent_text_object.Mode "strict" | "ignore_blank"
 
@@ -145,7 +146,7 @@ end
 ---@param cursor_line integer The 1-or-more cursor line.
 ---@param mode _my.indent_text_object.Mode The selection behavior.
 ---@return _my.text_object.Range # The text object range.
-function M.get_range(buffer, cursor_line, mode)
+function M._get_range(buffer, cursor_line, mode)
     local cursor_text = _get_line(buffer, cursor_line)
     local indent = _get_indent(cursor_text)
     local start_line = _find_start_line(buffer, cursor_line, indent, mode)
@@ -167,10 +168,10 @@ end
 --- Select the indentation text object under the cursor.
 ---
 ---@param mode _my.indent_text_object.Mode The selection behavior.
-function M.select(mode)
+function _P.select(mode)
     local buffer = vim.api.nvim_get_current_buf()
     local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
-    local range = M.get_range(buffer, cursor_line, mode)
+    local range = M._get_range(buffer, cursor_line, mode)
 
     require("modules.features.core_editor_setup").set_text_object_marks(
         range.start_line,
@@ -181,11 +182,11 @@ function M.select(mode)
 end
 
 vim.keymap.set({ "o", "x" }, "ii", function()
-    M.select("strict")
+    _P.select("strict")
 end, { desc = "Select same-indentation text until blank or different indentation lines." })
 
 vim.keymap.set({ "o", "x" }, "iI", function()
-    M.select("ignore_blank")
+    _P.select("ignore_blank")
 end, { desc = "Select same-indentation text across blank lines." })
 
 return M

@@ -1,6 +1,7 @@
 --- Highlight useful `f`, `F`, `t`, and `T` jump targets on the current line.
 
 local M = {}
+local _P = {}
 
 ---@class _my.quick_scope.Highlight
 ---@field line integer The 1-or-more buffer line to highlight.
@@ -261,7 +262,7 @@ end
 
 --- Set the highlight groups used by Quick Scope.
 ---
-function M.set_highlight_colors()
+function _P.set_highlight_colors()
     vim.g.qs_hi_priority = _get_option("qs_hi_priority", 1)
     vim.g.qs_hi_group_primary = "QuickScopePrimary"
     vim.g.qs_hi_group_secondary = "QuickScopeSecondary"
@@ -278,7 +279,7 @@ end
 ---@param line_number integer The 1-or-more line number for highlight positions.
 ---@param cursor_column integer? The 1-or-more cursor byte column to scan from.
 ---@return _my.quick_scope.HighlightResults # The highlights for the line.
-function M.get_line_highlights(line, line_number, cursor_column)
+function M._get_line_highlights(line, line_number, cursor_column)
     local max_chars = _get_option("qs_max_chars", 1000)
 
     if max_chars > 0 and #line > max_chars then
@@ -312,7 +313,7 @@ end
 --- Delete any Quick Scope matches in `window`.
 ---
 ---@param window integer The window whose matches should be cleared.
-function M.unhighlight_window(window)
+function _P.unhighlight_window(window)
     for _, match_id in ipairs(_MATCH_IDS_BY_WINDOW[window] or {}) do
         pcall(vim.fn.matchdelete, match_id, window)
     end
@@ -322,8 +323,8 @@ function M.unhighlight_window(window)
 end
 
 --- Delete Quick Scope matches in the current window.
-function M.unhighlight_line()
-    M.unhighlight_window(vim.api.nvim_get_current_win())
+function M._unhighlight_line()
+    _P.unhighlight_window(vim.api.nvim_get_current_win())
 end
 
 --- Add highlight matches for `positions`.
@@ -347,11 +348,11 @@ local function _add_match(group, positions)
 end
 
 --- Highlight the current line in the current window.
-function M.highlight_line()
+function M._highlight_line()
     local buffer = vim.api.nvim_get_current_buf()
     local window = vim.api.nvim_get_current_win()
 
-    M.unhighlight_window(window)
+    _P.unhighlight_window(window)
 
     if _should_skip_buffer(buffer) then
         return
@@ -360,7 +361,7 @@ function M.highlight_line()
     local line_number = vim.api.nvim_win_get_cursor(window)[1]
     local cursor_column = vim.api.nvim_win_get_cursor(window)[2] + 1
     local line = vim.api.nvim_buf_get_lines(buffer, line_number - 1, line_number, false)[1] or ""
-    local highlights = M.get_line_highlights(line, line_number, cursor_column)
+    local highlights = M._get_line_highlights(line, line_number, cursor_column)
     ---@type integer[]
     local match_ids = {}
     local primary_match = _add_match(vim.g.qs_hi_group_primary, highlights.primary)
@@ -378,37 +379,37 @@ function M.highlight_line()
 end
 
 --- Highlight the current line after `g:qs_delay`.
-function M.highlight_line_delay()
+function _P.highlight_line_delay()
     _stop_timer()
 
     local delay = _get_option("qs_delay", vim.fn.has("timers") == 1 and 50 or 0)
 
     if delay <= 0 then
-        M.highlight_line()
+        M._highlight_line()
         return
     end
 
     _TIMER = vim.fn.timer_start(delay, function()
         _TIMER = nil
-        M.highlight_line()
+        M._highlight_line()
     end)
 end
 
 --- Toggle Quick Scope on or off.
-function M.toggle()
+function _P.toggle()
     vim.g.qs_enable = _get_option("qs_enable", 1) == 1 and 0 or 1
 
     if vim.g.qs_enable == 1 then
-        M.highlight_line_delay()
+        _P.highlight_line_delay()
     else
         _stop_timer()
-        M.unhighlight_line()
+        M._unhighlight_line()
     end
 end
 
 --- Create Quick Scope autocommands, commands, mappings, and highlight groups.
-function M.setup()
-    M.set_highlight_colors()
+function _P.setup()
+    _P.set_highlight_colors()
     _get_option("qs_enable", 1)
     _get_option("qs_lazy_highlight", 0)
     _get_option("qs_second_highlight", 1)
@@ -428,7 +429,7 @@ function M.setup()
     vim.api.nvim_create_autocmd("ColorScheme", {
         group = group,
         desc = "Refresh Quick Scope highlight groups.",
-        callback = M.set_highlight_colors,
+        callback = _P.set_highlight_colors,
     })
 
     vim.api.nvim_create_autocmd(movement_events, {
@@ -436,9 +437,9 @@ function M.setup()
         desc = "Highlight Quick Scope targets on the current line.",
         callback = function()
             if _get_option("qs_lazy_highlight", 0) == 1 then
-                M.highlight_line()
+                M._highlight_line()
             else
-                M.highlight_line_delay()
+                _P.highlight_line_delay()
             end
         end,
     })
@@ -448,22 +449,22 @@ function M.setup()
         desc = "Clear Quick Scope targets when leaving the active line context.",
         callback = function()
             _stop_timer()
-            M.unhighlight_line()
+            M._unhighlight_line()
         end,
     })
 
-    vim.api.nvim_create_user_command("QuickScopeToggle", M.toggle, {
+    vim.api.nvim_create_user_command("QuickScopeToggle", _P.toggle, {
         desc = "Toggle Quick Scope current-line jump target highlighting.",
         nargs = 0,
     })
 
-    vim.keymap.set({ "n", "x" }, "<Plug>(QuickScopeToggle)", M.toggle, {
+    vim.keymap.set({ "n", "x" }, "<Plug>(QuickScopeToggle)", _P.toggle, {
         desc = "Toggle Quick Scope current-line jump target highlighting.",
     })
 end
 
 --- My personal settings that "feel good" with quick-scope.
-function M.initialize()
+function _P.initialize()
     -- Stop quick-scope highlighting after 160 characters
     vim.g.qs_max_chars = 160
 
@@ -483,8 +484,8 @@ function M.initialize()
     })
 end
 
-M.setup()
+_P.setup()
 
-M.initialize()
+_P.initialize()
 
 return M

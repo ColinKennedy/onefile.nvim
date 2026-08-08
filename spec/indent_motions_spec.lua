@@ -1,4 +1,4 @@
-local indent_motions = require("modules.features.indent_motions")
+local indent_motions = require("modules.features.indent_motions")._P
 
 --- Create a scratch buffer for indentation motion tests.
 ---

@@ -1,7 +1,7 @@
 local python_docstring_folds = require("modules.features.python_docstring_folds")
 
-local _ORIGINAL_REFRESH = python_docstring_folds.refresh
-local _ORIGINAL_SCHEDULE_REFRESH = python_docstring_folds.schedule_refresh
+local _ORIGINAL_REFRESH = python_docstring_folds._refresh
+local _ORIGINAL_SCHEDULE_REFRESH = python_docstring_folds._schedule_refresh
 ---@param ranges _my.python_docstring_folds.Range[]
 ---@return integer[][]
 local function simplify(ranges)
@@ -33,8 +33,8 @@ end
 
 describe("python docstring folds", function()
     after_each(function()
-        python_docstring_folds.refresh = _ORIGINAL_REFRESH
-        python_docstring_folds.schedule_refresh = _ORIGINAL_SCHEDULE_REFRESH
+        python_docstring_folds._refresh = _ORIGINAL_REFRESH
+        python_docstring_folds._schedule_refresh = _ORIGINAL_SCHEDULE_REFRESH
         vim.cmd.enew({ bang = true })
         vim.wo.foldmethod = "manual"
         vim.wo.foldexpr = "0"
@@ -45,7 +45,7 @@ describe("python docstring folds", function()
         local refreshed = 0
 
         ---@diagnostic disable-next-line: duplicate-set-field
-        python_docstring_folds.refresh = function(refreshed_buffer)
+        python_docstring_folds._refresh = function(refreshed_buffer)
             refreshed = refreshed + 1
             assert.equal(buffer, refreshed_buffer)
         end
@@ -60,7 +60,7 @@ describe("python docstring folds", function()
         local refreshed = 0
 
         ---@diagnostic disable-next-line: duplicate-set-field
-        python_docstring_folds.refresh = function()
+        python_docstring_folds._refresh = function()
             refreshed = refreshed + 1
         end
 
@@ -70,7 +70,7 @@ describe("python docstring folds", function()
     end)
 
     it("finds strict module, class, function, and async function docstrings without tree-sitter", function()
-        local ranges = python_docstring_folds.get_fallback_docstring_ranges({
+        local ranges = python_docstring_folds._get_fallback_docstring_ranges({
             '"""',
             "Module docs.",
             '"""',
@@ -97,7 +97,7 @@ describe("python docstring folds", function()
     end)
 
     it("ignores non-first-statement triple strings in the fallback scanner", function()
-        local ranges = python_docstring_folds.get_fallback_docstring_ranges({
+        local ranges = python_docstring_folds._get_fallback_docstring_ranges({
             "VALUE = 1",
             '"""not a module docstring"""',
             "",
@@ -111,7 +111,7 @@ describe("python docstring folds", function()
     end)
 
     it("does not create folds for one-line docstrings", function()
-        local ranges = python_docstring_folds.get_fallback_docstring_ranges({
+        local ranges = python_docstring_folds._get_fallback_docstring_ranges({
             '"""module docs"""',
             "",
             "def function():",
@@ -135,7 +135,7 @@ describe("python docstring folds", function()
         vim.api.nvim_set_current_buf(buffer)
         vim.bo[buffer].filetype = "python"
 
-        python_docstring_folds.refresh(buffer)
+        python_docstring_folds._refresh(buffer)
 
         assert.equal(1, python_docstring_folds.foldexpr(1))
         assert.equal(1, python_docstring_folds.foldexpr(2))
@@ -156,7 +156,7 @@ describe("python docstring folds", function()
             "    pass",
         })
 
-        assert.equal("Docstring starts several lines down.", python_docstring_folds.get_summary(buffer, 2, 6))
+        assert.equal("Docstring starts several lines down.", python_docstring_folds._get_summary(buffer, 2, 6))
     end)
 
     it("renders compact docstring fold text", function()
@@ -174,7 +174,7 @@ describe("python docstring folds", function()
         vim.api.nvim_set_current_buf(buffer)
         vim.bo[buffer].filetype = "python"
 
-        python_docstring_folds.refresh(buffer)
+        python_docstring_folds._refresh(buffer)
         vim.wo.foldmethod = "expr"
         vim.wo.foldexpr = "v:lua.require'modules.features.python_docstring_folds'.foldexpr(v:lnum)"
         vim.wo.foldtext = "v:lua.require'modules.features.python_docstring_folds'.foldtext()"
@@ -227,14 +227,14 @@ describe("python docstring folds", function()
         local refreshed = 0
 
         ---@diagnostic disable-next-line: duplicate-set-field
-        python_docstring_folds.refresh = function(refreshed_buffer)
+        python_docstring_folds._refresh = function(refreshed_buffer)
             refreshed = refreshed + 1
             assert.equal(buffer, refreshed_buffer)
         end
 
-        python_docstring_folds.schedule_refresh(buffer, 20)
-        python_docstring_folds.schedule_refresh(buffer, 20)
-        python_docstring_folds.schedule_refresh(buffer, 20)
+        python_docstring_folds._schedule_refresh(buffer, 20)
+        python_docstring_folds._schedule_refresh(buffer, 20)
+        python_docstring_folds._schedule_refresh(buffer, 20)
 
         vim.wait(100)
 
@@ -252,7 +252,7 @@ describe("python docstring folds", function()
             "value = 1",
         })
 
-        python_docstring_folds.refresh(buffer)
+        python_docstring_folds._refresh(buffer)
 
         assert.equal(1, python_docstring_folds.foldexpr(1))
 
@@ -282,7 +282,7 @@ describe("python docstring folds", function()
         end)
 
         local ok, message = pcall(function()
-            python_docstring_folds.refresh(buffer)
+            python_docstring_folds._refresh(buffer)
         end)
 
         rawset(vim.api, "nvim_get_mode", get_mode)
@@ -297,7 +297,7 @@ describe("python docstring folds", function()
         local scheduled = {}
 
         ---@diagnostic disable-next-line: duplicate-set-field
-        python_docstring_folds.schedule_refresh = function(buffer, delay)
+        python_docstring_folds._schedule_refresh = function(buffer, delay)
             table.insert(scheduled, { buffer = buffer, delay = delay })
         end
 

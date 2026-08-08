@@ -45,7 +45,7 @@ describe("LSP commands", function()
             return {}
         end
 
-        assert.equal("LSP Inactive", lsp_commands.get_attached_clients())
+        assert.equal("LSP Inactive", lsp_commands._get_attached_clients())
     end)
 
     it("lists attached LSP clients while ignoring null-ls and copilot", function()
@@ -60,7 +60,7 @@ describe("LSP commands", function()
             }
         end
 
-        assert.equal("[mypy, pylint, ty]", lsp_commands.get_attached_clients())
+        assert.equal("[mypy, pylint, ty]", lsp_commands._get_attached_clients())
     end)
 
     it("notifies the attached client list with :LspClients", function()
@@ -98,7 +98,7 @@ describe("LSP commands", function()
 
         assert.are.same({
             "# lua-language-server\n- completion\n- definition\n- rename",
-        }, lsp_commands.get_capabilities_messages())
+        }, lsp_commands._get_capabilities_messages())
     end)
 
     it("notifies capabilities and raw capability details", function()

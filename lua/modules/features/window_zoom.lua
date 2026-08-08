@@ -1,6 +1,7 @@
 --- Toggle a full-window zoom view without destroying the original layout.
 
 local M = {}
+local _P = {}
 
 ---@class _my.window_zoom.State
 ---@field source_tab integer The tabpage that owned the original window layout.
@@ -45,7 +46,7 @@ end
 ---@param tabpage? integer The tabpage handle to inspect. Defaults to the current tabpage.
 ---@return boolean # If the tabpage is a tracked zoom tab, return `true`.
 ---
-function M.is_zoomed_tab(tabpage)
+function M._is_zoomed_tab(tabpage)
     local tab = tabpage or vim.api.nvim_get_current_tabpage()
 
     return _STATE_BY_ZOOM_TAB[tab] ~= nil
@@ -56,14 +57,14 @@ end
 ---@param tabpage? integer The tabpage handle to inspect. Defaults to the current tabpage.
 ---@return _my.window_zoom.State? # The zoom state, if the tabpage is zoomed.
 ---
-function M.get_state(tabpage)
+function _P.get_state(tabpage)
     local tab = tabpage or vim.api.nvim_get_current_tabpage()
 
     return _STATE_BY_ZOOM_TAB[tab]
 end
 
 --- Zoom the current window into a temporary tabpage.
-function M.zoom_current_window()
+function _P.zoom_current_window()
     local source_tab = vim.api.nvim_get_current_tabpage()
     local source_window = vim.api.nvim_get_current_win()
     local source_buffer = vim.api.nvim_win_get_buf(source_window)
@@ -90,7 +91,7 @@ end
 ---
 ---@return boolean # If the zoom tab was restored, return `true`.
 ---
-function M.restore_current_zoom()
+function _P.restore_current_zoom()
     local zoom_tab = vim.api.nvim_get_current_tabpage()
     local state = _STATE_BY_ZOOM_TAB[zoom_tab]
 
@@ -120,17 +121,17 @@ function M.restore_current_zoom()
 end
 
 --- Toggle the current window between normal layout and a zoom tab.
-function M.toggle()
-    if M.is_zoomed_tab() then
-        M.restore_current_zoom()
+function M._toggle()
+    if M._is_zoomed_tab() then
+        _P.restore_current_zoom()
         return
     end
 
-    M.zoom_current_window()
+    _P.zoom_current_window()
 end
 
 --- Restore settings for any zoom tab that has already been closed.
-function M.clean_invalid_zoom_tabs()
+function _P.clean_invalid_zoom_tabs()
     for tabpage, state in pairs(_STATE_BY_ZOOM_TAB) do
         if not vim.api.nvim_tabpage_is_valid(tabpage) then
             vim.o.showtabline = state.showtabline
@@ -140,16 +141,16 @@ function M.clean_invalid_zoom_tabs()
 end
 
 --- Clear zoom state for tests.
-function M.reset_for_tests()
+function M._reset_for_tests()
     _STATE_BY_ZOOM_TAB = {}
 end
 
 vim.api.nvim_create_autocmd("TabClosed", {
-    callback = M.clean_invalid_zoom_tabs,
+    callback = _P.clean_invalid_zoom_tabs,
     desc = "Clean up closed zoom tabs.",
 })
 
-vim.keymap.set("n", "<C-w>o", M.toggle, {
+vim.keymap.set("n", "<C-w>o", M._toggle, {
     desc = "Toggle-zoom the current window.",
     silent = true,
 })

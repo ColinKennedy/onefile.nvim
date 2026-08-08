@@ -76,7 +76,7 @@ end
 
 --- Close any open aerial windows.
 local function close_aerial_windows()
-    aerial.close_all()
+    aerial._close_all()
 
     for _, window in ipairs(vim.api.nvim_list_wins()) do
         local buffer = vim.api.nvim_win_get_buf(window)
@@ -163,7 +163,7 @@ describe("modules.plugins.aerial", function()
             "        inner function",
             "            pass",
         })
-        local symbols = aerial.get_indentation_symbols(buffer)
+        local symbols = aerial._get_indentation_symbols(buffer)
 
         assert.equal("Widget1", symbols[1].name)
         assert.equal("initializer", symbols[1].children[1].name)
@@ -182,7 +182,7 @@ describe("modules.plugins.aerial", function()
 
         vim.bo[buffer].commentstring = "-- %s"
 
-        local symbols = aerial.get_indentation_symbols(buffer)
+        local symbols = aerial._get_indentation_symbols(buffer)
 
         assert.equal("function foo", symbols[1].name)
         assert.equal(1, #symbols)
@@ -204,7 +204,7 @@ describe("modules.plugins.aerial", function()
         vim.bo[buffer].filetype = "python"
         vim.bo[buffer].commentstring = "# %s"
 
-        local symbols = aerial.get_indentation_symbols(buffer)
+        local symbols = aerial._get_indentation_symbols(buffer)
 
         assert.equal(1, #symbols)
         assert.equal("function", symbols[1].kind)
@@ -272,7 +272,7 @@ describe("modules.plugins.aerial", function()
         vim.bo[buffer].filetype = "python"
         vim.bo[buffer].commentstring = "# %s"
 
-        local names = flatten_symbol_names(aerial.get_indentation_symbols(buffer))
+        local names = flatten_symbol_names(aerial._get_indentation_symbols(buffer))
 
         assert.are.same({
             "def single_line",
@@ -299,7 +299,7 @@ describe("modules.plugins.aerial", function()
         vim.bo[buffer].filetype = ""
         vim.bo[buffer].commentstring = "# %s"
 
-        local symbols = aerial.get_indentation_symbols(buffer)
+        local symbols = aerial._get_indentation_symbols(buffer)
 
         assert.equal(1, #symbols)
         assert.equal("def from_extension", symbols[1].name)
@@ -323,7 +323,7 @@ describe("modules.plugins.aerial", function()
         vim.bo[buffer].filetype = ""
         vim.bo[buffer].commentstring = "# %s"
 
-        local symbols = aerial.get_indentation_symbols(buffer)
+        local symbols = aerial._get_indentation_symbols(buffer)
 
         assert.equal("def get_something", symbols[1].name)
         assert.equal(5, symbols[1].line)
@@ -343,7 +343,7 @@ describe("modules.plugins.aerial", function()
         vim.bo[buffer].filetype = "lua"
         vim.bo[buffer].commentstring = "-- %s"
 
-        local symbols = aerial.get_indentation_symbols(buffer)
+        local symbols = aerial._get_indentation_symbols(buffer)
 
         assert.equal(2, #symbols)
         assert.equal("function", symbols[1].kind)
@@ -371,7 +371,7 @@ describe("modules.plugins.aerial", function()
         vim.bo[buffer].filetype = "cpp"
         vim.bo[buffer].commentstring = "// %s"
 
-        local symbols = aerial.get_indentation_symbols(buffer)
+        local symbols = aerial._get_indentation_symbols(buffer)
 
         assert.equal(2, #symbols)
         assert.equal("class", symbols[1].kind)
@@ -381,7 +381,7 @@ describe("modules.plugins.aerial", function()
     end)
 
     it("renders class and function rows with CC and FF prefixes", function()
-        local symbols = aerial.nest_symbols({
+        local symbols = aerial._nest_symbols({
             {
                 children = {},
                 column = 0,
@@ -405,7 +405,7 @@ describe("modules.plugins.aerial", function()
                 name = "__init__",
             },
         })
-        local rows = aerial.get_rows(symbols, {})
+        local rows = aerial._get_rows(symbols, {})
 
         assert.equal("  CC Widget", rows[1].text)
         assert.equal("    FF __init__", rows[2].text)
@@ -426,7 +426,7 @@ describe("modules.plugins.aerial", function()
             "    def __init__(self):",
         })
 
-        aerial.toggle()
+        aerial._toggle()
 
         local aerial_window = vim.api.nvim_get_current_win()
         local aerial_buffer = vim.api.nvim_get_current_buf()
@@ -445,7 +445,7 @@ describe("modules.plugins.aerial", function()
             "",
         })
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_buffer = vim.api.nvim_get_current_buf()
 
         assert.are.same({ "Nothing found. Define a class or function." }, get_lines(aerial_buffer))
@@ -501,11 +501,11 @@ describe("modules.plugins.aerial", function()
         vim.api.nvim_win_set_buf(0, stale_buffer)
         vim.api.nvim_set_current_win(source_window)
 
-        local entries = aerial.get_stale_session_entries()
+        local entries = aerial._get_stale_session_entries()
 
         assert.are.same({ { source_name = source_path } }, entries)
 
-        aerial.restore_stale_session_windows()
+        aerial._restore_stale_session_windows()
 
         local aerial_window = assert(find_aerial_window())
 
@@ -558,9 +558,9 @@ describe("modules.plugins.aerial", function()
         }, source_path)
         vim.cmd("silent edit " .. vim.fn.fnameescape(source_path))
 
-        aerial.toggle()
+        aerial._toggle()
 
-        local code = aerial.serialize_session_restore()
+        local code = aerial._serialize_session_restore()
 
         assert.is_truthy(code:find('require("modules.plugins.aerial").restore_session', 1, true))
         assert.is_truthy(code:find(source_path, 1, true))
@@ -602,12 +602,12 @@ describe("modules.plugins.aerial", function()
 
         assert.is_truthy(table.concat(get_lines(followed_aerial_buffer), "\n"):find("thing", 1, true))
 
-        local code = aerial.serialize_session_restore()
+        local code = aerial._serialize_session_restore()
 
         assert.is_truthy(code:find(second_path, 1, true))
         assert.is_nil(code:find(first_path, 1, true))
 
-        aerial.close_all()
+        aerial._close_all()
         vim.cmd("silent edit " .. vim.fn.fnameescape(second_path))
         vim.api.nvim_set_current_win(source_window)
         loadstring(code)()
@@ -633,7 +633,7 @@ describe("modules.plugins.aerial", function()
             hl_group = "ErrorMsg",
         })
 
-        aerial.toggle()
+        aerial._toggle()
 
         local aerial_buffer = vim.api.nvim_get_current_buf()
 
@@ -656,7 +656,7 @@ describe("modules.plugins.aerial", function()
             hl_group = "ErrorMsg",
         })
 
-        aerial.toggle()
+        aerial._toggle()
 
         local aerial_buffer = vim.api.nvim_get_current_buf()
 
@@ -670,9 +670,9 @@ describe("modules.plugins.aerial", function()
         })
         local source_window = vim.api.nvim_get_current_win()
 
-        aerial.toggle()
+        aerial._toggle()
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
-        aerial.jump_to_selected(false)
+        aerial._jump_to_selected(false)
 
         assert.equal(source_window, vim.api.nvim_get_current_win())
         assert.equal(source_buffer, vim.api.nvim_get_current_buf())
@@ -686,10 +686,10 @@ describe("modules.plugins.aerial", function()
         })
         local source_window = vim.api.nvim_get_current_win()
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_window = vim.api.nvim_get_current_win()
         vim.api.nvim_win_set_cursor(aerial_window, { 2, 0 })
-        aerial.jump_to_selected(true)
+        aerial._jump_to_selected(true)
 
         assert.equal(aerial_window, vim.api.nvim_get_current_win())
         assert.are.same({ 2, 0 }, vim.api.nvim_win_get_cursor(source_window))
@@ -701,7 +701,7 @@ describe("modules.plugins.aerial", function()
             "    def __init__(self):",
         })
 
-        aerial.toggle()
+        aerial._toggle()
 
         local mapping = vim.fn.maparg("<C-l>", "n", false, true)
 
@@ -715,7 +715,7 @@ describe("modules.plugins.aerial", function()
             "    def __init__(self):",
         })
 
-        aerial.toggle()
+        aerial._toggle()
 
         assert.equal("", vim.fn.maparg("<C-CR>", "n"))
         assert.equal("", vim.fn.maparg("<C-Enter>", "n"))
@@ -728,14 +728,14 @@ describe("modules.plugins.aerial", function()
             "        body",
         })
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_buffer = vim.api.nvim_get_current_buf()
 
-        aerial.collapse_selected()
+        aerial._collapse_selected()
 
         assert.are.same({ "> CC class Widget1" }, get_lines(aerial_buffer))
 
-        aerial.expand_selected()
+        aerial._expand_selected()
 
         assert.are.same({
             "  CC class Widget1",
@@ -751,15 +751,15 @@ describe("modules.plugins.aerial", function()
             "class SomeClass:",
         })
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_window = vim.api.nvim_get_current_win()
 
         vim.api.nvim_win_set_cursor(aerial_window, { 1, 0 })
-        aerial.collapse_selected()
+        aerial._collapse_selected()
 
         assert.are.same({ 1, 0 }, vim.api.nvim_win_get_cursor(aerial_window))
 
-        aerial.expand_selected()
+        aerial._expand_selected()
 
         assert.are.same({ 1, 0 }, vim.api.nvim_win_get_cursor(aerial_window))
     end)
@@ -771,7 +771,7 @@ describe("modules.plugins.aerial", function()
         })
         local source_window = vim.api.nvim_get_current_win()
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_buffer = vim.api.nvim_get_current_buf()
         vim.api.nvim_set_current_win(source_window)
         vim.api.nvim_buf_set_lines(source_buffer, 2, 2, false, { "", "class SomeClass:" })
@@ -790,7 +790,7 @@ describe("modules.plugins.aerial", function()
         })
         local source_window = vim.api.nvim_get_current_win()
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_buffer = vim.api.nvim_get_current_buf()
         vim.api.nvim_set_current_win(source_window)
         vim.api.nvim_buf_set_lines(source_buffer, 1, 1, false, { "    def unsaved_method(self):" })
@@ -810,7 +810,7 @@ describe("modules.plugins.aerial", function()
 
         vim.bo[source_buffer].filetype = ""
 
-        assert.equal(350, aerial.get_refresh_debounce_ms(source_buffer))
+        assert.equal(350, aerial._get_refresh_debounce_ms(source_buffer))
     end)
 
     it("follows the original source window when it switches buffers", function()
@@ -826,7 +826,7 @@ describe("modules.plugins.aerial", function()
             "    def method(self):",
         })
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_buffer = vim.api.nvim_get_current_buf()
         vim.api.nvim_set_current_win(source_window)
         vim.api.nvim_win_set_buf(source_window, second_buffer)
@@ -849,7 +849,7 @@ describe("modules.plugins.aerial", function()
             "class Second:",
         })
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_buffer = vim.api.nvim_get_current_buf()
         vim.api.nvim_set_current_win(source_window)
         vim.api.nvim_win_set_buf(source_window, second_buffer)
@@ -870,7 +870,7 @@ describe("modules.plugins.aerial", function()
         })
         local source_window = vim.api.nvim_get_current_win()
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_window = vim.api.nvim_get_current_win()
         local floating_window = vim.api.nvim_open_win(source_buffer, true, {
             col = 1,
@@ -905,7 +905,7 @@ describe("modules.plugins.aerial", function()
             "    def __init__(self):",
         })
         local source_window = vim.api.nvim_get_current_win()
-        aerial.toggle()
+        aerial._toggle()
         local aerial_buffer = vim.api.nvim_get_current_buf()
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -959,7 +959,7 @@ describe("modules.plugins.aerial", function()
         })
         local source_window = vim.api.nvim_get_current_win()
 
-        aerial.toggle()
+        aerial._toggle()
         local aerial_window = vim.api.nvim_get_current_win()
         vim.api.nvim_set_current_win(source_window)
         vim.api.nvim_win_set_cursor(source_window, { 4, 0 })

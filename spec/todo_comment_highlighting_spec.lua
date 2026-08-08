@@ -19,7 +19,7 @@ end
 ---@param buffer integer The buffer to inspect.
 ---@return table[] # Extmark data.
 local function get_extmarks(buffer)
-    return vim.api.nvim_buf_get_extmarks(buffer, tagged_comments.get_namespace(), 0, -1, {
+    return vim.api.nvim_buf_get_extmarks(buffer, tagged_comments._get_namespace(), 0, -1, {
         details = true,
     })
 end
@@ -67,7 +67,7 @@ describe("tagged comment highlighting", function()
     end)
 
     it("parses Python comments", function()
-        local comment = tagged_comments.parse_comment_line("# TODO: Some text", "# %s")
+        local comment = tagged_comments._parse_comment_line("# TODO: Some text", "# %s")
 
         assert.are.same({
             text = "TODO: Some text",
@@ -76,7 +76,7 @@ describe("tagged comment highlighting", function()
     end)
 
     it("finds known tags", function()
-        local tag = tagged_comments.find_tag({
+        local tag = tagged_comments._find_tag({
             text = "FIXME: Something important",
             comment_start_column = 2,
         })
@@ -98,7 +98,7 @@ describe("tagged comment highlighting", function()
             "# blah",
         })
 
-        tagged_comments.highlight_buffer(buffer)
+        tagged_comments._highlight_buffer(buffer)
 
         local extmarks = get_extmarks(buffer)
 
@@ -113,7 +113,7 @@ describe("tagged comment highlighting", function()
     it("highlights the whitespace between the comment prefix and tag", function()
         local buffer = make_buffer({ "# TODO: Some text here" })
 
-        tagged_comments.highlight_buffer(buffer)
+        tagged_comments._highlight_buffer(buffer)
 
         local extmark = find_highlight(get_extmarks(buffer), 0, "MyTodoTodoTagPadding")
 
@@ -137,7 +137,7 @@ describe("tagged comment highlighting", function()
             "# BUG: Some line",
         })
 
-        tagged_comments.highlight_buffer(buffer)
+        tagged_comments._highlight_buffer(buffer)
 
         local extmarks = get_extmarks(buffer)
 

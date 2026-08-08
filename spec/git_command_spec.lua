@@ -25,7 +25,7 @@ describe("git command", function()
     end)
 
     it("builds shell-free argv commands for Windows Git paths", function()
-        local command = git_command.build_git_command("C:\\Program Files\\Git\\cmd\\git.exe", { "branch", "-a" })
+        local command = git_command._build_git_command("C:\\Program Files\\Git\\cmd\\git.exe", { "branch", "-a" })
 
         assert.are.same({ "C:\\Program Files\\Git\\cmd\\git.exe", "branch", "-a" }, command)
     end)

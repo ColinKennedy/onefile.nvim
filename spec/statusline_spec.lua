@@ -69,25 +69,25 @@ describe("modules.features.statusline", function()
     end)
 
     it("elides long hyphenated ticket branch names", function()
-        local branch = core_editor_setup.elide_git_branch_name("ASC-1234-some_really_long_description_here_003")
+        local branch = core_editor_setup._elide_git_branch_name("ASC-1234-some_really_long_description_here_003")
 
         assert.equal("ASC-1234-..._here_003", branch)
     end)
 
     it("elides long underscored ticket branch names", function()
-        local branch = core_editor_setup.elide_git_branch_name("ABC-1234_some_really_long_description_here_003")
+        local branch = core_editor_setup._elide_git_branch_name("ABC-1234_some_really_long_description_here_003")
 
         assert.equal("ABC-1234_..._here_003", branch)
     end)
 
     it("keeps long non-ticket branch names unchanged", function()
-        local branch = core_editor_setup.elide_git_branch_name("some_really_long_description_here_003")
+        local branch = core_editor_setup._elide_git_branch_name("some_really_long_description_here_003")
 
         assert.equal("some_really_long_description_here_003", branch)
     end)
 
     it("keeps short ticket branch names unchanged", function()
-        local branch = core_editor_setup.elide_git_branch_name("ASC-1234-short")
+        local branch = core_editor_setup._elide_git_branch_name("ASC-1234-short")
 
         assert.equal("ASC-1234-short", branch)
     end)

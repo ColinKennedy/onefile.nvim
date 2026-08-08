@@ -58,7 +58,7 @@ describe("indent text objects", function()
             "    third",
         }, 2)
 
-        local range = indent_text_objects.get_range(buffer, 2, "strict")
+        local range = indent_text_objects._get_range(buffer, 2, "strict")
 
         assert.are.same({
             start_line = 2,
@@ -79,7 +79,7 @@ describe("indent text objects", function()
             "root again",
         }, 4)
 
-        local range = indent_text_objects.get_range(buffer, 4, "ignore_blank")
+        local range = indent_text_objects._get_range(buffer, 4, "ignore_blank")
 
         assert.are.same({
             start_line = 2,
@@ -104,7 +104,7 @@ describe("indent text objects", function()
             "aaaaa",
         }, 7)
 
-        local range = indent_text_objects.get_range(buffer, 7, "ignore_blank")
+        local range = indent_text_objects._get_range(buffer, 7, "ignore_blank")
 
         assert.are.same({
             start_line = 2,
@@ -243,7 +243,7 @@ describe("argument text object", function()
     it("gets argument ranges with nested parentheses", function()
         local buffer = make_buffer({ "(foo, buzz=(something, here), more)" }, 1, 8)
 
-        local range = argument_text_object.get_range(buffer, { line = 1, column = 8 })
+        local range = argument_text_object._get_range(buffer, { line = 1, column = 8 })
 
         assert.are.same({
             start_line = 1,
@@ -264,7 +264,7 @@ describe("subvariable text object", function()
         assert.are.same({
             start_column = 4,
             end_column = 6,
-        }, subvariable_text_object.get_range("foo_bar_fizz", 5, "inner"))
+        }, subvariable_text_object._get_range("foo_bar_fizz", 5, "inner"))
     end)
 
     it("deletes underscore inner and around ranges", function()
@@ -315,7 +315,7 @@ describe("line text object", function()
     it("gets the current line without its newline", function()
         local buffer = make_buffer({ "alpha", "beta", "gamma" }, 2)
 
-        local range = line_text_object.get_range(buffer, 2)
+        local range = line_text_object._get_range(buffer, 2)
 
         assert.are.same({
             start_line = 2,
@@ -375,7 +375,7 @@ describe("comment block text object", function()
             "code after",
         }, 3)
 
-        local range = comment_text_object.get_range(buffer, 3)
+        local range = comment_text_object._get_range(buffer, 3)
 
         assert.are.same({ start_line = 2, end_line = 4 }, range)
     end)
@@ -383,7 +383,7 @@ describe("comment block text object", function()
     it("returns nil when the cursor is not on a comment line", function()
         local buffer = make_comment_buffer({ "code", "# comment" }, 1)
 
-        assert.is_nil(comment_text_object.get_range(buffer, 1))
+        assert.is_nil(comment_text_object._get_range(buffer, 1))
     end)
 
     it("stops the block at blank lines", function()
@@ -394,7 +394,7 @@ describe("comment block text object", function()
             "# bottom",
         }, 3)
 
-        local range = comment_text_object.get_range(buffer, 3)
+        local range = comment_text_object._get_range(buffer, 3)
 
         assert.are.same({ start_line = 3, end_line = 4 }, range)
     end)

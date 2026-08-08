@@ -3,7 +3,6 @@
 --- Quickfix buffers are not modifiable so `d` is remapped to a function that
 --- rewrites the underlying quickfix list instead of the buffer text.
 
----@class _my.quickfix_entry_deletion
 local M = {}
 
 local _P = {}
@@ -21,7 +20,7 @@ end
 --- Get every entry shown in `window`, plus the metadata needed to restore it.
 ---
 ---@param window integer The quickfix-style window to inspect.
----@return vim.fn.setqflist.what # The `getqflist()` / `getloclist()` dictionary.
+---@return table # The `getqflist()` / `getloclist()` dictionary.
 function _P.get_list(window)
     if _P.is_location_list(window) then
         return vim.fn.getloclist(window, { all = 0 })
@@ -33,7 +32,7 @@ end
 --- Replace the list shown in `window` with `data`.
 ---
 ---@param window integer The quickfix-style window to modify.
----@param data vim.fn.setqflist.what The `setqflist()` / `setloclist()` dictionary to apply.
+---@param data table The `setqflist()` / `setloclist()` dictionary to apply.
 function _P.set_list(window, data)
     if _P.is_location_list(window) then
         vim.fn.setloclist(window, {}, "r", data)
@@ -109,7 +108,7 @@ end
 ---@param start_line integer The first 1-or-more entry line to remove.
 ---@param end_line integer The last 1-or-more entry line to remove.
 ---@return integer # The number of entries that were removed.
-function _P.delete_entries(window, start_line, end_line)
+function M.delete_entries(window, start_line, end_line)
     if not vim.api.nvim_win_is_valid(window) then
         return 0
     end
@@ -124,7 +123,7 @@ function _P.delete_entries(window, start_line, end_line)
         return 0
     end
 
-    ---@type vim.quickfix.entry[]
+    ---@type table[]
     local kept = {}
 
     for index, item in ipairs(items) do
@@ -133,7 +132,6 @@ function _P.delete_entries(window, start_line, end_line)
         end
     end
 
-    ---@type vim.fn.setqflist.what
     local replacement = { items = kept, title = data.title }
 
     if data.context ~= nil and data.context ~= "" then
@@ -165,7 +163,7 @@ function _P.delete_from_normal_mode()
     local window = vim.api.nvim_get_current_win()
     local line = vim.fn.line(".")
 
-    _P.delete_entries(window, line, line + count - 1)
+    M.delete_entries(window, line, line + count - 1)
 end
 
 --- Delete every entry that the current visual selection touches.
@@ -175,13 +173,13 @@ function _P.delete_from_visual_mode()
 
     vim.api.nvim_feedkeys(vim.keycode("<Esc>"), "nx", false)
 
-    _P.delete_entries(window, start_line, end_line)
+    M.delete_entries(window, start_line, end_line)
 end
 
 --- Add the entry-deletion mappings to `buffer`.
 ---
 ---@param buffer integer The quickfix or location list buffer to modify.
-function _P.setup_mappings(buffer)
+function M.setup_mappings(buffer)
     vim.keymap.set("n", "d", _P.delete_from_normal_mode, {
         buffer = buffer,
         desc = "Delete [count] quickfix entries, as in `dd` or `d2d`.",
@@ -198,7 +196,7 @@ end
 vim.api.nvim_create_autocmd("FileType", {
     pattern = "qf",
     callback = function(arguments)
-        _P.setup_mappings(arguments.buf)
+        M.setup_mappings(arguments.buf)
     end,
 })
 

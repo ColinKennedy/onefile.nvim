@@ -1126,7 +1126,7 @@ function M.complete_relative(text)
 end
 
 --- Delete all grapple bookmarks (so we can start from scratch).
-function M.delete_all_bookmarks()
+function M._delete_all_bookmarks()
     for index, _, _ in M.iter_bookmarks() do
         _P.delete_bookmark(index)
     end
@@ -1342,7 +1342,7 @@ end
 ---@param mark string A Vim mark to set. e.g. `"A"`.
 ---@param buffer integer | string A 0-or-more buffer to modify
 ---
-function M.reset_bookmark(mark, buffer)
+function _P.reset_bookmark(mark, buffer)
     --- Save the current buffer, call `caller`, and then return to the current buffer.
     ---
     ---@param caller fun(): nil Something to call and restore later.

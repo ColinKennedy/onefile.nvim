@@ -17,7 +17,7 @@ end
 --- Get extmarks from a buffer.
 ---
 ---@param buffer integer The buffer to inspect.
----@return table[] # Extmark data.
+---@return vim.api.keyset.get_extmark_item[] # Extmark data.
 local function get_extmarks(buffer)
     return vim.api.nvim_buf_get_extmarks(buffer, tagged_comments._get_namespace(), 0, -1, {
         details = true,
@@ -26,7 +26,7 @@ end
 
 --- Check whether a highlight exists on `line`.
 ---
----@param extmarks table[] Extmarks to inspect.
+---@param extmarks vim.api.keyset.get_extmark_item[] Extmarks to inspect.
 ---@param line integer The 0-or-more line number.
 ---@param group string The expected highlight group.
 ---@return boolean # Whether the highlight exists.
@@ -42,10 +42,10 @@ end
 
 --- Find a highlight extmark.
 ---
----@param extmarks table[] Extmarks to inspect.
+---@param extmarks vim.api.keyset.get_extmark_item[] Extmarks to inspect.
 ---@param line integer The 0-or-more line number.
 ---@param group string The expected highlight group.
----@return table? # The extmark, if found.
+---@return vim.api.keyset.get_extmark_item? # The extmark, if found.
 local function find_highlight(extmarks, line, group)
     for _, extmark in ipairs(extmarks) do
         if

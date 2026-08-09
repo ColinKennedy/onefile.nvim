@@ -579,7 +579,7 @@ end
 --- Populate the quickfix list with repository hunks and focus its window.
 ---
 ---@param root string The Git repository root.
----@return table[] # The loaded quickfix entries.
+---@return vim.quickfix.entry[] # The loaded quickfix entries.
 local function load_quickfix_hunks(root)
     local git_hunk_navigation = require("modules.features.git_hunk_navigation")
 
@@ -769,7 +769,7 @@ describe("git hunk staging from the quickfix window", function()
             local items = load_quickfix_hunks(root)
             assert.equal(2, #items)
 
-            local buffer = items[1].bufnr
+            local buffer = assert(items[1].bufnr)
 
             vim.cmd("1,2GitCheckoutSelection")
             vim.wait(1500)
@@ -849,7 +849,7 @@ describe("git hunk staging from the quickfix window", function()
             local items = load_quickfix_hunks(root)
             assert.equal(2, #items)
 
-            local buffer = items[1].bufnr
+            local buffer = assert(items[1].bufnr)
 
             vim.cmd("1,2GitCheckoutSelection")
             vim.wait(1500)

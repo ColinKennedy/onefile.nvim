@@ -43,7 +43,7 @@ end
 function _P.run_git_command(command, directory)
     --- Print `object` to the user.
     ---
-    ---@param object any Some object to inspect and print.
+    ---@param object vim.SystemCompleted The failed command's result to inspect and print.
     ---
     local function _on_fail(object)
         vim.notify(string.format('Command failed: Got "%s" error.', vim.inspect(object)), vim.log.levels.ERROR)

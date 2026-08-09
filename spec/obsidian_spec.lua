@@ -58,6 +58,7 @@ local function get_buffer_mapping(buffer, lhs)
 end
 
 describe("modules.plugins.obsidian", function()
+    ---@type string
     local original_root
 
     before_each(function()
@@ -141,6 +142,7 @@ describe("modules.plugins.obsidian", function()
         local note = vim.fs.joinpath(root, "workspace", "note.md")
         local core_editor_setup = require("modules.features.core_editor_setup")
         local original_select_from_options = core_editor_setup.select_from_options
+        ---@type _my.selection_gui.GuiOptions
         local captured_options
 
         write_note(note, { "The environment was disclosing" })

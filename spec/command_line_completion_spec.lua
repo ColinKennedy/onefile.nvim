@@ -1,7 +1,9 @@
 local command_line_completion = require("modules.features.command_line_completion")
 
 describe("modules.features.command_line_completion", function()
+    ---@type fun(): integer
     local original_wildmenumode
+    ---@type integer
     local original_wildcharm
 
     before_each(function()

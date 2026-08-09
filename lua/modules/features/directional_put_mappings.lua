@@ -118,6 +118,7 @@ local function _remove_indent_columns(line, columns)
 
     while byte_index <= #line do
         local character = line:sub(byte_index, byte_index)
+        ---@type integer
         local width
 
         if character == " " then
@@ -145,6 +146,7 @@ end
 ---@return integer # The least indentation column count among non-blank lines.
 ---
 local function _get_common_indent_columns(lines)
+    ---@type integer?
     local common
 
     for _, line in ipairs(lines) do
@@ -386,6 +388,7 @@ function M.remember_native_put(register, context)
     end
 
     local end_line = start_line + added_lines
+    ---@type integer
     local end_column
 
     if #register_lines == 1 then

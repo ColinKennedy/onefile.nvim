@@ -621,6 +621,7 @@ function M.build_selection_target(base_text, target_text, diff, start_line, end_
                     table.insert(output, added)
                 end
             elseif removed then
+                ---@type boolean
                 local selected
 
                 if hunk.new_count == 0 then

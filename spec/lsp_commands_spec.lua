@@ -2,12 +2,12 @@ local lsp_commands = require("modules.features.lsp_commands")
 
 ---@class _spec.lsp.Client
 ---@field name string
----@field server_capabilities table<string, any>|fun(): table<string, any>
+---@field server_capabilities lsp.ServerCapabilities|fun(): lsp.ServerCapabilities
 
 --- Make a minimal LSP client for command tests.
 ---
 ---@param name string The client name.
----@param capabilities table<string, any>? Server capabilities.
+---@param capabilities lsp.ServerCapabilities? Server capabilities.
 ---@return _spec.lsp.Client # A fake LSP client.
 local function make_client(name, capabilities)
     local server_capabilities = capabilities or {}
@@ -23,8 +23,11 @@ local function make_client(name, capabilities)
 end
 
 describe("LSP commands", function()
+    ---@type fun(filter: vim.lsp.get_clients.Filter?): vim.lsp.Client[]
     local original_get_clients
+    ---@type fun(message: string, level: integer?): nil
     local original_notify
+    ---@type fun(register: string, value: string | string[], type_: string?): nil
     local original_setreg
 
     before_each(function()
@@ -64,6 +67,7 @@ describe("LSP commands", function()
     end)
 
     it("notifies the attached client list with :LspClients", function()
+        ---@type string
         local message
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -91,7 +95,7 @@ describe("LSP commands", function()
                     renameProvider = true,
                 }),
                 make_client("null-ls", {
-                    formattingProvider = true,
+                    documentFormattingProvider = true,
                 }),
             }
         end

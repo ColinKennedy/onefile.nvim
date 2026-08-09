@@ -1,5 +1,19 @@
 --- Shared utility functions, type definitions, constants, and state for the Neovim configuration.
 
+---@class _my.core_helpers
+---@field ENGLISH_LANGUAGE string The Neovim `:help` language tag for English.
+---@field BOOKMARK_MINIMUM integer The lowest bookmark index.
+---@field BOOKMARK_MAXIMUM integer The highest bookmark index.
+---@field LSP_GROUP integer The augroup that starts LSP servers.
+---@field SNIPPET_AUGROUP integer The augroup that drives snippet completion.
+---@field TERMINAL_GROUP integer The augroup that customizes terminal behavior.
+---@field GIT_EXECUTABLE string The `git` command to run.
+---@field RIPGREP_EXECUTABLE string The `rg` command to run.
+---@field SESSIONS_DIRECTORY_NAME string The directory that stores branch-aware sessions.
+---@field VIM_SESSION_FILE_NAME string The conventional Vim session file name.
+---@field VIMSCRIPT_COMMENT_MARKER string The character that starts a Vimscript comment.
+---@field SESSIONX_NAME string The VCS-root session file name.
+---@field IS_NERDFONT_ALLOWED boolean If `true`, icons may use Nerd Font glyphs.
 local M = {}
 local _P = {}
 
@@ -24,8 +38,13 @@ local _P = {}
 ---@field menu string The sub-category / grouping.
 ---@field word string The word or phrase display text to show in the completion row.
 
+---@alias _my.selector_gui.Value string|integer
+---    A raw, un-deserialized selector option, as handed to `select_from_options`.
+---    Buffer selectors pass buffer numbers. Everything else passes text.
+
 ---@class _my.selector_gui.entry.Deserialized The formatted option used by the selector GUI.
 ---@field display string The text to show in the pop-up.
+-- typer: ignore-next-line[disallowed-any]
 ---@field value any The original data, unformatted.
 
 ---@class _my.selector_gui.HeaderChunk A highlighted bit of selector header text.
@@ -69,9 +88,10 @@ local _P = {}
 
 ---@class _my.selector_gui.State An internal state tracker for the selector floating window.
 ---@field input string The currently-written user prompt input.
----@field all string[] All possible options to consider.
+---@field all _my.selector_gui.Value[] All possible options to consider.
 ---@field filtered _my.selector_gui.entry.Selection[] All options that match with `input`.
 ---@field selected integer The selected index.
+-- typer: ignore-next-line[disallowed-any]
 ---@field selected_by_value table<any, _my.selector_gui.entry.Selection>
 ---    Entries explicitly selected in multi-select mode.
 
@@ -95,7 +115,7 @@ local _P = {}
 ---    Custom "close selection GUI" behavior.
 ---@field confirm fun(value: _my.selector_gui.entry.Selection|_my.selector_gui.entry.Selection[]): nil
 ---    The function that runs on-selection.
----@field deserialize (fun(value: any): _my.selector_gui.entry.Deserialized)?
+---@field deserialize (fun(value: _my.selector_gui.Value): _my.selector_gui.entry.Deserialized)?
 ---    Format the incoming data, if needed. This is needed when
 ---    `_my.selector_gui.entry.Selection.value` and `_my.selector_gui.entry.Selection.display` are differing values.
 ---@field sort_score (fun(entry: _my.selector_gui.entry.Selection, input: string): number?)?
@@ -757,6 +777,11 @@ function M.get_deferred_shell_command_results(command, on_fail, on_update)
         end
     end)
 
+    --- Get the option at `i`, if it has been read from stdout yet.
+    ---
+    ---@param i integer A 1-or-more index into the found options.
+    ---@return string? # The found option, if any.
+    ---
     local function generate_value(i)
         return options[i]
     end
@@ -893,6 +918,7 @@ function M.get_fuzzy_match_score(query, candidate)
         local score = 0
         local streak = 0
         local last_match = 0
+        ---@type integer?
         local first_match = nil
 
         for candidate_index = 1, #candidate_ do
@@ -1021,6 +1047,7 @@ end
 function _P.get_topmost_contiguous_project_root_marker(directory, names)
     local found_yet = false
     local current = directory
+    ---@type string?
     local previous = nil
 
     while current and previous ~= current do
@@ -1145,6 +1172,7 @@ function M.go_to_diagnostic(next, severity)
     severity = severity and vim.diagnostic.severity[severity] or nil
 
     if vim.diagnostic.jump then
+        ---@type integer
         local count
 
         if next then
@@ -1635,7 +1663,7 @@ end
 
 --- Show, Select, and Navigate to a buffer from a list of buffers.
 function M.select_buffer()
-    ---@type string[]
+    ---@type integer[]
     local buffers = {}
 
     for _, buffer in ipairs(vim.api.nvim_list_bufs()) do

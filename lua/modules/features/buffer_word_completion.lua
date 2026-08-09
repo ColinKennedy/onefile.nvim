@@ -1,6 +1,9 @@
 --- Provide lightweight current-buffer completion when no LSP completion exists.
 
+---@class _my.buffer_word_completion
 local M = {}
+
+---@class _my.buffer_word_completion._P
 local _P = {}
 
 local _AUGROUP = vim.api.nvim_create_augroup("my.buffer_word_completion", { clear = true })
@@ -192,6 +195,7 @@ vim.api.nvim_create_autocmd("TextChangedI", {
     desc = "Trigger buffer-word completion when no LSP completion is available.",
 })
 
+---@type _my.buffer_word_completion._P
 M._P = _P
 
 return M

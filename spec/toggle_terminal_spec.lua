@@ -25,6 +25,7 @@ local function is_buffer_visible(buffer)
 end
 
 describe("modules.plugins.toggle_terminal", function()
+    ---@type boolean
     local showmode
 
     before_each(function()

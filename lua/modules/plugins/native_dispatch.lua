@@ -1,6 +1,10 @@
 --- A small vim-dispatch-like command runner.
 
+---@class _my.native_dispatch
 local M = {}
+
+---@class _my.native_dispatch._P
+---@field extra_compilers table<string, fun(): nil> Extra 'errorformat' presets, by compiler name.
 local _P = {}
 
 ---@alias _my.dispatch.DisplayMode "always" | "on_error" | "never"
@@ -31,7 +35,11 @@ local _OUTPUT_DEFAULTS = { display = "always", jump_first = false }
 ---@field write fun(lines: string[]): nil
 ---@field close fun(): nil
 
----@type table<string, fun(): nil>
+---@class _my.dispatch.CompilerState
+---@field current_compiler string? The `b:current_compiler` in effect, if any.
+---@field errorformat string The 'errorformat' in effect.
+---@field makeprg string The 'makeprg' in effect.
+
 _P.extra_compilers = {
     vimgrep = function()
         vim.opt.errorformat = { "%f:%l:%c:%m", "%f:%l:%m" }
@@ -174,7 +182,7 @@ end
 
 --- Snapshot compiler-related options so they can be restored.
 ---
----@return table<string, any> # The saved compiler state.
+---@return _my.dispatch.CompilerState # The saved compiler state.
 function _P.get_compiler_state()
     return {
         current_compiler = vim.b.current_compiler,
@@ -185,7 +193,7 @@ end
 
 --- Restore a compiler state snapshot.
 ---
----@param state table<string, any> The state from `_P.get_compiler_state()`.
+---@param state _my.dispatch.CompilerState The state from `_P.get_compiler_state()`.
 function _P.restore_compiler_state(state)
     if state.current_compiler == nil then
         vim.b.current_compiler = nil
@@ -448,6 +456,7 @@ end
 ---@param lines string[] The raw output lines.
 ---@param code integer? The command exit code.
 function _P.finish(options, lines, code)
+    ---@type integer?
     local first_valid_index = nil
     ---@type vim.quickfix.entry[]
     local items = {}
@@ -694,6 +703,7 @@ vim.api.nvim_create_user_command("DispatchOutput", M._dispatch_output, {
     complete = _P.complete,
 })
 
+---@type _my.native_dispatch._P
 M._P = _P
 
 return M

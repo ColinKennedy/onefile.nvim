@@ -90,6 +90,9 @@ for _, character in ipairs(_CLOSING_PAIRS) do
 end
 
 --- Split an empty pair across three lines and keep the cursor on the inner line.
+---
+---@return string? # The keys to feed when the cursor is not inside an empty pair.
+---
 function M.split_pair_on_enter()
     local line = vim.api.nvim_get_current_line()
     local cursor = vim.api.nvim_win_get_cursor(0)

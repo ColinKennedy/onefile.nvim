@@ -21,13 +21,25 @@ local function make_command_args(args)
     }
 end
 
+---@class _my.native_dispatch_spec.JobOptions The `jobstart()` options that dispatch passes.
+---@field stdin string? The stdin mode, if the job sets one.
+---@field on_stdout fun(job: integer, data: string[]): nil The stdout callback.
+---@field on_exit fun(job: integer, code: integer): nil The job-exit callback.
+
 describe("native dispatch", function()
+    ---@type fun(cmd: string | string[], opts: _my.native_dispatch_spec.JobOptions?): integer
     local original_jobstart
+    ---@type fun(message: string, level: integer?): nil
     local original_notify
+    ---@type fun(cmd: string | string[], input: string?): string
     local original_system
+    ---@type fun(cmd: string | string[], input: string?): string[]
     local original_systemlist
+    ---@type fun(command: string[]): string
     local original_dispatch_system
+    ---@type fun(command: string[]): string[]
     local original_dispatch_systemlist
+    ---@type {message: string, level: integer?}[]
     local notifications
 
     before_each(function()
@@ -406,6 +418,7 @@ describe("native dispatch", function()
     end)
 
     it("runs concurrent argv jobs through jobstart", function()
+        ---@type {command: string[], options: _my.native_dispatch_spec.JobOptions}[]
         local captured = {}
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -439,7 +452,7 @@ describe("native dispatch", function()
     end)
 
     it("closes job stdin so ripgrep searches files instead of waiting for input", function()
-        ---@type table?
+        ---@type _my.native_dispatch_spec.JobOptions?
         local captured_options = nil
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -533,6 +546,7 @@ describe("native dispatch", function()
     end)
 
     it("keeps tmux display panes smaller than the maximum at their natural height", function()
+        ---@type string[][]
         local resize_commands = {}
 
         rawset(native_dispatch._P, "systemlist", function()
@@ -550,6 +564,7 @@ describe("native dispatch", function()
     end)
 
     it("clamps oversized tmux display panes to forty rows", function()
+        ---@type string[][]
         local resize_commands = {}
 
         rawset(native_dispatch._P, "systemlist", function()

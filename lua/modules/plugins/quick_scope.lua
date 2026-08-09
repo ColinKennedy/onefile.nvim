@@ -84,6 +84,7 @@ local _DEFAULT_ACCEPTED_CHARS = {
 local _DEFAULT_BUFTYPE_BLACKLIST = { "terminal" }
 ---@type table<integer, integer[]>
 local _MATCH_IDS_BY_WINDOW = {}
+---@type integer?
 local _TIMER = nil
 
 --- Get a global option, initializing it with `default` if it has not been set.

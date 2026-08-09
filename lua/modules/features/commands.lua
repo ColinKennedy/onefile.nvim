@@ -283,6 +283,7 @@ end
 
 vim.api.nvim_create_user_command("Crg", function(options)
     local path = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
+    ---@type string
     local directory
 
     if path == "" then

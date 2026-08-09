@@ -150,6 +150,7 @@ describe("modules.plugins.native_grapple", function()
     it("warns and skips writes when the sessions directory cannot be created", function()
         local original_mkdir = vim.fn.mkdir
         local original_notify = vim.notify
+        ---@type {message: string, level: integer}?
         local notification
 
         rawset(vim.fn, "mkdir", function(path, flags)

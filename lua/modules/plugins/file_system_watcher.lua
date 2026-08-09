@@ -13,9 +13,9 @@ local _GROUP_NAME = "my.file_system_watcher"
 
 ---@class _my.file_system_watcher.Watch
 ---@field path string The watched on-disk file path.
----@field poller any The libuv fs_poll handle for `path`.
+---@field poller uv.uv_fs_poll_t The libuv fs_poll handle for `path`.
 ---@field signature string? The most recently-observed file metadata.
----@field reload_timer any? A one-shot timer used to debounce reloads.
+---@field reload_timer uv.uv_timer_t? A one-shot timer used to debounce reloads.
 
 ---@type _my.file_system_watcher.Options
 local _OPTIONS = {

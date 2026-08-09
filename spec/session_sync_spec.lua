@@ -1,5 +1,7 @@
 describe("session sync", function()
+    ---@type string
     local original_shortmess
+    ---@type boolean
     local original_more
 
     before_each(function()

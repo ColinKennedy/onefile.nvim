@@ -410,6 +410,7 @@ function M._parse_diff(repository, diff)
 
     ---@type _my.git_hunk_navigation.Entry[]
     local entries = {}
+    ---@type string?
     local relative_path
     local is_deleted_file = false
     ---@type string[]

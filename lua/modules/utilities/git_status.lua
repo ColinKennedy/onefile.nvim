@@ -3,6 +3,9 @@
 local core_helpers = require("modules.utilities.core_helpers")
 
 local M = {}
+
+---@class _my.git_status._P
+---@field opts _my.git_status.Options The tunable Git status settings.
 local _P = {}
 
 ---@class _my.git_status.Operation
@@ -47,7 +50,6 @@ local _P = {}
 ---@field auto_fetch_interval integer
 ---@field git_status_timeout integer
 
----@type _my.git_status.Options
 _P.opts = {
     auto_fetch_interval = 30000,
     git_status_timeout = 1000,
@@ -57,8 +59,10 @@ local _GIT_STATUS_REFRESH_INTERVAL = 1000
 local _GIT_STATUS_BUSY_DELAY = 1000
 ---@type table<string, _my.git_status.CacheEntry>
 local _CACHE = {}
+---@type boolean?
 local _IS_GIT_AVAILABLE = nil
 local _DID_SETUP = false
+---@type uv.uv_timer_t?
 local _FETCH_TIMER = nil
 
 ---@type table<string, table<string, string>>

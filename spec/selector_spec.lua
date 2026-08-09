@@ -79,9 +79,13 @@ local function press_normal(keys)
 end
 
 describe("selector UI", function()
+    ---@type integer
     local original_lines
+    ---@type integer
     local original_columns
+    ---@type integer
     local original_scrolloff
+    ---@type boolean
     local original_showmode
 
     before_each(function()
@@ -130,6 +134,7 @@ describe("selector UI", function()
         local list_window = get_selector_list_window()
         local list_buffer = vim.api.nvim_win_get_buf(list_window)
         local lines = vim.api.nvim_buf_get_lines(list_buffer, 0, -1, false)
+        ---@type integer?
         local selected_row = nil
 
         for index, line in ipairs(lines) do
@@ -708,6 +713,7 @@ describe("selector UI", function()
         refresh()
 
         local marks = vim.api.nvim_buf_get_extmarks(prompt_buffer, -1, 0, -1, { details = true })
+        ---@type string?
         local count_text = nil
 
         for _, mark in ipairs(marks) do
@@ -725,6 +731,7 @@ describe("selector UI", function()
     end)
 
     it("toggles multi-selected rows and confirms selected entries even when filtered out", function()
+        ---@type _my.selector_gui.entry.Selection[]?
         local confirmed = nil
         local refresh = core_editor_setup.select_from_options({ "alpha", "beta", "gamma" }, {
             multiple_selection = true,
@@ -769,6 +776,7 @@ describe("selector UI", function()
         refresh()
 
         local marks = vim.api.nvim_buf_get_extmarks(prompt_buffer, -1, 0, -1, { details = true })
+        ---@type string?
         local count_text = nil
 
         for _, mark in ipairs(marks) do
@@ -796,6 +804,7 @@ describe("selector UI", function()
     end)
 
     it("confirms the hovered entry as a one-item list when multi-select has no explicit selections", function()
+        ---@type _my.selector_gui.entry.Selection[]?
         local confirmed = nil
         local refresh = core_editor_setup.select_from_options({ "alpha", "beta" }, {
             multiple_selection = true,
@@ -968,6 +977,8 @@ describe("selector UI", function()
         local refresh = core_editor_setup.select_from_options({ path }, {
             confirm = function() end,
             deserialize = function(value)
+                ---@cast value string
+
                 return { display = vim.fs.basename(value), value = value }
             end,
             preview = {
@@ -1006,6 +1017,7 @@ describe("selector UI", function()
         local original_get_stash_preview_lines_async = core_editor_setup._get_stash_preview_lines_async
         ---@type _my.selector_gui.entry.Selection[]
         local stashes = {}
+        ---@type fun(): nil
         local on_update
 
         ---@diagnostic disable-next-line: duplicate-set-field

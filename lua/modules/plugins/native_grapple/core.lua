@@ -1,6 +1,14 @@
 --- Branch-aware native bookmark management inspired by grapple.nvim.
 
+---@class _my.native_grapple.core
+---@field _NO_GIT_BRANCH_NAME string The branch name used when no Git branch is available.
+---@field _HEAD_WATCHERS_BY_ROOT table<string, uv.uv_fs_event_t> The `HEAD` watchers, by repository root.
 local M = {}
+
+---@class _my.native_grapple.core._P
+---@field BOOKMARK_MINIMUM integer The lowest bookmark index.
+---@field BOOKMARK_MAXIMUM integer The highest bookmark index.
+---@field MARKS_FILE_NAME string The file name that stores a branch's marks.
 local _P = {}
 
 _P.BOOKMARK_MINIMUM = 1
@@ -270,6 +278,7 @@ end
 ---@param line integer?
 ---@param column integer?
 function _P.reset_bookmark(mark, buffer, line, column)
+    ---@type integer
     local buffer_number
 
     if type(buffer) == "number" then
@@ -505,13 +514,13 @@ end
 
 --- Set a Vim mark, falling back to the file top when a saved line is stale.
 ---
----@param setter fun(buffer: integer, mark: string, line: integer, column: integer, opts: table): nil
+---@param setter fun(buffer: integer, mark: string, line: integer, column: integer, opts: vim.api.keyset.empty): nil
 ---    The real mark setter.
 ---@param buffer integer The buffer to mark.
 ---@param mark string The Vim mark to set.
 ---@param line integer The saved line number.
 ---@param column integer The saved column number.
----@param opts table Extra mark options.
+---@param opts vim.api.keyset.empty Extra mark options.
 function _P.set_mark_or_top(setter, buffer, mark, line, column, opts)
     local ok, message = pcall(setter, buffer, mark, line, column, opts)
 
@@ -667,6 +676,7 @@ function M.teardown()
     M._reset_state_for_tests()
 end
 
+---@type _my.native_grapple.core._P
 M._P = _P
 M._HEAD_WATCHERS_BY_ROOT = _HEAD_WATCHERS_BY_ROOT
 

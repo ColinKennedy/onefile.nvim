@@ -22,7 +22,7 @@ PRIVATA ?= $(HOME)/repositories/privata
 DEADCODE ?= $(HOME)/repositories/lua-deadcode
 
 deadcode:
-	@$(LUA) "$(DEADCODE)/bin/deadcode" init.lua lua spec $(ARGUMENTS)
+	deadcode init.lua lua spec $(ARGUMENTS)
 
 download-dependencies:
 	git clone git@github.com:Bilal2453/luvit-meta.git .dependencies/luvit-meta $(IGNORE_EXISTING)

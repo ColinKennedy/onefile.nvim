@@ -18,12 +18,12 @@ describe("modules.features.statusline", function()
 
     before_each(function()
         original_get_statusline = git_status.get_statusline
-        core_helpers.delete_all_bookmarks()
+        core_helpers._delete_all_bookmarks()
     end)
 
     after_each(function()
         git_status.get_statusline = original_get_statusline
-        core_helpers.delete_all_bookmarks()
+        core_helpers._delete_all_bookmarks()
     end)
 
     it("does not render git-detail or grapple separators when both are empty", function()

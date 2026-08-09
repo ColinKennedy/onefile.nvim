@@ -13,14 +13,6 @@ CONFIGURATION = .luarc.json
 ARGUMENTS ?=
 LUA ?= lua
 
-# Where the privata checkout lives. Override on the command line to point at a
-# different working copy: make privata PRIVATA=/path/to/privata
-PRIVATA ?= $(HOME)/repositories/privata
-
-# Same idea for deadcode. Its bin/ wrapper resolves the package relative to
-# itself, so the checkout runs without being installed.
-DEADCODE ?= $(HOME)/repositories/lua-deadcode
-
 deadcode:
 	deadcode init.lua lua spec $(ARGUMENTS)
 

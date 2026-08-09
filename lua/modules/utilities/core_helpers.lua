@@ -272,37 +272,6 @@ function M.has_treesitter_parser(name)
     return _LANGUAGES_CACHE[name]
 end
 
---- Check if `left` and `right` have the same contents.
----
---- Note: Order does not matter.
----
----@generic T: any
----@param left T[] Some flat array to check.
----@param right T[] Another flat array to check.
----@return boolean # If `left` and `right` have the same contents return `true`.
----
-function _P.is_arrays_equal(left, right)
-    if #left ~= #right then
-        return false
-    end
-
-    ---@generic T: any
-    ---@type table<T, boolean>
-    local lookup = {}
-
-    for _, value in ipairs(left) do
-        lookup[value] = true
-    end
-
-    for _, value in ipairs(right) do
-        if not lookup[value] then
-            return false
-        end
-    end
-
-    return true
-end
-
 --- Check if Vim `mark` is set already.
 ---
 ---@param mark string The Vim mark name. e.g. `"A"`.
@@ -329,15 +298,6 @@ function _P.is_start_of_source_line(details)
     local text_up_to_the_trigger = line:sub(1, details.start_column)
 
     return (text_up_to_the_trigger:match("^%s*$"))
-end
-
---- Check if `text` is 100% whitespace.
----
----@param text string Some line of text.
----@return boolean # If `text` has any non-whitespace, return `false`.
----
-function _P.is_whitespace(text)
-    return string.match(text, "^%s*$") ~= nil
 end
 
 --- Remove leading spaces across all snippets.
@@ -661,72 +621,6 @@ function M.compute_snippet_completion_options(data)
     return output
 end
 
---- Calls `caller` once after we stop requesting for `caller` after `milliseconds`.
----
---- If you call `caller` really often (e.g. because of user keyboard input)
---- this function makes sure that the requests aren't spammed to Neovim.
----
----@generic _Parameters : any
----@generic _Return : any
----@param caller (fun(...: _Parameters): _Return) A function to track and debounce.
----@param timeout integer A 1-or-more milliseconds to wait. Usually you'll want 50+.
----@param first boolean? Whether to use the arguments of the first call to `caller` or not.
----@return fun(...: _Parameters): _Return # The wrapped function.
----
-function _P.debounce_trailing(caller, timeout, first)
-    local timer = vim.uv.new_timer()
-
-    if not timer then
-        error("Unable to debounce the function. No timer could be created!", 2)
-    end
-
-    local wrapped
-
-    if not first then
-        --- Debounce `caller` and use the last arguments of the last debounced call.
-        function wrapped(...)
-            ---@type unknown[]
-            local argv = { ... }
-            local argc = select("#", ...)
-
-            timer:start(timeout, 0, function()
-                pcall(
-                    vim.schedule_wrap(function()
-                        pcall(function()
-                            timer:stop()
-                            timer:close()
-                        end)
-
-                        caller(unpack(argv, 1, argc))
-                    end),
-                    unpack(argv, 1, argc)
-                )
-            end)
-        end
-    else
-        local argv, argc
-
-        --- Debounce `caller` and use the first arguments of the last debounced call.
-        function wrapped(...)
-            argv = argv or { ... }
-            argc = argc or select("#", ...)
-
-            timer:start(timeout, 0, function()
-                pcall(vim.schedule_wrap(function()
-                    pcall(function()
-                        timer:stop()
-                        timer:close()
-                    end)
-
-                    caller(unpack(argv, 1, argc))
-                end))
-            end)
-        end
-    end
-
-    return wrapped
-end
-
 --- Remove `candidates` if they start with `base`.
 ---
 ---@param candidates _my.completion.Entry[] All possible text that could match.
@@ -887,23 +781,6 @@ function M.get_deferred_shell_command_results(command, on_fail, on_update)
     return output
 end
 
---- Crop `text` if it is longer than `maximum`.
----
----@param text string A long message that possibly crop.
----@param maximum integer? A 1-or-more value. If not given, a "good" default value is used.
----@return string # The simplified text.
----
-function _P.get_elided_left_text(text, maximum)
-    maximum = maximum or 40
-    local count = #text
-
-    if count <= maximum then
-        return text
-    end
-
-    return "..." .. text:sub(count - maximum, count)
-end
-
 --- Elide-right the `text`. Make `"something long here"` into `"something long..."`.
 ---
 ---@param text string The text to possibly crop.
@@ -919,54 +796,6 @@ function _P.get_elided_right_text(text, maximum)
     end
 
     return text:sub(1, maximum - 3) .. "..."
-end
-
---- Compute the levenshtein distance between `a` and `b`.
----
----@param a string
----    A word or phrase to match against.
----@param b string
----    A word or phrase to match against.
----@return number
----    Some number indicating similarity between `a` and `b`. Higher values
----    means they are not similar and 0 means "it's an exact match".
----
-function _P.levenshtein(a, b)
-    local len_a, len_b = #a, #b
-
-    if len_a == 0 then
-        return len_b
-    end
-
-    if len_b == 0 then
-        return len_a
-    end
-
-    ---@type integer[]
-    local previous = {}
-
-    for index_b = 0, len_b do
-        previous[index_b] = index_b
-    end
-
-    for index_a = 1, len_a do
-        ---@type integer[]
-        local current = {}
-
-        current[0] = index_a
-
-        local character_a = a:sub(index_a, index_a)
-
-        for index_b = 1, len_b do
-            local character_b = b:sub(index_b, index_b)
-            local cost = (character_a == character_b) and 0 or 1
-            current[index_b] = math.min(current[index_b - 1] + 1, previous[index_b] + 1, previous[index_b - 1] + cost)
-        end
-
-        previous = current
-    end
-
-    return previous[len_b]
 end
 
 -- TODO: I think the code below make not scale well. Consider replacing with
@@ -1178,22 +1007,6 @@ function M.get_nearest_project_root(source)
     return _P.get_topmost_contiguous_project_root_marker(source, _ALL_CONTIGUOUS_PROJECT_ROOT_MARKERS)
 end
 
---- Tokenize `text`, ignoring all whitespace.
----
----@param text string Some user input to separate.
----@return string[] # The tokenized values.
----
-function _P.get_split_words(text)
-    ---@type string[]
-    local output = {}
-
-    for word in text:gmatch("%S+") do
-        table.insert(output, word)
-    end
-
-    return output
-end
-
 --- Starting from `directory`, look for `names` to indicate a project root.
 ---
 ---@param directory string
@@ -1233,47 +1046,6 @@ end
 ---
 function M.get_vim_mark_from_bookmark_index(index)
     return string.char(64 + index) -- A=65, B=66, etc.
-end
-
----@retrn _my.window.Edge[] Get all edges of the screen that the current window touches.
-function _P.get_window_edges()
-    local window = vim.api.nvim_get_current_win()
-    local screen_width = vim.o.columns
-    local screen_height = vim.o.lines - vim.o.cmdheight
-
-    local configuration = vim.api.nvim_win_get_config(window)
-
-    if not configuration.relative or configuration.relative ~= "" then
-        -- NOTE: We skip floating windows
-        return nil
-    end
-
-    local pos = vim.api.nvim_win_get_position(window)
-    local row = pos[1]
-    local col = pos[2]
-    local height = vim.api.nvim_win_get_height(window)
-    local width = vim.api.nvim_win_get_width(window)
-
-    ---@type _my.window.Edge[]
-    local edges = {}
-
-    if row == 0 then
-        table.insert(edges, "top")
-    end
-
-    if (row + height + 1) == screen_height then
-        table.insert(edges, "bottom")
-    end
-
-    if col == 0 then
-        table.insert(edges, "left")
-    end
-
-    if (col + width) == screen_width then
-        table.insert(edges, "right")
-    end
-
-    return edges
 end
 
 --- Find the top-level project, if any, and then cd Neovim to it.
@@ -1358,27 +1130,6 @@ function M.delete_all_bookmarks()
     for index, _, _ in M.iter_bookmarks() do
         _P.delete_bookmark(index)
     end
-end
-
---- Save `:h autochdir`, run `caller`, and then restore it.
----
----@generic T : any
----@param caller fun(): T Some function to call and (hopefully) return.
----@return T? # The return value of `caller`, assuming it did not error.
----
-function _P.enable_autochdir(caller)
-    local original = vim.o.autochdir
-    vim.o.autochdir = true
-    local success, result = pcall(caller)
-    vim.o.autochdir = original
-
-    if not success then
-        vim.notify(result, vim.log.levels.ERROR)
-
-        return nil
-    end
-
-    return result
 end
 
 --- Move to the next or previous diagnostic message in the current buffer.
@@ -1509,27 +1260,6 @@ function _P.mark_current_buffer_as_bookmark(mark)
             vim.cmd('normal! `"')
         end)
     end
-end
-
---- Find the next-available bookmark number and set the current buffer to it.
-function M.mark_current_buffer_as_next_bookmark()
-    local maximum
-
-    for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
-        local mark = M.get_vim_mark_from_bookmark_index(index)
-
-        if _P.is_mark_defined(mark) then
-            maximum = index
-        end
-    end
-
-    local next_index = 1
-
-    if maximum then
-        next_index = ((maximum + 1) % M.BOOKMARK_MAXIMUM) + 1
-    end
-
-    _P.mark_current_buffer_as_bookmark(M.get_vim_mark_from_bookmark_index(next_index))
 end
 
 --- Open `text` relative path using the current directory as a root.
@@ -1674,15 +1404,6 @@ end
 ---
 function M.lstrip(text)
     return text:match("^%s*(.-)$")
-end
-
---- Remove whitespace from the end of `text`.
----
----@param text string Some text that has whitespace at the end. e.g. `"foo    "`.
----@return string # The removed text. e.g. `"foo"`.
----
-function _P.rstrip(text)
-    return text:match("^(.-)%s*$")
 end
 
 --- Run the git `command` and show an error if it fails for some reason.

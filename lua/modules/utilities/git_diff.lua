@@ -96,19 +96,6 @@ local function _split_lines(text)
     return lines
 end
 
---- Join `lines` into a newline-terminated string.
----
----@param lines string[] Some lines to join.
----@return string # The joined text.
----
-function _P.join_lines(lines)
-    if #lines == 0 then
-        return ""
-    end
-
-    return table.concat(lines, "\n") .. "\n"
-end
-
 --- Run a git command asynchronously.
 ---
 ---@param arguments string[] Git arguments, without the leading executable.
@@ -659,25 +646,6 @@ function M.build_selection_target(base_text, target_text, diff, start_line, end_
     local has_eol = selected_changes > 0 and target_has_eol or base_has_eol
 
     return _P.join_git_text(output, has_eol), selected_changes
-end
-
---- Build lines that contain only selected buffer changes applied to HEAD.
----
----@param old_lines string[] The original lines.
----@param new_lines string[] The changed buffer lines.
----@param start_line integer The first selected buffer line.
----@param end_line integer The last selected buffer line.
----@param callback fun(lines: string[]): nil Callback with the partially-applied file lines.
----
-function _P.make_selected_lines(old_lines, new_lines, start_line, end_line, callback)
-    local base_text = _P.join_lines(old_lines)
-    local target_text = _P.join_lines(new_lines)
-
-    M.build_zero_context_diff(base_text, target_text, function(diff)
-        local partial_text = M.build_selection_target(base_text, target_text, diff or "", start_line, end_line)
-
-        callback(_split_lines(partial_text))
-    end)
 end
 
 --- Write `text` without using Vim's line-based writefile behavior.

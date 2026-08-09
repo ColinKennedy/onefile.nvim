@@ -118,21 +118,6 @@ function _P.normalize_path(path)
     return vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
 end
 
---- Check if `path` is inside `directory`.
----
----@param directory string The possible parent directory.
----@param path string The possible child path.
----@return boolean # If `path` is inside `directory`, return `true`.
-function _P.is_path_inside(directory, path)
-    local ok, relative = pcall(vim.fs.relpath, _P.normalize_path(directory), _P.normalize_path(path))
-
-    if not ok or not relative then
-        return false
-    end
-
-    return relative ~= ".." and not relative:match("^%.%.[/\\]")
-end
-
 --- Get the Obsidian workspace root for `path`, if any.
 ---
 ---@param path string A buffer path.

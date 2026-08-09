@@ -52,17 +52,6 @@ function M._is_zoomed_tab(tabpage)
     return _STATE_BY_ZOOM_TAB[tab] ~= nil
 end
 
---- Get the zoom state for a tabpage.
----
----@param tabpage? integer The tabpage handle to inspect. Defaults to the current tabpage.
----@return _my.window_zoom.State? # The zoom state, if the tabpage is zoomed.
----
-function _P.get_state(tabpage)
-    local tab = tabpage or vim.api.nvim_get_current_tabpage()
-
-    return _STATE_BY_ZOOM_TAB[tab]
-end
-
 --- Zoom the current window into a temporary tabpage.
 function _P.zoom_current_window()
     local source_tab = vim.api.nvim_get_current_tabpage()

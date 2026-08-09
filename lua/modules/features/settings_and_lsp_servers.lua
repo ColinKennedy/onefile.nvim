@@ -144,11 +144,7 @@ function _P.is_running_busted()
     return tostring(arguments[0] or ""):match("busted") ~= nil
 end
 
----@type boolean
-_P.auto_configured_lsp_servers = false
-
 if not _P.is_running_busted() then
-    _P.auto_configured_lsp_servers = true
     M._configure_lsp_servers()
 end
 

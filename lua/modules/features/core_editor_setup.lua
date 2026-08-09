@@ -1815,70 +1815,6 @@ end
 
 M.SESSION_MANAGER = SessionManager.new()
 
---- Unset the bookmark if it is set or set it if it's not set.
-function _P.toggle_bookmark_in_current_buffer()
-    --- Delete and re-add all bookmarks.
-    ---
-    --- Bookmarks can sometimes become internally messy and tis function just
-    --- forces them to be clean and contiguous.
-    ---
-    local function _refresh_all_bookmark_values()
-        ---@type {index: integer?, path: string?}[]
-        local buffers = {}
-
-        for _, buffer_number, buffer_path in core_helpers.iter_bookmarks() do
-            if buffer_number == 0 then
-                table.insert(buffers, { path = buffer_path })
-            else
-                table.insert(buffers, { index = buffer_number })
-            end
-        end
-
-        core_helpers.delete_all_bookmarks()
-
-        for new_index, buffer in ipairs(buffers) do
-            local value = buffer.index or buffer.path
-
-            if not value then
-                error(string.format('Buffer "%s" has no index or path.', vim.inspect(buffer)), 0)
-            end
-
-            local mark = core_helpers.get_vim_mark_from_bookmark_index(new_index)
-            core_helpers.reset_bookmark(mark, value)
-        end
-    end
-
-    --- Add the current buffer to the bookmarks list if it isn't already.
-    local function _add_current_buffer_if_needed()
-        local current_buffer = vim.api.nvim_get_current_buf()
-        ---@type integer[]
-        local current_buffer_bookmarks = {}
-
-        for index, buffer_number, _ in core_helpers.iter_bookmarks() do
-            -- NOTE: Don't add the current buffer because it's already in the list
-            if buffer_number == current_buffer then
-                table.insert(current_buffer_bookmarks, index)
-
-                break
-            end
-        end
-
-        if vim.tbl_isempty(current_buffer_bookmarks) then
-            core_helpers.mark_current_buffer_as_next_bookmark()
-        else
-            for _, mark_index in ipairs(current_buffer_bookmarks) do
-                local mark = core_helpers.get_vim_mark_from_bookmark_index(mark_index)
-                vim.cmd.delmarks(mark)
-            end
-        end
-    end
-
-    _add_current_buffer_if_needed()
-    _refresh_all_bookmark_values()
-
-    M.SESSION_MANAGER:write_current_session()
-end
-
 --- Open or close the QuickFix window (don't move the cursor to the window).
 function M.toggle_quickfix()
     local current_window = vim.api.nvim_get_current_win()
@@ -2133,25 +2069,6 @@ function _P.get_git_branch_safe(path)
     end
 
     return entry.branch
-end
-
---- Refresh the cached git branch for `path` without waiting.
----
----@param path string? Use this path to find the git repository. If not provided, use the current buffer.
-function _P.refresh_git_branch_safe(path)
-    if not _is_git_available() then
-        return
-    end
-
-    local key = _get_git_branch_cache_key(path)
-    local entry = _GIT_BRANCH_CACHE[key]
-
-    if not entry then
-        entry = { checked_at = 0, in_flight = false, failed = false }
-        _GIT_BRANCH_CACHE[key] = entry
-    end
-
-    _refresh_git_branch(path, entry)
 end
 
 ---@return string # Get a human-readable git branch name, if possible.

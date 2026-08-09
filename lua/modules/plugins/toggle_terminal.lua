@@ -629,11 +629,13 @@ function _P.setup_commands()
     vim.api.nvim_create_user_command(
         "ToggleTerminal",
         _toggle_terminal,
-        { desc = "Open / Close a terminal at the bottom of the tab", nargs = 0 }
+        { desc = "Toggle Terminal, in a split at the bottom of the current tab.", nargs = 0 }
     )
 end
 
 _P.setup_autocommands()
+_P.setup_commands()
+
 vim.keymap.set(
     "n",
     "<space>T",

@@ -15,7 +15,11 @@ local _P = {}
 --
 local _METADATA_MARKER = "---"
 -- NOTE: obsidian.nvim uses YAML and aliases is a string[] that starts with "aliases:"
-local _ALIASES_START_MARKER = "aliases:"
+local _ALIASES_KEY = "aliases"
+-- NOTE: obsidian.nvim uses YAML and tags is a string[] that starts with "tags:"
+local _TAGS_KEY = "tags"
+-- NOTE: obsidian tags are hierarchical. e.g. `"food/protein"` is a child of `"food"`.
+local _TAG_SEPARATOR = "/"
 local _CURRENT_WORKSPACE = "politics"
 local _ROOT = os.getenv("NEOVIM_VAULTS_DIRECTORY") or vim.fs.joinpath(vim.fn.expand("~"), "vaults")
 
@@ -23,12 +27,21 @@ local _ROOT = os.getenv("NEOVIM_VAULTS_DIRECTORY") or vim.fs.joinpath(vim.fn.exp
 ---@field path string The markdown file path containing the alias.
 ---@field alias string The exact alias text from frontmatter.
 
---- Find the alias from `text`, if any.
+---@class modules.plugins.obsidian.TaggedNote A note that declares one or more frontmatter tags.
+---@field path string The absolute markdown file path.
+---@field display string Human-friendly note text. Its first alias or, failing that, its file name.
+---@field tags string[] Every tag that the note declares.
+
+---@class modules.plugins.obsidian.TagEntry One selectable row in the tag selector.
+---@field tag string The full tag text. e.g. `"food/protein"`.
+---@field count integer How many notes match `tag`, including its child tags.
+
+--- Find the YAML list item from `text`, if any.
 ---
 ---@param text string The line to query. e.g. ` - some_tag/here`.
 ---@return string? # The found match, if any.
 ---
-function _P.get_alias_text(text)
+function _P.get_list_item_text(text)
     return (string.match(text, "%s*-%s*(.*)"))
 end
 
@@ -42,23 +55,37 @@ function _P.is_metadata_key_line(line)
     return character ~= "" and character ~= " "
 end
 
---- Iterate aliases from a note's top YAML frontmatter.
+--- Read YAML list values from a note's top frontmatter.
+---
+--- Only block-style lists are considered. e.g. a `"tags:"` line followed by
+--- `"  - some_tag"` lines. An inline `"tags: []"` yields no values.
 ---
 --- Raises:
 ---     If `path` cannot be read for data.
 ---
 ---@param path string An absolute path on-disk to some obsidian note to query from.
----@return fun(): string? # A generator that yields one alias at a time.
-function _P.iter_aliases(path)
+---@param keys string[] The frontmatter keys to read. e.g. `{"aliases", "tags"}`.
+---@return table<string, string[]> # Each requested key and its found values.
+---
+function _P.get_frontmatter_lists(path, keys)
     local handler = io.open(path)
 
     if not handler then
         error(string.format('File "%s" could not be opened.', path), 0)
     end
 
-    local aliases_started = false
-    ---@type string[]
-    local aliases = {}
+    ---@type table<string, string[]>
+    local output = {}
+    ---@type table<string, boolean>
+    local is_wanted = {}
+
+    for _, key in ipairs(keys) do
+        output[key] = {}
+        is_wanted[key] = true
+    end
+
+    ---@type string?
+    local current_key = nil
     local line_number = 0
 
     for line in handler:lines() do
@@ -70,21 +97,38 @@ function _P.iter_aliases(path)
             end
         elseif line == _METADATA_MARKER then
             break
-        elseif line == _ALIASES_START_MARKER or line == "aliases: []" then
-            aliases_started = line == _ALIASES_START_MARKER
-        elseif aliases_started then
-            local alias = _P.get_alias_text(line)
+        else
+            local key = line:match("^([%w_%-]+):")
 
-            if alias then
-                table.insert(aliases, alias)
-            elseif _P.is_metadata_key_line(line) then
-                aliases_started = false
+            if key then
+                -- NOTE: An inline value such as `"tags: []"` has no list items to read.
+                current_key = (is_wanted[key] and line == key .. ":") and key or nil
+            elseif current_key then
+                local value = _P.get_list_item_text(line)
+
+                if value then
+                    table.insert(output[current_key], value)
+                elseif _P.is_metadata_key_line(line) then
+                    current_key = nil
+                end
             end
         end
     end
 
     handler:close()
 
+    return output
+end
+
+--- Iterate aliases from a note's top YAML frontmatter.
+---
+--- Raises:
+---     If `path` cannot be read for data.
+---
+---@param path string An absolute path on-disk to some obsidian note to query from.
+---@return fun(): string? # A generator that yields one alias at a time.
+function _P.iter_aliases(path)
+    local aliases = _P.get_frontmatter_lists(path, { _ALIASES_KEY })[_ALIASES_KEY]
     local index = 0
 
     return function()
@@ -108,6 +152,50 @@ function _P.get_aliases(path)
 
     for alias in _P.iter_aliases(path) do
         table.insert(output, alias)
+    end
+
+    return output
+end
+
+--- Clean raw frontmatter tag text so it can be compared and displayed.
+---
+---@param text string A raw tag value. e.g. `' "#food/protein" '`.
+---@return string # The cleaned tag. e.g. `"food/protein"`.
+---
+function _P.normalize_tag(text)
+    local tag = text:match("^%s*(.-)%s*$")
+    tag = tag:match('^"(.*)"$') or tag:match("^'(.*)'$") or tag
+
+    return (tag:gsub("^#", ""))
+end
+
+--- Find all tags from some obsidian.nvim note `path`.
+---
+--- Raises:
+---     If `path` cannot be read for data.
+---
+---@param path string An absolute path on-disk to some obsidian note to query from.
+---@return string[] # All found tags, if any.
+---
+function _P.get_tags(path)
+    return _P.get_normalized_tags(_P.get_frontmatter_lists(path, { _TAGS_KEY })[_TAGS_KEY])
+end
+
+--- Clean every raw frontmatter tag value and drop the empty ones.
+---
+---@param values string[] Raw tag values, straight from a note's frontmatter.
+---@return string[] # Every cleaned, non-empty tag.
+---
+function _P.get_normalized_tags(values)
+    ---@type string[]
+    local output = {}
+
+    for _, text in ipairs(values) do
+        local tag = _P.normalize_tag(text)
+
+        if tag ~= "" then
+            table.insert(output, tag)
+        end
     end
 
     return output
@@ -448,6 +536,284 @@ function _P.search_notes_by_aliases()
     })
 end
 
+--- Get every parent tag of `tag`, plus `tag` itself.
+---
+--- Example:
+---     `"a/b/c"` becomes `{"a", "a/b", "a/b/c"}`.
+---
+---@param tag string A full, possibly-hierarchical tag.
+---@return string[] # Each tag, from the outermost parent to `tag`.
+---
+function _P.get_tag_ancestors(tag)
+    ---@type string[]
+    local output = {}
+    ---@type string?
+    local current = nil
+
+    for _, part in ipairs(vim.split(tag, _TAG_SEPARATOR, { plain = true, trimempty = true })) do
+        current = current and (current .. _TAG_SEPARATOR .. part) or part
+        table.insert(output, current)
+    end
+
+    return output
+end
+
+--- Check if `tag` is `selected` or one of its children.
+---
+--- Tags are hierarchical so `"food"` matches a note tagged `"food/protein"`.
+---
+---@param tag string A tag that some note declares. e.g. `"food/protein"`.
+---@param selected string The tag that the user asked for. e.g. `"food"`.
+---@return boolean # If `tag` is at-or-under `selected`, return `true`.
+---
+function _P.is_tag_match(tag, selected)
+    if tag == selected then
+        return true
+    end
+
+    local prefix = selected .. _TAG_SEPARATOR
+
+    return tag:sub(1, #prefix) == prefix
+end
+
+--- Check if any of `tags` is at-or-under any of `selected_tags`.
+---
+---@param tags string[] Every tag that some note declares.
+---@param selected_tags string[] The tags that the user asked for.
+---@return boolean # If at least one tag matches, return `true`.
+---
+function _P.has_tag_match(tags, selected_tags)
+    for _, tag in ipairs(tags) do
+        for _, selected in ipairs(selected_tags) do
+            if _P.is_tag_match(tag, selected) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+--- Make display text for `path` in case the note has no alias to show.
+---
+---@param path string An absolute path on-disk to some obsidian note.
+---@return string # The note file name, without its file extension.
+---
+function _P.get_note_fallback_display(path)
+    return (vim.fs.basename(path):gsub("%.md$", ""))
+end
+
+--- Find every note in every vault that declares at least one tag.
+---
+--- Raises:
+---     If some note cannot be read for data.
+---
+---@return modules.plugins.obsidian.TaggedNote[] # Each tagged note, sorted by-path.
+---
+function _P.get_tagged_notes()
+    ---@type modules.plugins.obsidian.TaggedNote[]
+    local output = {}
+
+    for _, path in ipairs(_P.get_markdown_files(_P.get_vaults_root_path())) do
+        local frontmatter = _P.get_frontmatter_lists(path, { _ALIASES_KEY, _TAGS_KEY })
+        local tags = _P.get_normalized_tags(frontmatter[_TAGS_KEY])
+
+        if not vim.tbl_isempty(tags) then
+            table.insert(output, {
+                display = frontmatter[_ALIASES_KEY][1] or _P.get_note_fallback_display(path),
+                path = path,
+                tags = tags,
+            })
+        end
+    end
+
+    return output
+end
+
+--- Summarize every selectable tag in `notes`, parent tags included.
+---
+---@param notes modules.plugins.obsidian.TaggedNote[] Every known tagged note.
+---@return modules.plugins.obsidian.TagEntry[] # Each tag and its note count, sorted by-tag.
+---
+function _P.get_tag_entries(notes)
+    ---@type table<string, integer>
+    local counts = {}
+
+    for _, note in ipairs(notes) do
+        ---@type table<string, boolean>
+        local counted = {}
+
+        for _, tag in ipairs(note.tags) do
+            for _, ancestor in ipairs(_P.get_tag_ancestors(tag)) do
+                if not counted[ancestor] then
+                    counted[ancestor] = true
+                    counts[ancestor] = (counts[ancestor] or 0) + 1
+                end
+            end
+        end
+    end
+
+    ---@type modules.plugins.obsidian.TagEntry[]
+    local output = {}
+
+    for tag, count in pairs(counts) do
+        table.insert(output, { count = count, tag = tag })
+    end
+
+    table.sort(output, function(left, right)
+        return left.tag < right.tag
+    end)
+
+    return output
+end
+
+--- Find every note in `notes` that is tagged with any of `selected_tags`.
+---
+---@param notes modules.plugins.obsidian.TaggedNote[] Every known tagged note.
+---@param selected_tags string[] The tags that the user asked for.
+---@return modules.plugins.obsidian.TaggedNote[] # The matching notes, in `notes` order.
+---
+function _P.get_notes_matching_tags(notes, selected_tags)
+    ---@type modules.plugins.obsidian.TaggedNote[]
+    local output = {}
+
+    for _, note in ipairs(notes) do
+        if _P.has_tag_match(note.tags, selected_tags) then
+            table.insert(output, note)
+        end
+    end
+
+    return output
+end
+
+--- Fuzzy-rank selector rows but keep their original order while the prompt is empty.
+---
+--- Every row scores the same against an empty prompt so, without this, the
+--- sort would shuffle rows that were deliberately ordered by the caller.
+---
+---@param values _my.selector_gui.Value[] Every selectable entry value, in display order.
+---@return fun(entry: _my.selector_gui.entry.Selection, input: string): number? # The ranker.
+---
+function _P.get_stable_alias_sort_score(values)
+    -- typer: ignore-next-line[disallowed-any]
+    ---@type table<any, integer>
+    local ranks = {}
+
+    for index, value in ipairs(values) do
+        ranks[value] = index
+    end
+
+    return function(entry, input)
+        if input == "" then
+            return -(ranks[entry.value] or (#values + 1))
+        end
+
+        return _P.get_alias_selector_sort_score(entry, input)
+    end
+end
+
+--- Open the second selector page, which lists the notes that match `selected_tags`.
+---
+---@param notes modules.plugins.obsidian.TaggedNote[] Every known tagged note.
+---@param selected_tags string[] The tags that the user chose in the first page.
+---@param window integer The window to open any chosen note within.
+---
+function _P.select_notes_from_tags(notes, selected_tags, window)
+    local matches = _P.get_notes_matching_tags(notes, selected_tags)
+
+    if vim.tbl_isempty(matches) then
+        vim.notify(
+            string.format('No notes are tagged with "%s".', table.concat(selected_tags, ", ")),
+            vim.log.levels.WARN
+        )
+
+        return
+    end
+
+    ---@type _my.selector_gui.entry.Deserialized[]
+    local found = {}
+    ---@type _my.selector_gui.Value[]
+    local paths = {}
+
+    for _, note in ipairs(matches) do
+        table.insert(found, { display = note.display, value = note.path })
+        table.insert(paths, note.path)
+    end
+
+    local refresh_selector = require("modules.features.core_editor_setup").select_from_options(found, {
+        header = { { text = table.concat(selected_tags, ", "), highlight = "Special" } },
+        multiple_selection = true,
+        sort_maximum = 1000,
+        sort_score = _P.get_stable_alias_sort_score(paths),
+        confirm = function(entries)
+            if vim.api.nvim_win_is_valid(window) then
+                vim.api.nvim_set_current_win(window)
+            end
+
+            for _, entry in ipairs(entries) do
+                vim.cmd.edit(entry.value)
+            end
+        end,
+    })
+
+    refresh_selector()
+end
+
+--- Search all Obsidian notes across all vaults by-tag.
+---
+--- The first page selects one or more tags. <Tab> toggles a tag and <CR>
+--- confirms. If no tag was toggled, <CR> confirms whatever the cursor is on.
+--- The second page selects the note(s) to open.
+---
+function _P.search_notes_by_tags()
+    local notes = _P.get_tagged_notes()
+    local tag_entries = _P.get_tag_entries(notes)
+
+    if vim.tbl_isempty(tag_entries) then
+        vim.notify(
+            string.format('No tags were found in "%s" directory.', _P.get_vaults_root_path()),
+            vim.log.levels.WARN
+        )
+
+        return
+    end
+
+    ---@type _my.selector_gui.entry.Deserialized[]
+    local found = {}
+    ---@type _my.selector_gui.Value[]
+    local tags = {}
+
+    for _, entry in ipairs(tag_entries) do
+        table.insert(found, { display = string.format("%s (%d)", entry.tag, entry.count), value = entry.tag })
+        table.insert(tags, entry.tag)
+    end
+
+    local window = vim.api.nvim_get_current_win()
+
+    local refresh_selector = require("modules.features.core_editor_setup").select_from_options(found, {
+        header = { { text = "Select tag(s)", highlight = "Special" } },
+        multiple_selection = true,
+        sort_maximum = 1000,
+        sort_score = _P.get_stable_alias_sort_score(tags),
+        confirm = function(entries)
+            ---@type string[]
+            local selected_tags = {}
+
+            for _, entry in ipairs(entries) do
+                table.insert(selected_tags, entry.value)
+            end
+
+            if vim.tbl_isempty(selected_tags) then
+                return
+            end
+
+            _P.select_notes_from_tags(notes, selected_tags, window)
+        end,
+    })
+
+    refresh_selector()
+end
+
 --- Change Obsidian's workspace to `name`.
 ---
 ---@param name string The workspace on-disk to point to. e.g. `"personal"`.
@@ -589,6 +955,7 @@ local _SUBCOMMANDS = {
     aliases = _P.search_notes_by_aliases,
     get_workspace = _P.print_current_workspace,
     set_workspace = _P.select_workspace,
+    tags = _P.search_notes_by_tags,
     today = _P.today,
     tomorrow = _P.tomorrow,
     tommorrow = _P.tomorrow,

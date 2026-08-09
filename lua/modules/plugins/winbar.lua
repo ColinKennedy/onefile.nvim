@@ -1,6 +1,10 @@
 --- A lightweight winbar inspired by fgheng/winbar.nvim.
 
+---@class _my.winbar
 local M = {}
+
+---@class _my.winbar._P
+---@field WINBAR_EXPRESSION string The 'winbar' value that every tracked window uses.
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
 
@@ -988,6 +992,7 @@ vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "BufWinEnter", "TermOpen",
 _P.sync_all_window_winbars()
 
 --- Expose the private namespace so the specs can reach it.
+---@type _my.winbar._P
 M._P = _P
 
 return M

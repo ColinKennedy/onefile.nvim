@@ -2,7 +2,14 @@ local aerial = require("modules.plugins.aerial")
 local core_helpers = require("modules.utilities.core_helpers")
 local file_tree = require("modules.plugins.file_tree")
 
+--- Run a `git` command in `root` and make sure that it succeeds.
+---
+---@param root string The Git repository root.
+---@param arguments string[] The Git command arguments.
+---@return string # The command stdout text.
+---
 local function run_git(root, arguments)
+    ---@type string[]
     local command = { "git", "-C", root }
     vim.list_extend(command, arguments)
 
@@ -13,6 +20,11 @@ local function run_git(root, arguments)
     return result.stdout or ""
 end
 
+--- Write `text` to `path`, creating parent directories as needed.
+---
+---@param path string An absolute file path to write to.
+---@param text string The blob of text to write.
+---
 local function write_text(path, text)
     assert.equal(1, vim.fn.mkdir(vim.fs.dirname(path), "p"))
 
@@ -21,6 +33,10 @@ local function write_text(path, text)
     assert(vim.uv.fs_close(file))
 end
 
+--- Make a temporary Git repository with a few tracked and ignored files.
+---
+---@return string # The created repository root.
+---
 local function make_repository()
     local root = assert(vim.uv.fs_mkdtemp(vim.fs.joinpath(vim.uv.os_tmpdir(), "file-tree-spec-XXXXXX")))
 
@@ -38,7 +54,13 @@ local function make_repository()
     return root
 end
 
+--- Get the display name of every row in `rows`.
+---
+---@param rows _my.file_tree.Entry[] The tree rows to inspect.
+---@return string[] # The found display names.
+---
 local function names(rows)
+    ---@type string[]
     local output = {}
 
     for _, row in ipairs(rows) do
@@ -48,14 +70,27 @@ local function names(rows)
     return output
 end
 
+--- Get every line in `buffer` as one blob of text.
+---
+---@param buffer integer The Vim buffer to read.
+---@return string # The buffer text.
+---
 local function buffer_text(buffer)
     return table.concat(vim.api.nvim_buf_get_lines(buffer, 0, -1, false), "\n")
 end
 
+--- Wait until `predicate` passes or fail the test.
+---
+---@param predicate fun(): boolean? The condition to wait for.
+---
 local function wait_for(predicate)
     assert.True(vim.wait(1000, predicate, 20))
 end
 
+--- Find a window that shows a file tree buffer that lost its 'filetype'.
+---
+---@return integer? # The found window, if any.
+---
 local function get_stale_file_tree_window()
     for _, window in ipairs(vim.api.nvim_list_wins()) do
         local buffer = vim.api.nvim_win_get_buf(window)
@@ -71,6 +106,10 @@ local function get_stale_file_tree_window()
     return nil
 end
 
+--- Find a window that shows a file tree buffer.
+---
+---@return integer? # The found window, if any.
+---
 local function get_file_tree_window()
     for _, window in ipairs(vim.api.nvim_list_wins()) do
         local buffer = vim.api.nvim_win_get_buf(window)
@@ -108,6 +147,7 @@ local function close_file_tree_windows()
 end
 
 describe("file tree", function()
+    ---@type boolean
     local original_nerdfont_allowed
 
     before_each(function()
@@ -141,6 +181,7 @@ describe("file tree", function()
 
     it("expands and collapses directories", function()
         local root = make_repository()
+        ---@type table<string, boolean>
         local expanded = { [vim.fs.normalize(root)] = true }
         local collapsed_rows = file_tree._P.build_rows(root, false, expanded)
 
@@ -504,6 +545,7 @@ describe("file tree", function()
         local sessionx = vim.fs.joinpath(root, ".sessions", branch, "Sessionx.vim")
         local aerial_sidecar = vim.fs.joinpath(root, ".sessions", branch, ".aerial.lua")
         local tree_sidecar = vim.fs.joinpath(root, ".sessions", branch, ".file_tree.lua")
+        ---@type string[]
         local source_paths = {
             vim.fs.joinpath(root, "src", "main.py"),
             vim.fs.joinpath(root, "notes.md"),
@@ -573,6 +615,7 @@ describe("file tree", function()
         local session = vim.fs.joinpath(root, "Session.vim")
         local original_cwd = vim.fn.getcwd(-1, -1)
         local original_notify = vim.notify
+        ---@type string[]
         local notifications = {}
         local branch = vim.trim(run_git(root, { "branch", "--show-current" }))
         local branch_session = vim.fs.joinpath(root, ".sessions", branch, "Session.vim")

@@ -456,6 +456,7 @@ end
 ---@param lines string[] The raw output lines.
 ---@param code integer? The command exit code.
 function _P.finish(options, lines, code)
+    ---@type integer?
     local first_valid_index = nil
     ---@type vim.quickfix.entry[]
     local items = {}
@@ -692,12 +693,6 @@ end
 
 vim.api.nvim_create_user_command("Dispatch", M._dispatch, {
     desc = "Run a command quietly and load its output into quickfix.",
-    nargs = "+",
-    complete = _P.complete,
-})
-
-vim.api.nvim_create_user_command("DispatchOutput", M._dispatch_output, {
-    desc = "Run a command, mirror its output live, and load it into quickfix.",
     nargs = "+",
     complete = _P.complete,
 })

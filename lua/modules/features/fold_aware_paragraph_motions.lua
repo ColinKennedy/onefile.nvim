@@ -5,7 +5,10 @@
 --- closed fold do not count as paragraph boundaries, so pressing `{` or `}`
 --- jumps over the entire fold in one step without opening it.
 
+---@class _my.fold_aware_paragraph_motions
 local M = {}
+
+---@class _my.fold_aware_paragraph_motions._P
 local _P = {}
 
 ---@alias _my.fold_paragraph_motion.Direction "previous" | "next"
@@ -110,6 +113,7 @@ vim.keymap.set({ "n", "x" }, "{", function()
 end, { desc = "Move to the previous paragraph, treating a closed fold as one line." })
 
 --- Expose the private namespace so the specs can reach it.
+---@type _my.fold_aware_paragraph_motions._P
 M._P = _P
 
 return M

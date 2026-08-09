@@ -9,9 +9,9 @@ end
 --- Make quickfix entries whose text is each value in `texts`.
 ---
 ---@param texts string[] The text of each entry to create.
----@return table[] # The generated quickfix entries.
+---@return vim.quickfix.entry[] # The generated quickfix entries.
 local function make_items(texts)
-    ---@type table[]
+    ---@type vim.quickfix.entry[]
     local items = {}
 
     for index, text in ipairs(texts) do

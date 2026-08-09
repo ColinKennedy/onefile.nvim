@@ -4,7 +4,10 @@
 --- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim), which is
 --- a huge I just port the commands that I want to keep. And I only need a few commands.
 
+---@class _my.obsidian
 local M = {}
+
+---@class _my.obsidian._P
 local _P = {}
 
 -- NOTE: obsidian.nvim separates the top-level note data from the rest of the
@@ -1044,6 +1047,7 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 --- Expose the private namespace so the specs can reach it.
+---@type _my.obsidian._P
 M._P = _P
 
 return M

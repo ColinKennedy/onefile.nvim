@@ -16,6 +16,7 @@ end
 ---@param root string The Git repository root.
 ---@param arguments string[] The Git command arguments.
 local function run_git(root, arguments)
+    ---@type string[]
     local command = { "git", "-C", root }
     vim.list_extend(command, arguments)
 
@@ -25,9 +26,13 @@ local function run_git(root, arguments)
 end
 
 describe("ripgrep quickfix", function()
+    ---@type fun(cmd: string[], opts: vim.SystemOpts?, on_exit: (fun(out: vim.SystemCompleted): nil)?): vim.SystemObj
     local original_system
+    ---@type fun(executable: string): boolean
     local original_exists_command
+    ---@type fun(message: string, level: integer?): nil
     local original_notify
+    ---@type string
     local original_ripgrep_executable
 
     before_each(function()
@@ -115,6 +120,7 @@ describe("ripgrep quickfix", function()
         local original_cwd = vim.fn.getcwd()
         local root = make_directory()
         local path = vim.fs.joinpath(root, "relative.lua")
+        ---@type (fun(out: vim.SystemCompleted): nil)?
         local callback_
         local original_getcwd = vim.fn.getcwd
 
@@ -139,6 +145,7 @@ describe("ripgrep quickfix", function()
         end)
         assert(callback_)({
             code = 0,
+            signal = 0,
             stdout = "relative.lua:1:1:needle",
             stderr = "",
         })
@@ -209,6 +216,7 @@ describe("ripgrep quickfix", function()
         local root_parent = make_directory()
         local root = vim.fs.joinpath(root_parent, "Benchmark CPU")
         local path = vim.fs.joinpath(root, "vaults", "personal", "note.md")
+        ---@type string[]
         local captured_command
 
         assert.equal(1, vim.fn.mkdir(vim.fs.dirname(path), "p"))
@@ -316,6 +324,7 @@ describe("ripgrep quickfix", function()
         local root = vim.fs.joinpath(root_parent, "Benchmark CPU")
         local nested = vim.fs.joinpath(root, "vaults", "personal")
         local path = vim.fs.joinpath(nested, "note.md")
+        ---@type string[]
         local captured_command
 
         assert.equal(1, vim.fn.mkdir(vim.fs.dirname(path), "p"))
@@ -376,6 +385,7 @@ describe("ripgrep quickfix", function()
     it("does not fail ripgrep when stderr only has filesystem warnings", function()
         local root = make_directory()
         local path = vim.fs.joinpath(root, "ok.txt")
+        ---@type {message: string, level: integer?}[]
         local notifications = {}
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -423,6 +433,7 @@ describe("ripgrep quickfix", function()
     it("keeps ripgrep matches when warnings were hidden from stderr", function()
         local root = make_directory()
         local path = vim.fs.joinpath(root, "ok.txt")
+        ---@type {message: string, level: integer?}[]
         local notifications = {}
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -467,6 +478,7 @@ describe("ripgrep quickfix", function()
     end)
 
     it("treats exit code 1 as no ripgrep matches instead of an error", function()
+        ---@type {message: string, level: integer?}[]
         local notifications = {}
 
         ---@diagnostic disable-next-line: duplicate-set-field

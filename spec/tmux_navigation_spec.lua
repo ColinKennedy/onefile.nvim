@@ -50,6 +50,7 @@ describe("tmux navigation", function()
                 vim.cmd("vsplit")
             end
 
+            ---@type {win: integer, row: integer, col: integer}[]
             local cells = {}
 
             for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
@@ -65,6 +66,7 @@ describe("tmux navigation", function()
                 return left.col < right.col
             end)
 
+            ---@type table<string, integer>
             local by_label = {}
 
             for index, cell in ipairs(cells) do
@@ -75,6 +77,7 @@ describe("tmux navigation", function()
         end
 
         describe("grid geometry (no tmux)", function()
+            ---@type fun(): boolean
             local original_in_tmux
 
             before_each(function()
@@ -94,6 +97,7 @@ describe("tmux navigation", function()
 
             -- Whether each key grows (true) or shrinks (false) the *current* cell.
             -- Covers all rows and columns, matching resize_ux_plan.md.
+            ---@type {cell: string, key: string, grows: boolean}[]
             local CASES = {
                 { cell = "A", key = "j", grows = true },
                 { cell = "A", key = "k", grows = false },
@@ -176,15 +180,20 @@ describe("tmux navigation", function()
         end)
 
         describe("tmux panes", function()
+            ---@type fun(): boolean
             local original_in_tmux
+            ---@type fun(cmd: string | string[], input: string?): string
             local original_system
+            ---@type string[]
             local tmux_commands
             -- Whether the mocked tmux reports a pane adjacent to Neovim.
+            ---@type boolean
             local adjacent_pane
 
             --- Build two full-width splits stacked top over bottom.
             ---
-            ---@return integer, integer # top and bottom window ids.
+            ---@return integer # The top window id.
+            ---@return integer # The bottom window id.
             local function stacked_pair()
                 vim.cmd("silent! only")
                 vim.cmd("split")
@@ -199,7 +208,8 @@ describe("tmux navigation", function()
 
             --- Build two full-height splits side by side.
             ---
-            ---@return integer, integer # left and right window ids.
+            ---@return integer # The left window id.
+            ---@return integer # The right window id.
             local function side_by_side()
                 vim.cmd("silent! only")
                 vim.cmd("vsplit")

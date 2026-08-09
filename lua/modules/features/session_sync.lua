@@ -1,6 +1,10 @@
 --- Synchronize custom session tracking when Neovim loads a Session.vim file.
 
+---@class _my.session_sync
 local M = {}
+
+---@class _my.session_sync._P
+---@field session_load_options _my.session_sync.Options? The options to restore once a session finishes loading.
 local _P = {}
 
 ---@class _my.session_sync.Options
@@ -61,6 +65,7 @@ pcall(function()
 end)
 
 --- Expose the private namespace so the specs can reach it.
+---@type _my.session_sync._P
 M._P = _P
 
 return M

@@ -1377,6 +1377,8 @@ function M.show_git_stashes()
 
     refresh_selector = M.select_from_options(options, {
         deserialize = function(value)
+            ---@cast value string
+
             local parsed = _P.parse_stash_list_entry(value)
             local name = parsed.name
             local index = parsed.index
@@ -2145,6 +2147,7 @@ vim.g.mapleader = ","
 vim.cmd("set shortmess-=F")
 
 ---------- Auto-Commands [Start] ----------
+---@return boolean # If 'eventignore' currently suppresses Syntax events, return `true`.
 local is_ignoring_syntax_events = function()
     for _, value in pairs(vim.opt.eventignore) do
         if value == "Syntax" then

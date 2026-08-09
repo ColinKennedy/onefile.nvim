@@ -297,6 +297,7 @@ end
 ---@param line integer?
 ---@param column integer?
 function _P.reset_bookmark(mark, buffer, line, column)
+    ---@type integer
     local buffer_number
 
     if type(buffer) == "number" then

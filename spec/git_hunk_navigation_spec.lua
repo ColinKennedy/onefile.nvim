@@ -152,7 +152,7 @@ end
 --- name relative to the current directory. Tests compare absolute paths so that
 --- the current directory cannot change the result.
 ---
----@param entry table The quickfix entry to inspect.
+---@param entry vim.quickfix.entry The quickfix entry to inspect.
 ---@return string # The absolute file path for `entry`.
 local function get_quickfix_path(entry)
     return vim.fn.fnamemodify(vim.fn.bufname(entry.bufnr), ":p")
@@ -165,9 +165,9 @@ end
 ---
 ---@param root string The repository root, used to wait for the loaded state.
 ---@param directory string The directory to run `:LoadGitDiff` from.
----@return table[] # The resulting quickfix entries.
+---@return vim.quickfix.entry[] # The resulting quickfix entries.
 local function load_quickfix_from(root, directory)
-    ---@type table[]
+    ---@type vim.quickfix.entry[]
     local items = {}
 
     with_cwd(directory, function()

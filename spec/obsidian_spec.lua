@@ -387,8 +387,8 @@ describe("modules.plugins.obsidian", function()
         obsidian.set_vaults_root_for_tests(root)
 
         assert.same({
-            { display = "anonymous", path = obsidian.normalize_path(anonymous), tags = { "foo" } },
-            { display = "Some Alias", path = obsidian.normalize_path(aliased), tags = { "foo/bar" } },
+            { display = "anonymous", path = anonymous, tags = { "foo" } },
+            { display = "Some Alias", path = aliased, tags = { "foo/bar" } },
         }, obsidian.get_tagged_notes())
         vim.fn.delete(root, "rf")
     end)
@@ -433,7 +433,7 @@ describe("modules.plugins.obsidian", function()
         }, captured_values[1])
 
         assert.True(captured_options[2].multiple_selection)
-        assert.same({ { display = "Some Alias", value = obsidian.normalize_path(note) } }, captured_values[2])
+        assert.same({ { display = "Some Alias", value = note } }, captured_values[2])
         vim.fn.delete(root, "rf")
     end)
 
@@ -448,8 +448,6 @@ describe("modules.plugins.obsidian", function()
 
         write_tagged_note(first, { "First" }, { "foo" })
         write_tagged_note(second, { "Second" }, { "foo/bar" })
-        root = vim.uv.fs_realpath(root) or root
-        second = vim.uv.fs_realpath(second) or second
         obsidian.set_vaults_root_for_tests(root)
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -475,7 +473,7 @@ describe("modules.plugins.obsidian", function()
         captured_options.confirm({ { display = "Second", score = 1, value = second } })
         vim.o.shortmess = original_shortmess
 
-        assert.equal(obsidian.normalize_path(second), obsidian.normalize_path(vim.api.nvim_buf_get_name(0)))
+        assert.equal(second, vim.api.nvim_buf_get_name(0))
         vim.fn.delete(root, "rf")
     end)
 
@@ -510,8 +508,6 @@ describe("modules.plugins.obsidian", function()
         write_tagged_note(child, { "Child Note" }, { "foo/bar/fizz" })
         write_tagged_note(parent, { "Parent Note" }, { "foo/bar" })
         write_tagged_note(unrelated, { "Unrelated Note" }, { "other" })
-        root = vim.uv.fs_realpath(root) or root
-        parent = vim.uv.fs_realpath(parent) or parent
         obsidian.set_vaults_root_for_tests(root)
 
         local ok, error_message = pcall(function()
@@ -547,7 +543,7 @@ describe("modules.plugins.obsidian", function()
             error(error_message, 0)
         end
 
-        assert.equal(obsidian.normalize_path(parent), obsidian.normalize_path(vim.api.nvim_buf_get_name(0)))
+        assert.equal(parent, vim.api.nvim_buf_get_name(0))
 
         -- NOTE: Let asynchronous git-gutter work finish before the note buffer is wiped.
         vim.wait(200)

@@ -13,10 +13,6 @@ CONFIGURATION = .luarc.json
 ARGUMENTS ?=
 LUA ?= lua
 
-# typer is a local checkout, not an installed rock. Point TYPER elsewhere (or at
-# a plain `typer` once it is installed) to override.
-TYPER ?= $(HOME)/repositories/typer/bin/typer
-
 VIMRUNTIME_SHELL = nvim --clean --headless --cmd 'lua io.write(os.getenv("VIMRUNTIME"))' --cmd 'quit'
 
 deadcode:
@@ -50,4 +46,4 @@ test:
 # `mypy --strict`, for Lua: reports missing or too-vague LuaLS annotations.
 # Report-only -- it never edits files. Exit 1 means it found something.
 typer:
-	VIMRUNTIME="`$(VIMRUNTIME_SHELL)`" $(TYPER) $(ARGUMENTS) init.lua lua spec
+	VIMRUNTIME="`$(VIMRUNTIME_SHELL)`" typer $(ARGUMENTS) init.lua lua spec

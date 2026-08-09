@@ -52,7 +52,9 @@ local function current_tab_window_count()
 end
 
 describe("window zoom", function()
+    ---@type fun(message: string, level: integer?): nil
     local original_notify
+    ---@type integer
     local original_showtabline
 
     before_each(function()

@@ -127,7 +127,9 @@ local function find_aerial_window()
 end
 
 describe("modules.plugins.aerial", function()
+    ---@type integer
     local original_columns
+    ---@type boolean
     local original_nerdfont_allowed
 
     before_each(function()
@@ -896,7 +898,9 @@ describe("modules.plugins.aerial", function()
         local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
         local original_get_project_root = core_helpers.get_nearest_project_root
         local root = vim.fn.tempname()
+        ---@type integer
         local captured_window
+        ---@type string | integer
         local captured_root_buffer
 
         vim.fn.mkdir(root, "p")

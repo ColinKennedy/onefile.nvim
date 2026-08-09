@@ -7,10 +7,15 @@ local function close_extra_tabs()
 end
 
 describe("AI question response formatter", function()
+    ---@type fun(cmd: string[], opts: vim.SystemOpts?, on_exit: (fun(out: vim.SystemCompleted): nil)?): vim.SystemObj
     local original_system
+    ---@type fun(message: string, level: integer?): nil
     local original_notify
+    ---@type string?
     local original_command
+    ---@type fun(expression: string): integer
     local original_executable
+    ---@type {message: string, level: integer?}[]
     local notifications
 
     before_each(function()
@@ -56,6 +61,7 @@ describe("AI question response formatter", function()
         assert.equal(source_buf, ai_question_response._original_buffers_by_tab[source_tab])
         assert.equal(2, vim.fn.tabpagenr("$"))
         assert.equal(answer_buf, vim.api.nvim_get_current_buf())
+        ---@type table<integer, boolean>
         local window_buffers = {}
         for _, window in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
             window_buffers[vim.api.nvim_win_get_buf(window)] = true
@@ -77,7 +83,9 @@ describe("AI question response formatter", function()
     end)
 
     it("submits answers asynchronously and overwrites the original question buffer", function()
+        ---@type string[]
         local captured_command
+        ---@type string
         local captured_stdin
 
         ---@diagnostic disable-next-line: duplicate-set-field

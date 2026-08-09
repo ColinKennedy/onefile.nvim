@@ -1,11 +1,22 @@
 --- Configure the default colorscheme and fallback highlight groups.
 
+--- Copy every key in `items` onto `table_to_modify`, in-place.
+---
+---@param table_to_modify vim.api.keyset.highlight The highlight definition to add onto.
+---@param items vim.api.keyset.highlight The highlight definition to read from.
+---
 local _extend = function(table_to_modify, items)
     for key, value in pairs(items) do
         table_to_modify[key] = value
     end
 end
 
+--- Combine two highlight definitions into one, where later keys win.
+---
+---@param first vim.api.keyset.highlight The base highlight definition.
+---@param second vim.api.keyset.highlight The highlight definition to apply on top.
+---@return vim.api.keyset.highlight # The merged highlight definition.
+---
 local _multi_2 = function(first, second)
     ---@type vim.api.keyset.highlight
     local output = {}
@@ -16,6 +27,13 @@ local _multi_2 = function(first, second)
     return output
 end
 
+--- Combine three highlight definitions into one, where later keys win.
+---
+---@param first vim.api.keyset.highlight The base highlight definition.
+---@param second vim.api.keyset.highlight The highlight definition to apply on top.
+---@param third vim.api.keyset.highlight The highlight definition to apply last.
+---@return vim.api.keyset.highlight # The merged highlight definition.
+---
 local _multi_3 = function(first, second, third)
     ---@type vim.api.keyset.highlight
     local output = {}

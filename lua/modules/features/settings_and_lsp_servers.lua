@@ -1,6 +1,8 @@
 --- Configure editor options and collect built-in LSP server definitions.
 
 local M = {}
+
+---@class _my.settings_and_lsp_servers._P
 local _P = {}
 
 ---------- Saver [Start] ----------

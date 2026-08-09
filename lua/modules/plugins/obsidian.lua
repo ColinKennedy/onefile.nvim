@@ -4,7 +4,10 @@
 --- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim), which is
 --- a huge I just port the commands that I want to keep. And I only need a few commands.
 
+---@class _my.obsidian
 local M = {}
+
+---@class _my.obsidian._P
 local _P = {}
 
 -- NOTE: obsidian.nvim separates the top-level note data from the rest of the
@@ -594,6 +597,12 @@ local _SUBCOMMANDS = {
 
 local _SUBCOMMAND_NAMES = vim.fn.sort(vim.tbl_keys(_SUBCOMMANDS))
 
+--- Complete the `:Obsidian` sub-command name that the user is typing.
+---
+---@param arglead string The partial sub-command name to complete.
+---@param command_line string The whole command-line text, so far.
+---@return string[] # The matching sub-command names.
+---
 function _P.complete_command(arglead, command_line)
     local arguments_text = command_line:gsub("^%s*Obsidian%s*", "", 1)
 
@@ -617,6 +626,10 @@ function _P.complete_command(arglead, command_line)
     return output
 end
 
+--- Run the `:Obsidian` sub-command that `opts` names.
+---
+---@param opts vim.api.keyset.create_user_command.command_args The parsed `:Obsidian` arguments.
+---
 function _P.run_command(opts)
     local subcommand = opts.fargs[1]
     local callback = _SUBCOMMANDS[subcommand]
@@ -637,6 +650,8 @@ vim.api.nvim_create_user_command(
 )
 
 vim.api.nvim_create_user_command("Note", function(opts)
+    ---@param text string Some text with possible surrounding whitespace.
+    ---@return string # The stripped text.
     local _strip_whitespace = function(text)
         return (text:match("^%s*(.-)%s*$"))
     end
@@ -655,6 +670,7 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 --- Expose the private namespace so the specs can reach it.
+---@type _my.obsidian._P
 M._P = _P
 
 return M

@@ -1,5 +1,6 @@
 --- Turn an AI question list plus rough answers into a formatted response.
 
+---@class _my.ai_question_response
 local M = {}
 local _P = {}
 
@@ -13,8 +14,10 @@ M._original_buffers_by_tab = {}
 ---@type table<integer, _my.ai_question_response.Link>
 M._answer_links_by_buf = {}
 
+---@type string
 M._command_environment_variable = "NEOVIM_AI_QUESTION_RESPONSE_COMMAND"
 
+---@type string
 M._answer_sheet_hint = "<!-- This is the answer sheet, write your responses here-->"
 
 local INSTRUCTION = table.concat({

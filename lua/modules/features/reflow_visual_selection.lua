@@ -4,7 +4,10 @@
 --- Seriously, why isn't this Neovim's default behavior?
 ---
 
+---@class _my.reflow_visual_selection
 local M = {}
+
+---@class _my.reflow_visual_selection._P
 local _P = {}
 
 --- Get the selected range from the current visual selection.
@@ -110,6 +113,7 @@ end, {
     silent = true,
 })
 
+---@type _my.reflow_visual_selection._P
 M._P = _P
 
 return M

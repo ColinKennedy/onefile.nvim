@@ -53,7 +53,7 @@ local _COLOR_LINKS = {
 
 local _COMMENT_HIGHLIGHT = vim.api.nvim_create_namespace("my.comment.highlighter")
 local _DEBOUNCE_MS = 120
----@type table<integer, any>
+---@type table<integer, uv.uv_timer_t>
 local _TIMER_BY_BUFFER = {}
 ---@type table<integer, integer>
 local _UPDATE_GENERATION_BY_BUFFER = {}

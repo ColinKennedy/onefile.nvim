@@ -13,6 +13,7 @@ function _P.get_tag_files(paths)
 
     for _, path in ipairs(paths) do
         local name = vim.fs.basename(path)
+        ---@type string?
         local found_language
 
         if name == "tags" then
@@ -93,6 +94,7 @@ function _P.select_helptag(vim_options)
         end)
     end
 
+    ---@type string?
     local input
 
     if vim_options.args ~= "" then

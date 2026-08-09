@@ -3,6 +3,7 @@
 --- Quickfix buffers are not modifiable so `d` is remapped to a function that
 --- rewrites the underlying quickfix list instead of the buffer text.
 
+---@class _my.quickfix_entry_deletion
 local M = {}
 
 local _P = {}
@@ -20,7 +21,7 @@ end
 --- Get every entry shown in `window`, plus the metadata needed to restore it.
 ---
 ---@param window integer The quickfix-style window to inspect.
----@return table # The `getqflist()` / `getloclist()` dictionary.
+---@return vim.fn.setqflist.what # The `getqflist()` / `getloclist()` dictionary.
 function _P.get_list(window)
     if _P.is_location_list(window) then
         return vim.fn.getloclist(window, { all = 0 })
@@ -32,7 +33,7 @@ end
 --- Replace the list shown in `window` with `data`.
 ---
 ---@param window integer The quickfix-style window to modify.
----@param data table The `setqflist()` / `setloclist()` dictionary to apply.
+---@param data vim.fn.setqflist.what The `setqflist()` / `setloclist()` dictionary to apply.
 function _P.set_list(window, data)
     if _P.is_location_list(window) then
         vim.fn.setloclist(window, {}, "r", data)
@@ -123,7 +124,7 @@ function _P.delete_entries(window, start_line, end_line)
         return 0
     end
 
-    ---@type table[]
+    ---@type vim.quickfix.entry[]
     local kept = {}
 
     for index, item in ipairs(items) do
@@ -132,6 +133,7 @@ function _P.delete_entries(window, start_line, end_line)
         end
     end
 
+    ---@type vim.fn.setqflist.what
     local replacement = { items = kept, title = data.title }
 
     if data.context ~= nil and data.context ~= "" then

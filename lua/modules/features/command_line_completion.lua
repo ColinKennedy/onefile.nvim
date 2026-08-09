@@ -1,6 +1,9 @@
 --- Add command-line mode completion mappings that behave like insert completion.
 
+---@class _my.command_line_completion
 local M = {}
+
+---@class _my.command_line_completion._P
 local _P = {}
 local _WILDCHARM_KEY = "<C-z>"
 
@@ -64,6 +67,7 @@ end, {
     expr = true,
 })
 
+---@type _my.command_line_completion._P
 M._P = _P
 
 return M

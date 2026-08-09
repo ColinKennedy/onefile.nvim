@@ -67,7 +67,9 @@ end
 ---@return _Cursor[] # The found row (1-or-more) and column (0-or-more) positions.
 ---
 function _P.parse_cursor(text)
+    ---@type integer?
     local found_row
+    ---@type integer?
     local found_column
 
     ---@type string[]
@@ -106,6 +108,7 @@ end
 ---
 function _P.setup_cursor_text(text)
     local lines = _P.dedent_lines(vim.split(text, _LINE_SEPARATOR))
+    ---@type _Cursor[]
     local cursors
     lines, cursors = _P.parse_cursor(lines)
     text = vim.fn.join(lines, _LINE_SEPARATOR)

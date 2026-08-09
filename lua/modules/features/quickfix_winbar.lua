@@ -1,5 +1,6 @@
 --- Add an automatic winbar title to quickfix windows.
 
+---@class _my.quickfix_winbar
 local M = {}
 local _P = {}
 
@@ -8,6 +9,7 @@ local _P = {}
 --- The expression is re-evaluated on every redraw so the winbar always shows
 --- the current quickfix title, even when the title changes later.
 ---
+---@type string
 M.WINBAR_EXPRESSION = " %{v:lua.require'modules.features.quickfix_winbar'.get_quickfix_winbar_title()}"
 
 --- Check if `window` displays a quickfix or location list buffer.

@@ -14,6 +14,7 @@ local function contains(text, pattern)
 end
 
 describe("modules.features.statusline", function()
+    ---@type fun(path: string?): string
     local original_get_statusline
 
     before_each(function()

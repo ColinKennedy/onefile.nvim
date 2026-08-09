@@ -182,7 +182,7 @@ end
 
 --- Schedule a sign refresh for a buffer event.
 ---
----@param event table The Neovim autocommand event.
+---@param event vim.api.keyset.create_autocmd.callback_args The Neovim autocommand event.
 local function _schedule_update(event)
     local buffer = event.buf
 

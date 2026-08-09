@@ -36,7 +36,7 @@ local _P = {}
 ---@field collapsed table<string, boolean> Collapsed symbol keys.
 ---@field namespace integer Extmark namespace for active-row highlighting.
 ---@field refresh_generation integer Monotonic counter used to ignore stale debounced refreshes.
----@field refresh_timer any? Timer used to debounce source-buffer outline rebuilds.
+---@field refresh_timer uv.uv_timer_t? Timer used to debounce source-buffer outline rebuilds.
 
 ---@class _my.aerial.SessionEntry
 ---@field source_name string The source buffer path whose sidebar should be restored.
@@ -525,6 +525,7 @@ function _P.get_highlight_segments(buffer, line, start_column, end_column)
     local segments = {}
     ---@type string?
     local current_group = nil
+    ---@type integer?
     local current_start = nil
 
     for column = start_column, end_column - 1 do
@@ -778,6 +779,7 @@ function M._get_indentation_symbols(buffer)
     local use_unknown_language_definitions = fallback_language == nil
         and _has_unknown_language_definitions(lines, comment_prefixes)
     local use_language_definitions = fallback_language ~= nil or use_unknown_language_definitions
+    ---@type integer?
     local previous_indent = nil
     local blank_since_previous = true
     ---@type {indent: integer, symbol: _my.aerial.Symbol}[]

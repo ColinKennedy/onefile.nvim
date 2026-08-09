@@ -1,6 +1,9 @@
 --- A lightweight "toggleterminal". Use <space>T to open and close it.
 
+---@class _my.toggle_terminal
 local M = {}
+
+---@class _my.toggle_terminal._P
 local _P = {}
 
 ---@type table<integer, _my.ToggleTerminal>
@@ -19,6 +22,7 @@ local _NEXT_NUMBER = 0
 local _STARTING_MODE = _Mode.insert -- NOTE: Start off in insert mode
 
 local _IS_VIM_ENTERED = false
+---@type string?
 local _DEFAULT_SHELL_COMMAND = nil
 local _TERMINAL_MODE_VARIABLE = "_toggle_terminal_mode"
 ---@type table<string, string>
@@ -222,7 +226,7 @@ end
 
 --- Check whether `mode` is a tracked toggle-terminal mode.
 ---
----@param mode any The mode to inspect.
+---@param mode string? The mode to inspect. Unset or unrecognized values are invalid.
 ---@return boolean # Whether `mode` can be stored for a toggle terminal.
 local function _is_valid_mode(mode)
     return mode == _Mode.insert or mode == _Mode.normal or mode == _Mode.unknown
@@ -643,6 +647,7 @@ vim.keymap.set(
     { desc = "Toggle [T]erminal, in a split at the bottom of the current tab." }
 )
 
+---@type _my.toggle_terminal._P
 M._P = _P
 
 return M

@@ -1,5 +1,7 @@
 --- Configure core editor helpers for file selection, completions, snippets, git status, etc.
 
+---@class _my.core_editor_setup
+---@field SESSION_MANAGER _my.core_editor_setup.SessionManager The shared session tracker.
 local M = {}
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
@@ -163,6 +165,7 @@ function M.get_file_selector_sort_score(entry, input)
         local score = base_score
         local streak = 0
         local last_match = 0
+        ---@type integer?
         local first_match = nil
 
         for candidate_index = 1, #candidate do
@@ -374,7 +377,7 @@ end
 ---
 --- This function creates a "telescope.nvim-lite" floating window picker.
 ---
----@param values string[]
+---@param values _my.selector_gui.Value[]
 ---    The possible values to select from.
 ---@param options _my.selection_gui.GuiOptions
 ---    A function run to run on-selection. e.g. "open the file in a buffer".
@@ -398,7 +401,7 @@ function M.select_from_options(values, options)
     --- time as it is iterating.
     ---
     ---@param table_ T[] Some values to iterate over.
-    ---@return fun(): [integer, T]? # A function that iterates over `table_` (basically `ipairs`).
+    ---@return fun(): integer?, T? # A function that iterates over `table_` (basically `ipairs`).
     ---
     local function _dynamic_ipairs(table_)
         local index = 0
@@ -523,8 +526,11 @@ function M.select_from_options(values, options)
         vim.wo[list_window].winbar = list_window_winbar
     end
 
+    ---@type integer?
     local preview_buffer = nil
+    ---@type integer?
     local preview_window = nil
+    ---@type string?
     local preview_key = nil
     local preview_timer = assert((vim.uv or vim.loop).new_timer())
 
@@ -1297,6 +1303,7 @@ function M.show_git_stashes()
         return
     end
 
+    ---@type (fun())?
     local refresh_selector
     local should_refresh_selector = false
     ---@type table<string, integer>
@@ -1370,6 +1377,8 @@ function M.show_git_stashes()
 
     refresh_selector = M.select_from_options(options, {
         deserialize = function(value)
+            ---@cast value string
+
             local parsed = _P.parse_stash_list_entry(value)
             local name = parsed.name
             local index = parsed.index
@@ -1530,7 +1539,9 @@ end
 ---
 function M.split_quoted_string(text)
     local spat, epat = [=[^(['"])]=], [=[(['"])$]=]
+    ---@type string?
     local buf
+    ---@type string?
     local quoted
 
     ---@type string[]
@@ -1570,10 +1581,15 @@ function M.strip_left(text)
     return (text:gsub("^%s*", ""))
 end
 
+---@class _my.core_editor_setup.SessionManager Track and rewrite the current Vim session files.
+---@field _callbacks table<string, fun(): string> Extra session text to append, by unique name.
 local SessionManager = {}
 SessionManager.__index = SessionManager
 
 --- Create a new instance of `SessionManager`.
+---
+---@return _my.core_editor_setup.SessionManager # The created instance.
+---
 function SessionManager.new()
     local self = setmetatable({}, SessionManager)
 
@@ -1671,6 +1687,11 @@ end
 ---@return string # The found (git) branch name.
 ---
 function SessionManager:_get_stored_branch_name(path)
+    --- Read the SessionManager header comment at the top of `path_`.
+    ---
+    ---@param path_ string The Vimscript path on-disk to read.
+    ---@return string? # The found (git) branch name, if there is one.
+    ---
     local function _get_branch_name(path_)
         for line in io.lines(path_) do
             if not line:match("^%s*$") then
@@ -1884,6 +1905,7 @@ local _GIT_BRANCH_CACHE = {}
 local _GIT_BRANCH_REFRESH_INTERVAL = 500
 local _GIT_BRANCH_ELIDE_LENGTH = 30
 local _GIT_BRANCH_ELIDE_SUFFIX_LENGTH = 9
+---@type boolean?
 local _IS_GIT_AVAILABLE = nil
 
 ---@class _my.git_branch_cache
@@ -2019,6 +2041,7 @@ local function _refresh_git_branch(path, entry)
     entry.in_flight = true
 
     vim.system(_get_git_branch_command(path), { text = true }, function(process)
+        ---@type string?
         local branch = nil
         local failed = process.code ~= 0
 
@@ -2092,9 +2115,9 @@ function M.get_git_branch_label_safe()
     return git_prefix .. M._elide_git_branch_name(branch)
 end
 
----@return string # Get the position in the current file.
 -- luacheck: push ignore
-function get_window_line_progress()
+---@return string # Get the position in the current file.
+function _G.get_window_line_progress()
     -- luacheck: pop
     local current_line = vim.fn.line(".")
     local total_lines = vim.fn.line("$")
@@ -2124,6 +2147,7 @@ vim.g.mapleader = ","
 vim.cmd("set shortmess-=F")
 
 ---------- Auto-Commands [Start] ----------
+---@return boolean # If 'eventignore' currently suppresses Syntax events, return `true`.
 local is_ignoring_syntax_events = function()
     for _, value in pairs(vim.opt.eventignore) do
         if value == "Syntax" then
@@ -2155,6 +2179,7 @@ vim.api.nvim_create_autocmd("FileType", {
             local success, winbar = pcall(require, "winbar")
 
             if success then
+                ---@diagnostic disable-next-line: undefined-field
                 winbar.run_on_current_buffer()
             end
         end, {

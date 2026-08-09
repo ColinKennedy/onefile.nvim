@@ -1,5 +1,9 @@
 --- Extend vim.notify with log-level filtering and optional file logging.
 
+---@class _my.notify._P
+---@field ENABLE_NOTIFY_LOGGING_VARIABLE string The environment variable that enables file logging.
+---@field MINIMUM_LOG_LEVEL integer Notifications below this vim.log.levels value are dropped.
+---@field TEMPORARY_LOG_PATH string? The file that notifications are appended to, if logging is on.
 local _P = {}
 
 local _ORIGINAL_VIM_NOTIFY = vim.notify

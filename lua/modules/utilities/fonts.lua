@@ -1,5 +1,7 @@
 --- Shared font and icon choices for UI modules.
 
+---@class _my.fonts
+---@field Icon table<string, string> Every icon name that this configuration can draw.
 local M = {}
 
 ---@enum _my.fonts.Icon

@@ -1,6 +1,9 @@
 --- Make `p` behave as a text-object operator for replacing motions and text objects.
 
 local M = {}
+---@class _my.put_text_objects._P
+---@field operatorfunc_caller (fun(type_: string): nil)? The pending custom operatorfunc behavior.
+---@field operatorfunc_original string? The 'operatorfunc' value to restore once the operator ends.
 local _P = {}
 
 _P.operatorfunc_caller = nil

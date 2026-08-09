@@ -25,6 +25,7 @@ end
 ---@param root string The Git repository root.
 ---@param arguments string[] The Git command arguments.
 local function run_git(root, arguments)
+    ---@type string[]
     local command = { "git", "-C", root }
     vim.list_extend(command, arguments)
 

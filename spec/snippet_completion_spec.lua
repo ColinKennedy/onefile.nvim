@@ -1,5 +1,6 @@
 local core_editor_setup = require("modules.features.core_editor_setup")
 
+---@type boolean
 local _SHOWMODE
 
 --- Create a scratch buffer with `text` and set the cursor at the end.

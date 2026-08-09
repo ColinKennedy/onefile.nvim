@@ -3,6 +3,7 @@ local quick_scope = require("modules.plugins.quick_scope")
 --- Save a global variable and return its current value.
 ---
 ---@param name string The global variable name without `g:`.
+-- typer: ignore-next-line[disallowed-any]
 ---@return any # The previous value.
 local function save_global(name)
     return vim.g[name]
@@ -11,6 +12,7 @@ end
 --- Restore a global variable to a previous value.
 ---
 ---@param name string The global variable name without `g:`.
+-- typer: ignore-next-line[disallowed-any]
 ---@param value any The value to restore.
 local function restore_global(name, value)
     vim.g[name] = value
@@ -35,7 +37,7 @@ end
 
 --- Get the columns from a match result.
 ---
----@param match table The match returned by `getmatches()`.
+---@param match vim.fn.getmatches.ret.item The match returned by `getmatches()`.
 ---@return integer[] # Sorted 1-or-more columns.
 local function get_match_columns(match)
     ---@type integer[]
@@ -53,7 +55,7 @@ local function get_match_columns(match)
 end
 
 describe("quick scope", function()
-    ---@type table<string, any>
+    ---@type table<string, any>  -- typer: ignore[disallowed-any]
     local saved_options = {}
 
     before_each(function()

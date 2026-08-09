@@ -1,8 +1,12 @@
 --- A tiny Git-aware file tree browser.
 
+---@class _my.file_tree
 local M = {}
+
+---@class _my.file_tree._P
 local _P = {}
 
+---@type _my.file_tree._P
 M._P = _P
 
 local _FILETYPE = "filetree"
@@ -13,6 +17,7 @@ local _SIDEBAR_WIDTH = 32
 local _WATCH_DEBOUNCE_MS = 80
 local _GROUP = vim.api.nvim_create_augroup("my.file_tree", { clear = true })
 local _HIGHLIGHT_NAMESPACE = vim.api.nvim_create_namespace("my.file_tree")
+---@type table<integer, _my.file_tree.State>
 local _STATE_BY_BUFFER = {}
 
 ---@alias _my.file_tree.Kind "directory"|"file"
@@ -201,6 +206,8 @@ function _P.build_rows(root, show_all, expanded)
     ---@type _my.file_tree.Entry[]
     local rows = {}
 
+    ---@param directory string The absolute directory to add rows for.
+    ---@param depth integer The zero-based tree depth of `directory`.
     local function visit(directory, depth)
         for _, entry in ipairs(_P.get_child_entries(directory, depth, show_all, visible)) do
             table.insert(rows, entry)
@@ -344,6 +351,7 @@ local function _watch_directory(state, watched_path)
     state.watchers[watched_path] = watcher
 end
 
+---@param state _my.file_tree.State The tree to redraw.
 function _render(state)
     state.rows = _P.build_rows(state.root, state.show_all, state.expanded)
 
@@ -380,6 +388,7 @@ function _render(state)
     _sync_watchers(state)
 end
 
+---@param state _my.file_tree.State The tree whose watchers should match its visible rows.
 function _sync_watchers(state)
     ---@type table<string, boolean>
     local wanted = {
@@ -506,6 +515,7 @@ end
 local function _set_directory_expanded_recursively(state, path, expanded)
     local visible = state.show_all and nil or _P.get_git_visible_paths(state.root)
 
+    ---@param directory string The absolute directory to expand or collapse.
     local function visit(directory)
         if expanded then
             state.expanded[directory] = true
@@ -594,6 +604,7 @@ end
 
 ---@param buffer integer
 local function _set_keymaps(buffer)
+    ---@type vim.keymap.set.Opts
     local options = { buffer = buffer, nowait = true, silent = true }
 
     vim.keymap.set(
@@ -658,6 +669,7 @@ function M._open(root)
 
     local source_window = vim.api.nvim_get_current_win()
     local buffer = vim.api.nvim_create_buf(false, true)
+    ---@type _my.file_tree.State
     local state = {
         buffer = buffer,
         expanded = { [root] = true },
@@ -809,6 +821,7 @@ function M.restore_session(entries)
 
     for _, entry in ipairs(entries) do
         if type(entry.root) == "string" and _is_directory(entry.root) then
+            ---@type integer?
             local source_window = nil
 
             if type(entry.source_name) == "string" then

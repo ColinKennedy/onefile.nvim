@@ -5,6 +5,7 @@ local _ORIGINAL_SCHEDULE_REFRESH = python_docstring_folds._schedule_refresh
 ---@param ranges _my.python_docstring_folds.Range[]
 ---@return integer[][]
 local function simplify(ranges)
+    ---@type integer[][]
     local result = {}
 
     for _, range in ipairs(ranges) do
@@ -294,6 +295,7 @@ describe("python docstring folds", function()
     it("schedules debounced refreshes only for Python text changes", function()
         local python_buffer = prepare_buffer("python")
         local lua_buffer = prepare_buffer("lua")
+        ---@type {buffer: integer, delay: integer}[]
         local scheduled = {}
 
         ---@diagnostic disable-next-line: duplicate-set-field

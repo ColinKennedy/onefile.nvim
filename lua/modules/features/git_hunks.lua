@@ -445,6 +445,7 @@ end
 ---@param line integer The current cursor line.
 ---@return _my.git_diff.SelectionHunk? # The closest hunk, if any.
 local function _find_closest_hunk(hunks, line)
+    ---@type _my.git_diff.SelectionHunk?
     local closest
     local closest_distance = math.huge
 
@@ -506,7 +507,7 @@ end
 ---
 ---@param window integer The window to read from.
 ---@param is_loclist boolean If `true`, read that window's location list.
----@return table[] # The listed entries.
+---@return vim.quickfix.entry[] # The listed entries.
 local function _get_quickfix_items(window, is_loclist)
     if is_loclist then
         return vim.fn.getloclist(window)
@@ -588,7 +589,7 @@ local function _remove_quickfix_entries(window, is_loclist, removed)
     end
 
     local items = _get_quickfix_items(window, is_loclist)
-    ---@type table[]
+    ---@type vim.quickfix.entry[]
     local kept = {}
 
     for _, item in ipairs(items) do

@@ -1317,27 +1317,6 @@ function _P.mark_current_buffer_as_bookmark(mark)
     end
 end
 
---- Find the next-available bookmark number and set the current buffer to it.
-function M.mark_current_buffer_as_next_bookmark()
-    local maximum
-
-    for index = M.BOOKMARK_MINIMUM, M.BOOKMARK_MAXIMUM do
-        local mark = M.get_vim_mark_from_bookmark_index(index)
-
-        if _P.is_mark_defined(mark) then
-            maximum = index
-        end
-    end
-
-    local next_index = 1
-
-    if maximum then
-        next_index = ((maximum + 1) % M.BOOKMARK_MAXIMUM) + 1
-    end
-
-    _P.mark_current_buffer_as_bookmark(M.get_vim_mark_from_bookmark_index(next_index))
-end
-
 --- Open `text` relative path using the current directory as a root.
 ---
 --- If the current buffer has no directory then this function is treated as
@@ -1480,15 +1459,6 @@ end
 ---
 function M.lstrip(text)
     return text:match("^%s*(.-)$")
-end
-
---- Remove whitespace from the end of `text`.
----
----@param text string Some text that has whitespace at the end. e.g. `"foo    "`.
----@return string # The removed text. e.g. `"foo"`.
----
-function _P.rstrip(text)
-    return text:match("^(.-)%s*$")
 end
 
 --- Run the git `command` and show an error if it fails for some reason.

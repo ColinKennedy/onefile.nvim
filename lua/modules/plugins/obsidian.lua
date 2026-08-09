@@ -209,18 +209,6 @@ function _P.normalize_path(path)
     return (vim.fs.normalize(resolved):gsub("\\", "/"))
 end
 
---- Normalize path case for comparison on Windows drive-letter paths.
----
----@param path string An already normalized path.
----@return string # A path suitable for identity and prefix comparisons.
-local function _get_comparison_path(path)
-    if path:match("^%a:") then
-        return path:lower()
-    end
-
-    return path
-end
-
 --- Get the Obsidian workspace root for `path`, if any.
 ---
 ---@param path string A buffer path.

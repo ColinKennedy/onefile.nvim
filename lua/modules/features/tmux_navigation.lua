@@ -319,6 +319,21 @@ function M.complete_send_text(argument_lead, command_line)
     end, _DIRECTION_NAMES)
 end
 
+--- Whether alt+<key> needs a second, raw keymap to be usable.
+---
+--- Terminals report alt+<key> as `<Esc>` followed by `<key>`. Neovim folds that
+--- pair back into `<M-key>` only when the second byte lands within
+--- `'ttimeoutlen'`. Windows routes terminal input through ConPTY, which breaks
+--- that fold, so `<M-j>` never matches and Neovim falls back to running `<Esc>`
+--- and then a plain `j` -- the cursor moves and the window keeps its size.
+---
+--- Binding the raw `<Esc><key>` sequence makes the resize work anyway. The cost
+--- is Windows-only: pressing `<Esc>` and then `h`/`j`/`k`/`l` within
+--- `'timeoutlen'` resizes instead of moving the cursor.
+---
+---@type boolean
+local _NEEDS_RAW_ALT_KEYMAPS = vim.fn.has("win32") == 1
+
 for direction, details in pairs(_DIRECTIONS) do
     vim.keymap.set({ "n", "t" }, "<C-" .. direction .. ">", function()
         _P.move(direction)
@@ -333,6 +348,15 @@ for direction, details in pairs(_DIRECTIONS) do
         desc = string.format('Resize the "%s" split or tmux pane.', details.description),
         silent = true,
     })
+
+    if _NEEDS_RAW_ALT_KEYMAPS then
+        vim.keymap.set({ "n", "t" }, "<Esc>" .. direction, function()
+            M._resize(direction)
+        end, {
+            desc = string.format('Resize the "%s" split or tmux pane (raw alt+%s).', details.description, direction),
+            silent = true,
+        })
+    end
 end
 
 return M

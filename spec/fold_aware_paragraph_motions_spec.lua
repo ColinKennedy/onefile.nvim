@@ -115,6 +115,131 @@ describe("fold-aware paragraph motions", function()
         assert.equal(3, vim.fn.foldclosed(4))
     end)
 
+    it("skips over contiguous blank lines when moving forward", function()
+        prepare_buffer({
+            "alpha",
+            "",
+            "",
+            "",
+            "beta",
+            "",
+            "gamma",
+        }, 2)
+
+        fold_aware_paragraph_motions.move("next")
+
+        assert.equal(6, get_cursor_line())
+    end)
+
+    it("skips over contiguous blank lines when moving backward", function()
+        prepare_buffer({
+            "alpha",
+            "",
+            "beta",
+            "",
+            "",
+            "",
+            "gamma",
+        }, 6)
+
+        fold_aware_paragraph_motions.move("previous")
+
+        assert.equal(2, get_cursor_line())
+    end)
+
+    it("does not stop on the blank line right after the cursor's blank line", function()
+        prepare_buffer({
+            "",
+            "",
+            "",
+            "alpha",
+            "",
+        }, 1)
+
+        fold_aware_paragraph_motions.move("next")
+
+        assert.equal(5, get_cursor_line())
+    end)
+
+    it("skips over blank lines that surround a closed fold when moving forward", function()
+        prepare_buffer({
+            "before",
+            "",
+            "",
+            "fold line 1",
+            "fold line 2",
+            "",
+            "",
+            "after",
+        }, 2)
+        close_fold(4, 5)
+
+        fold_aware_paragraph_motions.move("next")
+
+        assert.equal(6, get_cursor_line())
+    end)
+
+    it("skips over blank lines that surround a closed fold when moving backward", function()
+        prepare_buffer({
+            "before",
+            "",
+            "",
+            "fold line 1",
+            "fold line 2",
+            "",
+            "",
+            "after",
+        }, 7)
+        close_fold(4, 5)
+
+        fold_aware_paragraph_motions.move("previous")
+
+        assert.equal(3, get_cursor_line())
+    end)
+
+    it("stops on the last line when there are only blank lines ahead", function()
+        prepare_buffer({
+            "alpha",
+            "",
+            "",
+            "",
+        }, 2)
+
+        fold_aware_paragraph_motions.move("next")
+
+        assert.equal(4, get_cursor_line())
+    end)
+
+    it("stops on the first line when there are only blank lines behind", function()
+        prepare_buffer({
+            "",
+            "",
+            "",
+            "alpha",
+        }, 3)
+
+        fold_aware_paragraph_motions.move("previous")
+
+        assert.equal(1, get_cursor_line())
+    end)
+
+    it("honors a count across contiguous blank lines", function()
+        prepare_buffer({
+            "alpha",
+            "",
+            "",
+            "beta",
+            "",
+            "",
+            "gamma",
+            "",
+        }, 1)
+
+        fold_aware_paragraph_motions.move("next", 2)
+
+        assert.equal(5, get_cursor_line())
+    end)
+
     it("honors a count when moving forward", function()
         prepare_buffer({
             "alpha",

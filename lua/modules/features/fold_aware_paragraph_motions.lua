@@ -65,22 +65,39 @@ end
 
 --- Find the next fold-aware paragraph boundary from `start_line`.
 ---
+--- Like the built-in motion, contiguous boundary lines are skipped over. A
+--- boundary only counts once at least one non-boundary line was seen, so a run
+--- of blank lines is crossed in a single step instead of one line at a time.
+---
 ---@param start_line integer The 1-or-more line to search from.
 ---@param step integer 1 to move down the buffer, -1 to move up the buffer.
 ---@return integer # The 1-or-more boundary line, clamped to the buffer range.
 local function _find_boundary(start_line, step)
     local line_count = vim.api.nvim_buf_line_count(0)
-    local line = _step_over_folds(start_line, step)
+    local line = start_line
+    local first = true
+    local found_text = false
 
-    while line >= 1 and line <= line_count do
-        if _is_paragraph_boundary(line) then
-            break
+    while true do
+        if not _is_paragraph_boundary(line) then
+            found_text = true
         end
 
-        line = _step_over_folds(line, step)
-    end
+        if not first and found_text and _is_paragraph_boundary(line) then
+            return line
+        end
 
-    return math.min(math.max(line, 1), line_count)
+        local next_line = _step_over_folds(line, step)
+
+        if next_line < 1 or next_line > line_count then
+            -- NOTE: The built-in motion stops on the first / last line when it
+            -- runs out of paragraphs to move over.
+            return step > 0 and line_count or 1
+        end
+
+        line = next_line
+        first = false
+    end
 end
 
 --- Move the cursor over fold-aware paragraphs, treating folds as single lines.

@@ -20,6 +20,11 @@ end
 
 --- Replace all text in `buffer` with exact file `text`.
 ---
+--- Only the changed line span is written so signs, extmarks, and folds on the
+--- untouched lines survive. A whole-buffer replacement would drop every git
+--- gutter sign until the next async refresh, which makes `signcolumn=auto`
+--- collapse and re-expand.
+---
 ---@param buffer integer The Vim buffer to modify.
 ---@param text string The full text to place into the buffer.
 local function _set_buffer_text(buffer, text)
@@ -32,7 +37,33 @@ local function _set_buffer_text(buffer, text)
         lines = vim.split(body, "\n", { plain = true })
     end
 
-    vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+    local current = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+    local prefix = 0
+
+    while prefix < #current and prefix < #lines and current[prefix + 1] == lines[prefix + 1] do
+        prefix = prefix + 1
+    end
+
+    local suffix = 0
+
+    while
+        suffix < #current - prefix
+        and suffix < #lines - prefix
+        and current[#current - suffix] == lines[#lines - suffix]
+    do
+        suffix = suffix + 1
+    end
+
+    if prefix ~= #current or prefix ~= #lines then
+        vim.api.nvim_buf_set_lines(
+            buffer,
+            prefix,
+            #current - suffix,
+            false,
+            vim.list_slice(lines, prefix + 1, #lines - suffix)
+        )
+    end
+
     vim.bo[buffer].endofline = has_eol
 end
 
@@ -519,6 +550,7 @@ end
 ---@class _my.git_hunks.QuickfixTarget
 ---@field buffer integer The buffer holding the hunk.
 ---@field lnum integer The hunk's line within that buffer.
+---@field rows integer[] The list rows that named this hunk.
 
 --- Collect the unique hunks named by a range of quickfix rows.
 ---
@@ -535,7 +567,7 @@ local function _get_quickfix_targets(window, is_loclist, start_row, end_row)
     local items = _get_quickfix_items(window, is_loclist)
     ---@type _my.git_hunks.QuickfixTarget[]
     local targets = {}
-    ---@type table<string, boolean>
+    ---@type table<string, _my.git_hunks.QuickfixTarget>
     local seen = {}
 
     for row = start_row, end_row do
@@ -543,11 +575,15 @@ local function _get_quickfix_targets(window, is_loclist, start_row, end_row)
 
         if item and item.bufnr and item.bufnr ~= 0 and item.lnum and item.lnum > 0 then
             local key = string.format("%s:%s", item.bufnr, item.lnum)
+            local target = seen[key]
 
-            if not seen[key] then
-                seen[key] = true
-                table.insert(targets, { buffer = item.bufnr, lnum = item.lnum })
+            if not target then
+                target = { buffer = item.bufnr, lnum = item.lnum, rows = {} }
+                seen[key] = target
+                table.insert(targets, target)
             end
+
+            table.insert(target.rows, row)
         end
     end
 
@@ -568,9 +604,14 @@ end
 
 --- Drop entries naming `removed` hunks from the list shown in `window`.
 ---
---- CAVEAT: Only the checked-out rows are dropped. Checking out part of a file
---- shifts the lines of that file's remaining hunks, so any rows still listing
---- them keep their original line numbers and will be stale until `:LoadGitDiff`
+--- Rows are matched by their position in the list, not by buffer and line.
+--- Neovim tracks the entries of a loaded buffer with extmarks, so checking out
+--- one hunk shifts the recorded lines of that file's remaining rows and they no
+--- longer match the lines that `_get_quickfix_targets` captured.
+---
+--- CAVEAT: Only the checked-out rows are dropped. A file whose buffer is not
+--- loaded gets no extmark tracking, so the rows still listing its other hunks
+--- keep their original line numbers and will be stale until `:LoadGitDiff`
 --- rebuilds the list.
 ---
 ---@param window integer The window holding the list.
@@ -581,19 +622,21 @@ local function _remove_quickfix_entries(window, is_loclist, removed)
         return
     end
 
-    ---@type table<string, boolean>
+    ---@type table<integer, boolean>
     local dropped = {}
 
     for _, target in ipairs(removed) do
-        dropped[string.format("%s:%s", target.buffer, target.lnum)] = true
+        for _, row in ipairs(target.rows) do
+            dropped[row] = true
+        end
     end
 
     local items = _get_quickfix_items(window, is_loclist)
     ---@type vim.quickfix.entry[]
     local kept = {}
 
-    for _, item in ipairs(items) do
-        if not dropped[string.format("%s:%s", item.bufnr, item.lnum)] then
+    for row, item in ipairs(items) do
+        if not dropped[row] then
             table.insert(kept, item)
         end
     end

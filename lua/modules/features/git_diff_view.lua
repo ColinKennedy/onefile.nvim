@@ -28,7 +28,7 @@ local _MAXIMUM_INLINE_LENGTH = 2000
 --- Neovim renamed `vim.diff` to `vim.text.diff`. Prefer the newer name.
 ---
 ---@type fun(old_text: string, new_text: string, options: _my.git_diff_view.DiffOptions): integer[][]?
----@diagnostic disable-next-line: undefined-field, deprecated
+---@diagnostic disable-next-line: undefined-field
 local _diff = vim.text and vim.text.diff or vim.diff
 
 ---@class _my.git_diff_view.Region A changed byte range within a single line.
@@ -69,29 +69,6 @@ local _DRAWN_BUFFERS = {}
 ---@type table<integer, integer>
 local _UPDATE_GENERATION_BY_BUFFER = {}
 
---- How long to wait after the last keystroke before recomputing the view.
-local _TEXT_CHANGED_I_DEBOUNCE_MS = 100
-
---- Per-buffer timers used to debounce `TextChangedI` updates.
----
----@type table<integer, uv.uv_timer_t>
-local _TIMERS_BY_BUFFER = {}
-
---- Stop and free the debounce timer for `buffer`, if any.
----
----@param buffer integer The buffer whose timer should be cleared.
-local function _clear_timer(buffer)
-    local timer = _TIMERS_BY_BUFFER[buffer]
-
-    if not timer then
-        return
-    end
-
-    timer:stop()
-    timer:close()
-    _TIMERS_BY_BUFFER[buffer] = nil
-end
-
 --- Define the git diff view highlight groups.
 function _P.define_highlights()
     vim.api.nvim_set_hl(0, _ADD_HIGHLIGHT, { default = true, link = "DiffAdd" })
@@ -114,29 +91,29 @@ end
 ---
 function _P.get_diff_options()
     ---@type _my.git_diff_view.DiffOptions
-    local options = { ctxlen = 0, result_type = "indices" } -- deadcode: ignore DC05
+    local options = { ctxlen = 0, result_type = "indices" }
 
     for _, value in ipairs(_P.get_diff_option_values()) do
         if value == "iblank" then
-            options.ignore_blank_lines = true -- deadcode: ignore DC05
+            options.ignore_blank_lines = true
         elseif value == "iwhite" then
-            options.ignore_whitespace_change = true -- deadcode: ignore DC05
+            options.ignore_whitespace_change = true
         elseif value == "iwhiteall" then
-            options.ignore_whitespace = true -- deadcode: ignore DC05
+            options.ignore_whitespace = true
         elseif value == "iwhiteeol" then
-            options.ignore_whitespace_change_at_eol = true -- deadcode: ignore DC05
+            options.ignore_whitespace_change_at_eol = true
         elseif value == "indent-heuristic" then
-            options.indent_heuristic = true -- deadcode: ignore DC05
+            options.indent_heuristic = true
         else
             local algorithm = value:match("^algorithm:(%a+)$")
 
             if algorithm then
-                options.algorithm = algorithm -- deadcode: ignore DC05
+                options.algorithm = algorithm
             else
                 local linematch = tonumber(value:match("^linematch:(%d+)$") or "")
 
                 if linematch then
-                    options.linematch = linematch -- deadcode: ignore DC05
+                    options.linematch = linematch
                 end
             end
         end
@@ -723,7 +700,7 @@ end
 ---
 ---@param buffer integer? The buffer to update. Defaults to the current buffer.
 ---
-function _P.update(buffer)
+function M.update(buffer)
     local current = buffer or vim.api.nvim_get_current_buf()
 
     if not _P.is_wanted_buffer(current) or not _P.is_supported_buffer(current) then
@@ -782,7 +759,7 @@ function _P.refresh()
     end
 
     for buffer, _ in pairs(wanted) do
-        _P.update(buffer)
+        M.update(buffer)
     end
 end
 
@@ -831,29 +808,11 @@ vim.api.nvim_create_autocmd({ "BufWritePost", "InsertLeave", "TextChanged", "Tex
             return
         end
 
-        local buffer = event.buf
-
-        if event.event ~= "TextChangedI" then
-            _clear_timer(buffer)
-            vim.schedule(function()
-                _P.update(buffer)
-            end)
-
-            return
-        end
-
-        if not _TIMERS_BY_BUFFER[buffer] then
-            _TIMERS_BY_BUFFER[buffer] = assert(vim.uv.new_timer())
-        end
-
-        _TIMERS_BY_BUFFER[buffer]:stop()
-        _TIMERS_BY_BUFFER[buffer]:start(_TEXT_CHANGED_I_DEBOUNCE_MS, 0, function()
-            vim.schedule(function()
-                _P.update(buffer)
-            end)
+        vim.schedule(function()
+            M.update(event.buf)
         end)
     end,
-    desc = "Redraw the git diff view after the buffer changes. `TextChangedI` is debounced.",
+    desc = "Redraw the git diff view after the buffer changes.",
     group = _AUGROUP,
 })
 
@@ -891,17 +850,8 @@ vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     callback = function(event)
         _DRAWN_BUFFERS[event.buf] = nil
         _UPDATE_GENERATION_BY_BUFFER[event.buf] = nil
-        _clear_timer(event.buf)
     end,
     desc = "Forget git diff view state for deleted buffers.",
-    group = _AUGROUP,
-})
-
-vim.api.nvim_create_autocmd("BufFilePost", {
-    callback = function(event)
-        require("modules.utilities.git_diff").invalidate_file_details(event.buf)
-    end,
-    desc = "Forget cached Git file details after a buffer is renamed.",
     group = _AUGROUP,
 })
 

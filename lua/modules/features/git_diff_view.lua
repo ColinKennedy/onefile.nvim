@@ -69,6 +69,29 @@ local _DRAWN_BUFFERS = {}
 ---@type table<integer, integer>
 local _UPDATE_GENERATION_BY_BUFFER = {}
 
+--- How long to wait after the last keystroke before recomputing the view.
+local _TEXT_CHANGED_I_DEBOUNCE_MS = 100
+
+--- Per-buffer timers used to debounce `TextChangedI` updates.
+---
+---@type table<integer, uv.uv_timer_t>
+local _TIMERS_BY_BUFFER = {}
+
+--- Stop and free the debounce timer for `buffer`, if any.
+---
+---@param buffer integer The buffer whose timer should be cleared.
+local function _clear_timer(buffer)
+    local timer = _TIMERS_BY_BUFFER[buffer]
+
+    if not timer then
+        return
+    end
+
+    timer:stop()
+    timer:close()
+    _TIMERS_BY_BUFFER[buffer] = nil
+end
+
 --- Define the git diff view highlight groups.
 function _P.define_highlights()
     vim.api.nvim_set_hl(0, _ADD_HIGHLIGHT, { default = true, link = "DiffAdd" })
@@ -808,11 +831,29 @@ vim.api.nvim_create_autocmd({ "BufWritePost", "InsertLeave", "TextChanged", "Tex
             return
         end
 
-        vim.schedule(function()
-            M.update(event.buf)
+        local buffer = event.buf
+
+        if event.event ~= "TextChangedI" then
+            _clear_timer(buffer)
+            vim.schedule(function()
+                M.update(buffer)
+            end)
+
+            return
+        end
+
+        if not _TIMERS_BY_BUFFER[buffer] then
+            _TIMERS_BY_BUFFER[buffer] = assert(vim.uv.new_timer())
+        end
+
+        _TIMERS_BY_BUFFER[buffer]:stop()
+        _TIMERS_BY_BUFFER[buffer]:start(_TEXT_CHANGED_I_DEBOUNCE_MS, 0, function()
+            vim.schedule(function()
+                M.update(buffer)
+            end)
         end)
     end,
-    desc = "Redraw the git diff view after the buffer changes.",
+    desc = "Redraw the git diff view after the buffer changes. `TextChangedI` is debounced.",
     group = _AUGROUP,
 })
 
@@ -850,6 +891,7 @@ vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     callback = function(event)
         _DRAWN_BUFFERS[event.buf] = nil
         _UPDATE_GENERATION_BY_BUFFER[event.buf] = nil
+        _clear_timer(event.buf)
     end,
     desc = "Forget git diff view state for deleted buffers.",
     group = _AUGROUP,

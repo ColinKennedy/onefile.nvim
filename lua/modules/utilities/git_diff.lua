@@ -332,65 +332,9 @@ function M.get_index_lines(details, callback)
     )
 end
 
---- Forget the cached index contents for the file shown by `buffer`.
----
----@param buffer integer The buffer whose index entry changed.
-function M.invalidate_index_lines(buffer)
-    buffer = _resolve_buffer(buffer)
-    local cached = _DETAILS_CACHE[buffer]
-
-    if not cached or not cached.details then
-        return
-    end
-
-    local key = _get_index_key(cached.details)
-    _INDEX_GENERATION[key] = (_INDEX_GENERATION[key] or 0) + 1
-end
-
---- Get the index version of `path`, sharing cached and in-flight results.
----
----@param details _my.git_diff.FileDetails The file details to query.
----@param callback fun(lines: string[], missing: boolean): nil Callback with the index lines.
-function M.get_index_lines(details, callback)
-    local key = _get_index_key(details)
-    local generation = _INDEX_GENERATION[key] or 0
-    local cached = _INDEX_CACHE[key]
-
-    if cached and cached.generation == generation then
-        callback(cached.lines, cached.missing)
-
-        return
-    end
-
-    local pending = _INDEX_PENDING[key]
-
-    if pending and pending.generation == generation then
-        table.insert(pending.callbacks, callback)
-
-        return
-    end
-
-    pending = { generation = generation, callbacks = { callback } }
-    _INDEX_PENDING[key] = pending
-
-    _fetch_index_lines_uncached(details, function(lines, missing)
-        if (_INDEX_GENERATION[key] or 0) == generation then
-            _INDEX_CACHE[key] = { generation = generation, lines = lines, missing = missing }
-        end
-
-        if _INDEX_PENDING[key] == pending then
-            _INDEX_PENDING[key] = nil
-        end
-
-        for _, waiting in ipairs(pending.callbacks) do
-            waiting(lines, missing)
-        end
-    end)
-end
-
 --- Neovim renamed `vim.diff` to `vim.text.diff`. Prefer the newer name.
 ---
----@diagnostic disable-next-line: undefined-field, deprecated
+---@diagnostic disable-next-line: undefined-field
 local _diff = vim.text and vim.text.diff or vim.diff
 
 --- Join lines into diff-ready text.

@@ -205,6 +205,11 @@ end
 
 --- Schedule a sign refresh for a buffer event.
 ---
+--- `TextChangedI` fires on every inserted keystroke, and each update chains
+--- 2-3 git subprocesses plus a full-buffer diff, so it is debounced to avoid
+--- redoing that work on every character typed. The other events fire far less
+--- often and update immediately.
+---
 ---@param event vim.api.keyset.create_autocmd.callback_args The Neovim autocommand event.
 local function _schedule_update(event)
     local buffer = event.buf

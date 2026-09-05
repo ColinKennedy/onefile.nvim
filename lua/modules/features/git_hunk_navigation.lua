@@ -446,6 +446,15 @@ local function _merge_loaded_buffer_hunks(repository, entries, callback)
         diffed_relative_paths[entry.relative_path] = true
     end
 
+    --- Merge the next buffer.
+    local function _next()
+        local buffer = buffers[index]
+        index = index + 1
+
+    for _, entry in ipairs(entries) do
+        diffed_relative_paths[entry.relative_path] = true
+    end
+
     if #buffers == 0 then
         _sort_cached_entries(entries)
         callback()
@@ -470,8 +479,11 @@ local function _merge_loaded_buffer_hunks(repository, entries, callback)
             return
         end
 
-        for _, ordered_buffer in ipairs(buffers) do
-            local result = results[ordered_buffer]
+        _make_buffer_entries(repository, buffer, diffed_relative_paths, function(buffer_entries, relative_path)
+            if relative_path then
+                _remove_file_entries(entries, relative_path)
+                vim.list_extend(entries, buffer_entries)
+            end
 
             if result and result.relative_path then
                 _remove_file_entries(entries, result.relative_path)

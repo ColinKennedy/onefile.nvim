@@ -1,5 +1,6 @@
 --- Stage and unstage visual selections from unsaved buffer edits.
 
+local M = {}
 local _P = {}
 
 --- Get all current buffer text as a single string.
@@ -172,7 +173,7 @@ local function _get_action_details(action, buffer, details, callback)
 end
 
 ---@class _my.git_hunks.ApplyOptions
----@field callback fun(success: boolean, message: string?): nil? Called once the action finishes.
+---@field callback? fun(success: boolean, message: string?): nil Called once the action finishes.
 ---@field quiet boolean? If `true`, report nothing. The caller summarizes instead.
 
 --- Run a hunk operation using already-resolved texts and range.
@@ -331,7 +332,8 @@ end
 --- Run a whole-file Git hunk action for the current buffer.
 ---
 ---@param action "stage" | "reset" The whole-file operation to run.
-function _P.apply_current_file(action)
+---@param callback? fun(success: boolean, message: string?): nil Called once the action finishes.
+function _P.apply_current_file(action, callback)
     local git_diff = require("modules.utilities.git_diff")
 
     local buffer = vim.api.nvim_get_current_buf()
@@ -339,12 +341,20 @@ function _P.apply_current_file(action)
         if not details then
             _notify_error(details_error or "Cannot find git details for current buffer.")
 
+            if callback then
+                callback(false, details_error)
+            end
+
             return
         end
 
         git_diff.has_unmerged_entries(details, function(has_unmerged)
             if has_unmerged and action == "reset" then
                 _notify_error("Cannot reset a file with unresolved merge entries.")
+
+                if callback then
+                    callback(false, "unresolved merge entries")
+                end
 
                 return
             end
@@ -357,6 +367,10 @@ function _P.apply_current_file(action)
                 if not success then
                     _notify_error(string.format("Cannot %s current Git file: %s", action, message or ""))
 
+                    if callback then
+                        callback(false, message)
+                    end
+
                     return
                 end
 
@@ -367,6 +381,10 @@ function _P.apply_current_file(action)
                 end
 
                 _refresh_git_views(buffer)
+
+                if callback then
+                    callback(true, nil)
+                end
             end
 
             if action == "stage" then
@@ -811,13 +829,18 @@ end
 --- Run a visual Git hunk action for the closest hunk.
 ---
 ---@param action _my.git_hunks.Action The hunk operation to run.
-function _P.apply_closest_hunk(action)
+---@param callback? fun(success: boolean, message: string?): nil Called once the action finishes.
+function _P.apply_closest_hunk(action, callback)
     local git_diff = require("modules.utilities.git_diff")
 
     local buffer = vim.api.nvim_get_current_buf()
     git_diff.get_file_details(buffer, function(details, details_error)
         if not details then
             _notify_error(details_error or "Cannot find git details for current buffer.")
+
+            if callback then
+                callback(false, details_error)
+            end
 
             return
         end
@@ -826,17 +849,29 @@ function _P.apply_closest_hunk(action)
             if has_unmerged then
                 _notify_error("Cannot use Git hunk selection on a file with unresolved merge entries.")
 
+                if callback then
+                    callback(false, "unresolved merge entries")
+                end
+
                 return
             end
 
             _get_action_details(action, buffer, details, function(data)
                 if not data then
+                    if callback then
+                        callback(false, "cannot resolve git action details")
+                    end
+
                     return
                 end
 
                 git_diff.build_zero_context_diff(data.base_text, data.target_text, function(diff, diff_error)
                     if not diff then
                         _notify_error(string.format("Cannot calculate selected Git hunks: %s", diff_error or ""))
+
+                        if callback then
+                            callback(false, diff_error)
+                        end
 
                         return
                     end
@@ -847,11 +882,23 @@ function _P.apply_closest_hunk(action)
                     if not hunk then
                         vim.notify("No Git hunk lines were found.", vim.log.levels.INFO)
 
+                        if callback then
+                            callback(false, "no git hunk lines found")
+                        end
+
                         return
                     end
 
                     local start_line, end_line = _get_hunk_line_range(hunk)
-                    _apply_selection_from_details(action, buffer, data, diff, start_line, end_line)
+                    _apply_selection_from_details(
+                        action,
+                        buffer,
+                        data,
+                        diff,
+                        start_line,
+                        end_line,
+                        { callback = callback }
+                    )
                 end)
             end)
         end)
@@ -958,3 +1005,8 @@ end, { desc = "Stage current Git file." })
 vim.keymap.set("n", "<leader>grc", function()
     _P.apply_current_file("reset")
 end, { desc = "Reset current Git file from the index." })
+
+M.apply_closest_hunk = _P.apply_closest_hunk
+M.apply_current_file = _P.apply_current_file
+
+return M

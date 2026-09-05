@@ -14,6 +14,29 @@ local _SIGN_DELETE = "MyGitGutterDelete"
 ---@type table<integer, integer>
 local _UPDATE_GENERATION_BY_BUFFER = {}
 
+--- How long to wait after the last keystroke before recomputing signs.
+local _TEXT_CHANGED_I_DEBOUNCE_MS = 100
+
+--- Per-buffer timers used to debounce `TextChangedI` updates.
+---
+---@type table<integer, uv.uv_timer_t>
+local _TIMERS_BY_BUFFER = {}
+
+--- Stop and free the debounce timer for `buffer`, if any.
+---
+---@param buffer integer The buffer whose timer should be cleared.
+local function _clear_timer(buffer)
+    local timer = _TIMERS_BY_BUFFER[buffer]
+
+    if not timer then
+        return
+    end
+
+    timer:stop()
+    timer:close()
+    _TIMERS_BY_BUFFER[buffer] = nil
+end
+
 --- Define git gutter highlight groups and signs.
 function _P.define_signs()
     vim.api.nvim_set_hl(0, "GitGutterAdd", { default = true, fg = "#50fa7b" })
@@ -182,12 +205,33 @@ end
 
 --- Schedule a sign refresh for a buffer event.
 ---
+--- `TextChangedI` fires on every inserted keystroke, and each update chains
+--- 2-3 git subprocesses plus a full-buffer diff, so it is debounced to avoid
+--- redoing that work on every character typed. The other events fire far less
+--- often and update immediately.
+---
 ---@param event vim.api.keyset.create_autocmd.callback_args The Neovim autocommand event.
 local function _schedule_update(event)
     local buffer = event.buf
 
-    vim.schedule(function()
-        M.update(buffer)
+    if event.event ~= "TextChangedI" then
+        _clear_timer(buffer)
+        vim.schedule(function()
+            M.update(buffer)
+        end)
+
+        return
+    end
+
+    if not _TIMERS_BY_BUFFER[buffer] then
+        _TIMERS_BY_BUFFER[buffer] = assert(vim.uv.new_timer())
+    end
+
+    _TIMERS_BY_BUFFER[buffer]:stop()
+    _TIMERS_BY_BUFFER[buffer]:start(_TEXT_CHANGED_I_DEBOUNCE_MS, 0, function()
+        vim.schedule(function()
+            M.update(buffer)
+        end)
     end)
 end
 
@@ -195,6 +239,14 @@ _P.define_signs()
 
 vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "TextChanged", "TextChangedI" }, {
     callback = _schedule_update,
+    group = _AUGROUP,
+})
+
+vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+    callback = function(event)
+        _clear_timer(event.buf)
+        _UPDATE_GENERATION_BY_BUFFER[event.buf] = nil
+    end,
     group = _AUGROUP,
 })
 

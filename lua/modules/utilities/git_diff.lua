@@ -17,12 +17,6 @@ local _P = {}
 
 ---@alias _my.git_diff.SystemCallback fun(result: _my.git_diff.SystemResult): nil
 
----@class _my.git_diff.Operation
----@field type "add" | "delete" | "equal"
----@field old_line integer?
----@field new_line integer?
----@field text string
-
 ---@class _my.git_diff.Hunk
 ---@field type "add" | "change" | "delete"
 ---@field line integer
@@ -30,14 +24,6 @@ local _P = {}
 ---@field old_count integer
 ---@field new_start integer
 ---@field new_count integer
-
----@class _my.git_diff.ChangeGroup
----@field old_start integer
----@field old_count integer
----@field new_start integer
----@field new_count integer
----@field deletes _my.git_diff.Operation[]
----@field adds _my.git_diff.Operation[]
 
 ---@class _my.git_diff.SelectionHunk
 ---@field old_start integer
@@ -252,156 +238,34 @@ function M.get_index_lines(details, callback)
     )
 end
 
---- Build a dynamic-programming table for longest common subsequence.
+--- Neovim renamed `vim.diff` to `vim.text.diff`. Prefer the newer name.
 ---
----@param old_lines string[] The old file lines.
----@param new_lines string[] The new file lines.
----@return integer[][] # The LCS table.
+---@diagnostic disable-next-line: undefined-field
+local _diff = vim.text and vim.text.diff or vim.diff
+
+--- Join lines into diff-ready text.
 ---
-local function _make_lcs_table(old_lines, new_lines)
-    ---@type integer[][]
-    local table_ = {}
-
-    for old_index = 0, #old_lines do
-        ---@type integer[]
-        table_[old_index] = {}
-
-        for new_index = 0, #new_lines do
-            table_[old_index][new_index] = 0
-        end
+---@param lines string[] The lines to join.
+---@return string # The text, always ending in a newline unless it is empty.
+---
+local function _join_diff_lines(lines)
+    if #lines == 0 then
+        return ""
     end
 
-    for old_index = #old_lines - 1, 0, -1 do
-        for new_index = #new_lines - 1, 0, -1 do
-            if old_lines[old_index + 1] == new_lines[new_index + 1] then
-                table_[old_index][new_index] = table_[old_index + 1][new_index + 1] + 1
-            else
-                table_[old_index][new_index] =
-                    math.max(table_[old_index + 1][new_index], table_[old_index][new_index + 1])
-            end
-        end
-    end
-
-    return table_
-end
-
---- Compute line-level diff operations from `old_lines` to `new_lines`.
----
----@param old_lines string[] The original lines.
----@param new_lines string[] The changed lines.
----@return _my.git_diff.Operation[] # The diff operations.
----
-function _P.compute_operations(old_lines, new_lines)
-    local table_ = _make_lcs_table(old_lines, new_lines)
-    local old_index = 1
-    local new_index = 1
-    ---@type _my.git_diff.Operation[]
-    local operations = {}
-
-    while old_index <= #old_lines and new_index <= #new_lines do
-        if old_lines[old_index] == new_lines[new_index] then
-            table.insert(operations, {
-                old_line = old_index,
-                new_line = new_index,
-                text = old_lines[old_index],
-                type = "equal",
-            })
-            old_index = old_index + 1
-            new_index = new_index + 1
-        elseif table_[old_index][new_index - 1] >= table_[old_index - 1][new_index] then
-            table.insert(operations, {
-                old_line = old_index,
-                text = old_lines[old_index],
-                type = "delete",
-            })
-            old_index = old_index + 1
-        else
-            table.insert(operations, {
-                new_line = new_index,
-                text = new_lines[new_index],
-                type = "add",
-            })
-            new_index = new_index + 1
-        end
-    end
-
-    while old_index <= #old_lines do
-        table.insert(operations, {
-            old_line = old_index,
-            text = old_lines[old_index],
-            type = "delete",
-        })
-        old_index = old_index + 1
-    end
-
-    while new_index <= #new_lines do
-        table.insert(operations, {
-            new_line = new_index,
-            text = new_lines[new_index],
-            type = "add",
-        })
-        new_index = new_index + 1
-    end
-
-    return operations
-end
-
---- Group adjacent changed operations together.
----
----@param operations _my.git_diff.Operation[] The operations to group.
----@return _my.git_diff.ChangeGroup[] # The changed groups.
----
-function _P.get_change_groups(operations)
-    ---@type _my.git_diff.ChangeGroup[]
-    local groups = {}
-    local index = 1
-    local old_cursor = 1
-    local new_cursor = 1
-
-    while index <= #operations do
-        local operation = operations[index]
-
-        if operation.type == "equal" then
-            old_cursor = old_cursor + 1
-            new_cursor = new_cursor + 1
-            index = index + 1
-        else
-            local old_start = old_cursor
-            local new_start = new_cursor
-            ---@type _my.git_diff.Operation[]
-            local deletes = {}
-            ---@type _my.git_diff.Operation[]
-            local adds = {}
-
-            while operations[index] and operations[index].type ~= "equal" do
-                local changed = operations[index]
-
-                if changed.type == "delete" then
-                    table.insert(deletes, changed)
-                    old_cursor = old_cursor + 1
-                else
-                    table.insert(adds, changed)
-                    new_cursor = new_cursor + 1
-                end
-
-                index = index + 1
-            end
-
-            table.insert(groups, {
-                adds = adds,
-                deletes = deletes,
-                new_count = #adds,
-                new_start = new_start,
-                old_count = #deletes,
-                old_start = old_start,
-            })
-        end
-    end
-
-    return groups
+    return table.concat(lines, "\n") .. "\n"
 end
 
 --- Convert line changes into sign-friendly hunks.
+---
+--- Delegates to the native `vim.diff`/`vim.text.diff` (the same xdiff engine
+--- `git` itself uses) instead of a hand-rolled LCS diff, since the LCS table is
+--- O(#old_lines * #new_lines) and became a multi-second stall on large files.
+---
+--- `vim.diff`'s zero-count (pure add/delete) hunks anchor one line earlier than
+--- this module's callers expect (real unified-diff convention anchors on the
+--- line *before* the change; callers here anchor on the line *after*), so
+--- zero-count sides get shifted by one to keep the existing anchor contract.
 ---
 ---@param old_lines string[] The original lines.
 ---@param new_lines string[] The changed lines.
@@ -411,20 +275,36 @@ function M.compute_hunks(old_lines, new_lines)
     old_lines = _normalize_hunk_lines(old_lines)
     new_lines = _normalize_hunk_lines(new_lines)
 
-    local groups = _P.get_change_groups(_P.compute_operations(old_lines, new_lines))
+    local ok, raw_hunks =
+        pcall(_diff, _join_diff_lines(old_lines), _join_diff_lines(new_lines), { result_type = "indices", ctxlen = 0 })
+
+    if not ok or type(raw_hunks) ~= "table" then
+        return {}
+    end
+
     ---@type _my.git_diff.Hunk[]
     local hunks = {}
 
-    for _, group in ipairs(groups) do
+    for _, entry in ipairs(raw_hunks) do
+        local old_start, old_count, new_start, new_count = entry[1], entry[2], entry[3], entry[4]
+
+        if old_count == 0 then
+            old_start = old_start + 1
+        end
+
+        if new_count == 0 then
+            new_start = new_start + 1
+        end
+
         local kind = "add"
 
-        if group.old_count > 0 and group.new_count > 0 then
+        if old_count > 0 and new_count > 0 then
             kind = "change"
-        elseif group.old_count > 0 then
+        elseif old_count > 0 then
             kind = "delete"
         end
 
-        local line = group.new_start
+        local line = new_start
 
         if line > #new_lines then
             line = math.max(#new_lines, 1)
@@ -433,10 +313,10 @@ function M.compute_hunks(old_lines, new_lines)
         ---@cast kind "add" | "change" | "delete"
         table.insert(hunks, {
             line = line,
-            new_count = group.new_count,
-            new_start = group.new_start,
-            old_count = group.old_count,
-            old_start = group.old_start,
+            new_count = new_count,
+            new_start = new_start,
+            old_count = old_count,
+            old_start = old_start,
             type = kind,
         })
     end

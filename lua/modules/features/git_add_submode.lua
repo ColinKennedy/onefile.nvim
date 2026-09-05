@@ -14,7 +14,6 @@ local _AUGROUP = vim.api.nvim_create_augroup("my.git_add_submode", { clear = tru
 local _ACTIVE = false
 
 --- The Normal-mode keys the submode temporarily takes over.
----@type string[]
 local _SUBMODE_KEYS = { "y", "n", "N", "a", "v", "q", "<Esc>" }
 
 --- The prior mapping for each submode key, saved before overriding it.
@@ -22,7 +21,7 @@ local _SUBMODE_KEYS = { "y", "n", "N", "a", "v", "q", "<Esc>" }
 --- `false` means the key had no prior mapping (fall back to Neovim's builtin
 --- behavior on restore instead of calling `mapset`).
 ---
----@type table<string, vim.api.keyset.get_keymap|false>
+---@type table<string, table|false>
 local _SAVED_KEYMAPS = {}
 
 ---@type integer? The floating legend window, while active.
@@ -31,7 +30,6 @@ local _LEGEND_WINDOW = nil
 local _LEGEND_BUFFER = nil
 
 -- NOTE: Every line must stay under 10 characters so the legend window stays tiny.
----@type string[]
 local _LEGEND_LINES = { "y stage", "n skip", "N prev", "a all", "v diff", "q exit", "esc exit" }
 
 --- Save the current Normal-mode mapping for `key`, then replace it with `callback`.
@@ -194,19 +192,9 @@ function _P.deactivate(message)
     end
 end
 
---- Update the hunk cache locally, then either finish or jump to the next hunk.
----
----@param buffer integer The buffer whose hunks were staged.
----@param line integer? The staged hunk line, or `nil` when the whole file was staged.
-function _P.advance_or_finish(buffer, line)
-    local git_hunk_navigation = require("modules.features.git_hunk_navigation")
-    local remaining = git_hunk_navigation.remove_cached_hunks_for_buffer(buffer, line)
-    local repository_state = git_hunk_navigation._get_repository_state()
-
-    --- Finish after falling back to a full reload when the local cache did not match.
-    ---
-    ---@param state _my.git_hunk_navigation.RepositoryState?
-    local function _finish(state)
+--- Reload the hunk cache, then either finish the submode or jump to the next hunk.
+function _P.advance_or_finish()
+    _P.reload(function(state)
         if not state then
             _P.deactivate("Git add is done.")
 
@@ -214,27 +202,16 @@ function _P.advance_or_finish(buffer, line)
         end
 
         vim.cmd.GitDiffNext()
-    end
-
-    if remaining == nil or (repository_state and repository_state.stale) then
-        _P.reload(_finish)
-
-        return
-    end
-
-    _finish(remaining > 0 and repository_state or nil)
+    end)
 end
 
 --- Stage the hunk under the cursor, then advance.
 function _P.on_y()
-    local buffer = vim.api.nvim_get_current_buf()
-    local line = vim.api.nvim_win_get_cursor(0)[1]
-
     require("modules.features.git_hunks").apply_closest_hunk("stage", function(success)
         if success then
-            _P.advance_or_finish(buffer, line)
+            _P.advance_or_finish()
         end
-    end, true)
+    end)
 end
 
 --- Skip the current hunk and advance, wrapping at the end of the list.
@@ -249,13 +226,11 @@ end
 
 --- Stage every hunk in the current file, then advance to the next file.
 function _P.on_a()
-    local buffer = vim.api.nvim_get_current_buf()
-
     require("modules.features.git_hunks").apply_current_file("stage", function(success)
         if success then
-            _P.advance_or_finish(buffer, nil)
+            _P.advance_or_finish()
         end
-    end, true)
+    end)
 end
 
 --- Toggle the Git diff view for the current window.

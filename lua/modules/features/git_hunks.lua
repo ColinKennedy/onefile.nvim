@@ -1,13 +1,5 @@
 --- Stage and unstage visual selections from unsaved buffer edits.
 
----@alias _my.git_hunks.Callback fun(success: boolean, message: string?)
-
----@class _my.git_hunks.Module
----@field apply_closest_hunk fun(action: _my.git_hunks.Action, callback?: _my.git_hunks.Callback, keep_cache?: boolean)
----@field apply_current_file fun(action: "stage" | "reset", callback?: _my.git_hunks.Callback, keep_cache?: boolean)
-
----@type _my.git_hunks.Module
----@diagnostic disable-next-line: missing-fields
 local M = {}
 local _P = {}
 
@@ -186,7 +178,7 @@ local function _get_action_details(action, buffer, details, callback)
 end
 
 ---@class _my.git_hunks.ApplyOptions
----@field callback fun(success: boolean, message: string?): nil? Called once the action finishes.
+---@field callback? fun(success: boolean, message: string?): nil Called once the action finishes.
 ---@field quiet boolean? If `true`, report nothing. The caller summarizes instead.
 
 --- Run a hunk operation using already-resolved texts and range.
@@ -346,8 +338,7 @@ end
 ---
 ---@param action "stage" | "reset" The whole-file operation to run.
 ---@param callback? fun(success: boolean, message: string?): nil Called once the action finishes.
----@param keep_navigation_cache boolean? If `true`, the caller updates the navigation cache itself.
-function _P.apply_current_file(action, callback, keep_navigation_cache)
+function _P.apply_current_file(action, callback)
     local git_diff = require("modules.utilities.git_diff")
 
     local buffer = vim.api.nvim_get_current_buf()
@@ -394,7 +385,7 @@ function _P.apply_current_file(action, callback, keep_navigation_cache)
                     vim.notify("Reset current Git file from the index.", vim.log.levels.INFO)
                 end
 
-                _refresh_git_views(buffer, keep_navigation_cache)
+                _refresh_git_views(buffer)
 
                 if callback then
                     callback(true, nil)
@@ -844,8 +835,7 @@ end
 ---
 ---@param action _my.git_hunks.Action The hunk operation to run.
 ---@param callback? fun(success: boolean, message: string?): nil Called once the action finishes.
----@param keep_navigation_cache boolean? If `true`, the caller updates the navigation cache itself.
-function _P.apply_closest_hunk(action, callback, keep_navigation_cache)
+function _P.apply_closest_hunk(action, callback)
     local git_diff = require("modules.utilities.git_diff")
 
     local buffer = vim.api.nvim_get_current_buf()
@@ -912,7 +902,7 @@ function _P.apply_closest_hunk(action, callback, keep_navigation_cache)
                         diff,
                         start_line,
                         end_line,
-                        { callback = callback, keep_navigation_cache = keep_navigation_cache }
+                        { callback = callback }
                     )
                 end)
             end)

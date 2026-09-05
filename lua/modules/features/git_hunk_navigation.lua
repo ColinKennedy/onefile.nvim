@@ -328,11 +328,20 @@ end
 
 --- Build unsaved-buffer hunk entries for a buffer in `repository`.
 ---
+--- An unmodified buffer's content matches disk exactly. If disk already has no
+--- diff for it either, there is nothing to override, so this skips the git
+--- subprocess round trip entirely -- the common case for the many untouched
+--- buffers that can be open in a large repository. An unmodified buffer whose
+--- file *does* have a disk diff still goes through the full lookup, since the
+--- entry text uses the buffer's live lines for a better "nearest non-empty
+--- line" fallback than the raw diff hunk can provide.
+---
 ---@param repository string The repository root.
 ---@param buffer integer The buffer to inspect.
+---@param diffed_relative_paths table<string, boolean> Relative paths with a disk-diff entry.
 ---@param callback fun(entries: _my.git_hunk_navigation.Entry[], relative_path: string?): nil
 ---    Callback with buffer hunks.
-local function _make_buffer_entries(repository, buffer, callback)
+local function _make_buffer_entries(repository, buffer, diffed_relative_paths, callback)
     if
         not vim.api.nvim_buf_is_valid(buffer)
         or not vim.api.nvim_buf_is_loaded(buffer)
@@ -341,6 +350,17 @@ local function _make_buffer_entries(repository, buffer, callback)
         callback({}, nil)
 
         return
+    end
+
+    if not vim.bo[buffer].modified then
+        local path = _get_buffer_path(buffer)
+        local relative_path = path and _get_relative_path_from_repository(repository, path)
+
+        if not relative_path or not diffed_relative_paths[relative_path] then
+            callback({}, nil)
+
+            return
+        end
     end
 
     local git_diff = require("modules.utilities.git_diff")
@@ -375,6 +395,13 @@ local function _merge_loaded_buffer_hunks(repository, entries, callback)
     local buffers = vim.api.nvim_list_bufs()
     local index = 1
 
+    ---@type table<string, boolean>
+    local diffed_relative_paths = {}
+
+    for _, entry in ipairs(entries) do
+        diffed_relative_paths[entry.relative_path] = true
+    end
+
     --- Merge the next buffer.
     local function _next()
         local buffer = buffers[index]
@@ -387,7 +414,7 @@ local function _merge_loaded_buffer_hunks(repository, entries, callback)
             return
         end
 
-        _make_buffer_entries(repository, buffer, function(buffer_entries, relative_path)
+        _make_buffer_entries(repository, buffer, diffed_relative_paths, function(buffer_entries, relative_path)
             if relative_path then
                 _remove_file_entries(entries, relative_path)
                 vim.list_extend(entries, buffer_entries)

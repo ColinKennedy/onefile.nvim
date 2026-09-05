@@ -1472,17 +1472,6 @@ function M.run_git_push()
     _P.run_git_generic_command("push")
 end
 
---- Run `git add -p` in the current tab's `$PWD` in a new terminal.
-function M.run_git_add_p()
-    vim.cmd.split()
-    vim.cmd.terminal(string.format("%s add -p", M.GIT_EXECUTABLE))
-    vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
-
-    local terminal_buffer = vim.api.nvim_get_current_buf()
-
-    M.close_terminal_afterwards(terminal_buffer)
-end
-
 --- Run `git checkout -p` in the current tab's `$PWD` in a new terminal.
 function M.run_git_checkout_p()
     vim.cmd.split()

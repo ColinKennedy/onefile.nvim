@@ -331,9 +331,10 @@ function _P.dedent_snippets()
         text = text:gsub("\n[ ]+$", "\n")
 
         if vim.text and vim.text.indent then
-            return vim.text.indent(0, text)
+            return (vim.text.indent(0, text))
         end
 
+        ---@type integer
         local minimum_indent
 
         for line in text:gmatch("[^\n]+") do

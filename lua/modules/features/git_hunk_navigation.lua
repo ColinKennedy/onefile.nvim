@@ -143,7 +143,15 @@ local function _get_repository(path, callback)
             return
         end
 
-        callback(vim.trim(result.stdout), nil)
+        -- NOTE: Git always reports the toplevel with forward slashes, even on
+        -- Windows, so this would otherwise disagree with every other path in
+        -- this module (all derived from `vim.uv.fs_realpath`/`fnamemodify`,
+        -- which use the OS-native separator). Resolving through the same
+        -- `fs_realpath` call callers use keeps the repository root string
+        -- identical to what they already have, regardless of separator style.
+        local root = vim.trim(result.stdout)
+
+        callback(vim.uv.fs_realpath(root) or root, nil)
     end)
 end
 
@@ -927,7 +935,7 @@ end
 ---@param repository string The repository root.
 ---@return string # The labelled, shortened repository root.
 function M._get_quickfix_title(repository)
-    return "Git: " .. vim.fn.fnamemodify(repository, ":~")
+    return "Git: " .. (vim.fn.fnamemodify(repository, ":~"):gsub("\\", "/"))
 end
 
 --- Load repository hunks into the cache and quickfix list.

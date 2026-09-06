@@ -146,6 +146,20 @@ local function press_normal_keys(keys)
     vim.wait(400)
 end
 
+--- Normalize a path's separators for cross-platform comparisons.
+---
+--- On Windows, a buffer created through `setqflist()`'s `filename` field (or
+--- resolved by jumping to a quickfix entry) comes back with native
+--- backslashes, while a path built here with `vim.fs.joinpath` keeps the
+--- forward slashes it was given. Both name the same file, so tests compare
+--- them after normalizing to forward slashes.
+---
+---@param path string The path to normalize.
+---@return string # The path with forward slashes.
+local function to_forward_slashes(path)
+    return (path:gsub("\\", "/"))
+end
+
 --- Get the resolved absolute path for a quickfix entry.
 ---
 --- Quickfix entries store a buffer number, and Vim may display that buffer's
@@ -155,7 +169,7 @@ end
 ---@param entry vim.quickfix.entry The quickfix entry to inspect.
 ---@return string # The absolute file path for `entry`.
 local function get_quickfix_path(entry)
-    return vim.fn.fnamemodify(vim.fn.bufname(entry.bufnr), ":p")
+    return to_forward_slashes(vim.fn.fnamemodify(vim.fn.bufname(entry.bufnr), ":p"))
 end
 
 --- Run `:LoadGitDiff` from `directory` and wait for the quickfix list.
@@ -560,12 +574,12 @@ index 2222222..3333333 100644
                 -- must point at the real files even though `src/deep` is neither
                 -- the repository root nor a parent of `docs/beta.txt`.
                 assert.equal(
-                    vim.fn.fnamemodify(vim.fs.joinpath(root, "docs/beta.txt"), ":p"),
+                    to_forward_slashes(vim.fn.fnamemodify(vim.fs.joinpath(root, "docs/beta.txt"), ":p")),
                     get_quickfix_path(items[1])
                 )
                 assert.equal(3, items[1].lnum)
                 assert.equal(
-                    vim.fn.fnamemodify(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), ":p"),
+                    to_forward_slashes(vim.fn.fnamemodify(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), ":p")),
                     get_quickfix_path(items[2])
                 )
                 assert.equal(2, items[2].lnum)
@@ -731,10 +745,10 @@ index 2222222..3333333 100644
                 with_cwd(subfolder, function()
                     vim.cmd("silent cfirst")
 
-                    assert.equal(
-                        vim.fn.fnamemodify(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), ":p"),
-                        vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p")
-                    )
+                    local expected_path = vim.fn.fnamemodify(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), ":p")
+                    local actual_path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p")
+
+                    assert.equal(to_forward_slashes(expected_path), to_forward_slashes(actual_path))
                     assert.equal(4, vim.api.nvim_win_get_cursor(0)[1])
                     assert.equal("FOUR", vim.api.nvim_get_current_line())
                 end)

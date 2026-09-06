@@ -258,11 +258,26 @@ end
 
 --- Find all markdown files in `workspace_root` recursively.
 ---
+--- CAVEAT: `vim.fn.glob()` on Windows does not reliably recurse through a `**`
+--- pattern built from forward slashes, so the pattern is converted to native
+--- separators before the call. Results are normalized back to forward
+--- slashes afterward so every caller compares paths the same way regardless
+--- of platform.
+---
 ---@param workspace_root string The workspace to scan.
----@return string[] # Sorted markdown file paths.
+---@return string[] # Sorted, normalized markdown file paths.
 function _P.get_markdown_files(workspace_root)
     local template = vim.fs.joinpath(workspace_root, "**", "*.md")
+
+    if vim.fn.has("win32") == 1 then
+        template = template:gsub("/", "\\")
+    end
+
     local paths = vim.fn.glob(template, true, true)
+
+    for index, path in ipairs(paths) do
+        paths[index] = _P.normalize_path(path)
+    end
 
     table.sort(paths)
 
@@ -514,11 +529,10 @@ end
 
 --- Search all Obsidian notes across all vaults by-alias (basically by-title).
 function _P.search_notes_by_aliases()
-    local template = vim.fs.joinpath(_ROOT, "**", "*.md")
     ---@type _my.selector_gui.entry.Deserialized[]
     local found = {}
 
-    for _, path in ipairs(vim.fn.glob(template, true, true)) do
+    for _, path in ipairs(_P.get_markdown_files(_ROOT)) do
         for _, alias in ipairs(_P.get_aliases(path)) do
             table.insert(found, { display = alias, value = path })
         end

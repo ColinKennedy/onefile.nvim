@@ -897,6 +897,14 @@ vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     group = _AUGROUP,
 })
 
+vim.api.nvim_create_autocmd("BufFilePost", {
+    callback = function(event)
+        require("modules.utilities.git_diff").invalidate_file_details(event.buf)
+    end,
+    desc = "Forget cached Git file details after a buffer is renamed.",
+    group = _AUGROUP,
+})
+
 vim.api.nvim_create_user_command("ToggleGitDiffView", function()
     M.toggle()
 end, {

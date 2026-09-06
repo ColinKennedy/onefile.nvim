@@ -251,10 +251,9 @@ diff --git a/file b/file
 
     it("coalesces and caches file-detail lookups until the buffer is renamed", function()
         local buffer = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_name(buffer, scratch_path("git-details-cache-" .. buffer .. ".txt"))
+        vim.api.nvim_buf_set_name(buffer, "/tmp/git-details-cache-" .. buffer .. ".txt")
 
         local original_run_git = git_diff.run_git
-        ---@type {arguments: string[], callback: _my.git_diff.SystemCallback, directory: string, stdin: string?}[]
         local calls = {}
         ---@type _my.git_diff.FileDetails[]
         local received = {}
@@ -304,8 +303,8 @@ diff --git a/file b/file
     it("caches current-buffer file details by the resolved buffer handle", function()
         local first = vim.api.nvim_create_buf(false, true)
         local second = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_name(first, scratch_path("git-current-buffer-cache-first.txt"))
-        vim.api.nvim_buf_set_name(second, scratch_path("git-current-buffer-cache-second.txt"))
+        vim.api.nvim_buf_set_name(first, "/tmp/git-current-buffer-cache-first.txt")
+        vim.api.nvim_buf_set_name(second, "/tmp/git-current-buffer-cache-second.txt")
 
         local original_run_git = git_diff.run_git
         local calls = 0
@@ -327,14 +326,12 @@ diff --git a/file b/file
 
         local ok, err = pcall(function()
             vim.api.nvim_set_current_buf(first)
-            ---@type _my.git_diff.FileDetails?
             local first_details
             git_diff.get_file_details(0, function(details)
                 first_details = details
             end)
 
             vim.api.nvim_set_current_buf(second)
-            ---@type _my.git_diff.FileDetails?
             local second_details
             git_diff.get_file_details(0, function(details)
                 second_details = details
@@ -361,7 +358,7 @@ diff --git a/file b/file
 
     it("coalesces index reads and fetches again after an index mutation", function()
         local buffer = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_name(buffer, scratch_path("git-index-cache-" .. buffer .. ".txt"))
+        vim.api.nvim_buf_set_name(buffer, "/tmp/git-index-cache-" .. buffer .. ".txt")
 
         local original_run_git = git_diff.run_git
         ---@type _my.git_diff.FileDetails?
@@ -376,9 +373,7 @@ diff --git a/file b/file
         end)
         details = assert(details)
 
-        ---@type {arguments: string[], callback: _my.git_diff.SystemCallback, directory: string, stdin: string?}[]
         local calls = {}
-        ---@type string[][]
         local received = {}
         rawset(git_diff, "run_git", function(arguments, directory, stdin, callback)
             table.insert(calls, { arguments = arguments, callback = callback, directory = directory, stdin = stdin })
@@ -417,9 +412,7 @@ diff --git a/file b/file
 
     it("applies a cached patch with one mutating Git command", function()
         local original_run_git = git_diff.run_git
-        ---@type {arguments: string[], directory: string, stdin: string?}[]
         local calls = {}
-        ---@type boolean?
         local success
 
         rawset(git_diff, "run_git", function(arguments, directory, stdin, callback)

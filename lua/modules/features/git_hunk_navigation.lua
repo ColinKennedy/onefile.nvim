@@ -86,26 +86,7 @@ local function _get_comparison_path(path)
     return path
 end
 
---- Check whether two paths identify the same location across separator and
---- Windows drive-letter case differences.
----
----@param left string The first path to compare.
----@param right string The second path to compare.
----@return boolean # Whether the normalized paths are equal.
-local function _paths_equal(left, right)
-    return _get_comparison_path(_normalize_path(left)) == _get_comparison_path(_normalize_path(right))
-end
-
 --- Get `path` relative to `repository`, if `path` is inside it.
----
---- CAVEAT: This compares the two paths as raw strings, which is unreliable on
---- Windows. `git rev-parse --show-toplevel` always reports forward slashes
---- (`C:/Users/...`) while `fnamemodify(..., ":p")` reports backslashes unless
---- 'shellslash' is set, and drive letters can differ in case (`C:` vs `c:`).
---- Either mismatch fails the prefix test, which silently disables the cached
---- repository lookup and the unsaved-buffer hunk merge rather than erroring.
---- Normalizing separators and case before comparing would fix it. This is
---- untested on Windows.
 ---
 ---@param repository string The repository root.
 ---@param path string The absolute file path.
@@ -446,15 +427,6 @@ local function _merge_loaded_buffer_hunks(repository, entries, callback)
         diffed_relative_paths[entry.relative_path] = true
     end
 
-    --- Merge the next buffer.
-    local function _next()
-        local buffer = buffers[index]
-        index = index + 1
-
-    for _, entry in ipairs(entries) do
-        diffed_relative_paths[entry.relative_path] = true
-    end
-
     if #buffers == 0 then
         _sort_cached_entries(entries)
         callback()
@@ -479,11 +451,8 @@ local function _merge_loaded_buffer_hunks(repository, entries, callback)
             return
         end
 
-        _make_buffer_entries(repository, buffer, diffed_relative_paths, function(buffer_entries, relative_path)
-            if relative_path then
-                _remove_file_entries(entries, relative_path)
-                vim.list_extend(entries, buffer_entries)
-            end
+        for _, ordered_buffer in ipairs(buffers) do
+            local result = results[ordered_buffer]
 
             if result and result.relative_path then
                 _remove_file_entries(entries, result.relative_path)
@@ -631,7 +600,6 @@ function M.remove_cached_hunks_for_buffer(buffer, line)
 
         for _, index in ipairs(matching) do
             local entry = repository_state.entries[index]
-            ---@type integer
             local distance
 
             if entry.lnum <= line and line <= entry.end_lnum then
@@ -672,11 +640,6 @@ end
 
 --- Mark any cached repositories containing `buffer` as stale.
 ---
---- CAVEAT: This duplicates the prefix comparison in
---- `_get_relative_path_from_repository` instead of calling it, so it carries the
---- same Windows separator and drive-letter-case bug documented there. Both sites
---- need the same fix.
----
 --- CAVEAT: Staleness is only ever driven by buffer edits, so repository changes
 --- made outside Neovim (`git checkout`, `rebase`, `stash`, another editor) leave
 --- the cache marked current. `[g` and `]g` then navigate hunks from the previous
@@ -691,9 +654,7 @@ function M.mark_stale_for_buffer(buffer)
     end
 
     for repository in pairs(_STATE.repositories) do
-        local repository_prefix = vim.fn.fnamemodify(repository, ":p")
-
-        if path:sub(1, #repository_prefix) == repository_prefix then
+        if _get_relative_path_from_repository(repository, path) then
             _P.mark_stale(repository)
         end
     end

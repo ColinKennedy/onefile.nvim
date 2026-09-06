@@ -1513,13 +1513,28 @@ end
 ---@class _my.ripgrep.Options
 ---@field display_root string? Directory that quickfix paths should be displayed relative to.
 
+--- Check whether `path` is already absolute.
+---
+--- CAVEAT: `fnamemodify(path, ":p") == path` alone is not reliable here: it
+--- can disagree with `path` over slash direction for an already-absolute
+--- Windows path, which would misclassify it as relative and send it through
+--- `get_ripgrep_absolute_path`'s `joinpath(cwd, path)` fallback -- doubling
+--- the path onto `cwd`. Checking for a POSIX leading `/` or a Windows drive
+--- letter directly avoids depending on `fnamemodify`'s slash behavior.
+---
+---@param path string The path to check.
+---@return boolean # Whether `path` is already absolute.
+function _P.is_absolute_path(path)
+    return path:sub(1, 1) == "/" or path:match("^%a:[/\\]") ~= nil
+end
+
 --- Get an absolute path for a ripgrep result path.
 ---
 ---@param path string A path printed by ripgrep.
 ---@param cwd string The directory where ripgrep was started.
 ---@return string # The absolute path.
 function _P.get_ripgrep_absolute_path(path, cwd)
-    if vim.fn.fnamemodify(path, ":p") == path then
+    if _P.is_absolute_path(path) then
         return vim.fs.normalize(path)
     end
 
@@ -1539,6 +1554,36 @@ function _P.get_ripgrep_display_path(path, display_root)
     local relative = vim.fs.relpath(vim.fs.normalize(display_root), path)
 
     return relative or _P.cleanup_path(path)
+end
+
+--- Parse one `--vimgrep`-formatted ripgrep output line.
+---
+--- CAVEAT: A naive `([^:]+):(%d+):(%d+):(.*)` pattern breaks on Windows
+--- drive-letter paths (e.g. `C:\foo\bar.lua:10:5:text`): Lua's pattern
+--- matching tries every start position until the whole pattern matches, so it
+--- skips past the drive letter's own colon and matches starting right after
+--- it, silently dropping the drive letter from the captured filename. This
+--- strips a leading drive letter first, if any, and reattaches it afterward.
+---
+---@param line string One line of `--vimgrep` output.
+---@return string? # The matched file path, if the line matched.
+---@return string? # The matched line number, as text.
+---@return string? # The matched column number, as text.
+---@return string? # The matched text.
+function _P.parse_ripgrep_vimgrep_line(line)
+    local drive, rest = line:match("^(%a:)([^:]*:%d+:%d+:.*)$")
+
+    if drive then
+        local filename, matched_line, column, text = rest:match("^([^:]*):(%d+):(%d+):(.*)$")
+
+        if filename then
+            return drive .. filename, matched_line, column, text
+        end
+
+        return nil
+    end
+
+    return line:match("([^:]+):(%d+):(%d+):(.*)")
 end
 
 --- Check whether ripgrep stderr only contains filesystem access warnings.
@@ -1630,16 +1675,15 @@ function M.run_ripgrep(command, options)
         local entries = {}
 
         for line in vim.gsplit(stdout, "\n") do
-            local filename, matched_line, column, text = string.match(line, "([^:]+):(%d+):(%d+):(.*)")
-            line = matched_line
+            local filename, matched_line, column, text = _P.parse_ripgrep_vimgrep_line(line)
 
-            if filename and line and column and text then
+            if filename and matched_line and column and text then
                 local path = _P.get_ripgrep_absolute_path(filename, cwd)
 
                 table.insert(entries, {
                     filename = path,
                     module = _P.get_ripgrep_display_path(path, display_root),
-                    lnum = tonumber(line),
+                    lnum = tonumber(matched_line),
                     col = tonumber(column),
                     text = text,
                 })

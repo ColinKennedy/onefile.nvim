@@ -34,20 +34,6 @@ local function run_git(root, arguments)
     assert.equal(0, result.code, result.stderr)
 end
 
---- Run a Git command inside `root`.
----
----@param root string The Git repository root.
----@param arguments string[] The Git command arguments.
-local function run_git(root, arguments)
-    ---@type string[]
-    local command = { "git", "-C", root }
-    vim.list_extend(command, arguments)
-
-    local result = vim.system(command, { text = true }):wait()
-
-    assert.equal(0, result.code, result.stderr)
-end
-
 --- Edit `path` in the current window.
 ---
 ---@param path string The file path to edit.

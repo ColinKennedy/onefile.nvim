@@ -538,6 +538,8 @@ describe("modules.plugins.aerial", function()
             "def thing():",
             "    return 1",
         }, current_source_path)
+        old_source_path = vim.uv.fs_realpath(old_source_path) or old_source_path
+        current_source_path = vim.uv.fs_realpath(current_source_path) or current_source_path
         vim.cmd("silent edit " .. vim.fn.fnameescape(current_source_path))
 
         local source_window = vim.api.nvim_get_current_win()
@@ -593,6 +595,8 @@ describe("modules.plugins.aerial", function()
             "def thing():",
             "    return 1",
         }, second_path)
+        first_path = vim.uv.fs_realpath(first_path) or first_path
+        second_path = vim.uv.fs_realpath(second_path) or second_path
         vim.cmd("silent edit " .. vim.fn.fnameescape(first_path))
 
         local source_window = vim.api.nvim_get_current_win()

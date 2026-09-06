@@ -39,6 +39,7 @@ end
 ---
 local function make_repository()
     local root = assert(vim.uv.fs_mkdtemp(vim.fs.joinpath(vim.uv.os_tmpdir(), "file-tree-spec-XXXXXX")))
+    root = vim.uv.fs_realpath(root) or root
 
     run_git(root, { "init" })
     run_git(root, { "config", "user.email", "test@example.com" })

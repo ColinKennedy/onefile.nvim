@@ -40,4 +40,4 @@ jobs:
           executable: 'nvim -u "spec/minimal_init.lua"'
           # Skip vim.health because it validates the CI runner's terminal, and
           # Neovim nightly treats its missing graphics protocol as an error.
-          checks: "vim.deprecated vim.lsp vim.provider vim.treesitter"
+          checks: ${{ matrix.neovim.health_checks }}

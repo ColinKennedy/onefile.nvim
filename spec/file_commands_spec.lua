@@ -174,7 +174,7 @@ describe("file commands", function()
     it("describes BufferOnly as window-aware only", function()
         local command = vim.api.nvim_get_commands({ builtin = false }).BufferOnly
 
-        assert.equal(":only, but window-aware", command.definition)
+        assert.equal(":only, but window-aware", rawget(command, "desc") or command.definition)
     end)
 
     it("changes directory to the Git repository root with Gcd", function()

@@ -23,7 +23,7 @@ download-dependencies:
 	git clone git@github.com:LuaCATS/busted.git .dependencies/busted $(IGNORE_EXISTING)
 	git clone git@github.com:LuaCATS/luassert.git .dependencies/luassert $(IGNORE_EXISTING)
 
-lint: stylua luacheck privata deadcode typer llscheck
+lint: check-stylua luacheck privata deadcode typer llscheck
 
 llscheck: download-dependencies
 	VIMRUNTIME="`$(VIMRUNTIME_SHELL)`" llscheck --configpath $(CONFIGURATION) .
@@ -45,5 +45,5 @@ test:
 
 # `mypy --strict`, for Lua: reports missing or too-vague LuaLS annotations.
 # Report-only -- it never edits files. Exit 1 means it found something.
-typer:
-	VIMRUNTIME="`$(VIMRUNTIME_SHELL)`" typer $(ARGUMENTS) init.lua lua spec
+typer: download-dependencies
+	PATH="`luarocks path --lr-bin`:$$PATH" VIMRUNTIME="`$(VIMRUNTIME_SHELL)`" typer $(ARGUMENTS) init.lua lua spec

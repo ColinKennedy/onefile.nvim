@@ -5,6 +5,11 @@ local _CURRENT_RELATIVE_DIRECTORY = _CURRENT_FILE:match("(.+[/\\])")
 local _CURRENT_ABSOLUTE_DIRECTORY = vim.fn.fnamemodify(_CURRENT_RELATIVE_DIRECTORY, ":p:h")
 local _PROJECT_ROOT_DIRECTORY = vim.fs.dirname(_CURRENT_ABSOLUTE_DIRECTORY)
 
+-- NOTE: Force unbuffered stdout so CI logs show test output (and any
+-- failure) as it happens, instead of it all arriving in one block right
+-- before the process exits, which can drop the trailing output entirely.
+io.stdout:setvbuf("no")
+
 -- NOTE: `toggle_terminal` specs open a real terminal job. Without this, they
 -- fall back to the user's interactive shell (e.g. a bare, banner-printing
 -- `cmd.exe` on Windows CI runners), which sits waiting for input and can

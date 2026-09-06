@@ -185,6 +185,13 @@ end
 
 --- Watch a Git HEAD file for branch changes without polling on hot paths.
 ---
+--- CAVEAT: This watches `context.git_dir` rather than `context.head_path`
+--- directly. Git replaces `HEAD` with a rename-over-existing-file on branch
+--- checkout, and libuv's Windows backend (`ReadDirectoryChangesW`) does not
+--- reliably report that rename when a single file is watched -- only when its
+--- containing directory is. Watching the directory and filtering for the
+--- `HEAD` filename works on every platform.
+---
 ---@param context _my.native_grapple.Context The context whose HEAD should be watched.
 function _P.watch_head(context)
     if not context.head_path or vim.fn.filereadable(context.head_path) ~= 1 then
@@ -201,8 +208,10 @@ function _P.watch_head(context)
         return
     end
 
-    local ok = watcher:start(context.head_path, {}, function()
-        _P.schedule_branch_reload(context.cwd)
+    local ok = watcher:start(context.git_dir, {}, function(_, filename)
+        if filename == nil or filename == "HEAD" then
+            _P.schedule_branch_reload(context.cwd)
+        end
     end)
 
     if ok then

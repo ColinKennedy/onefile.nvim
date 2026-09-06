@@ -127,13 +127,50 @@ function _P.first_git_path(text)
     return first and vim.trim(first) or ""
 end
 
---- Get git details for `buffer`.
+---@type table<integer, integer>
+local _DETAILS_GENERATION = {}
+---@type table<integer, {generation: integer, details: _my.git_diff.FileDetails?, message: string?}>
+local _DETAILS_CACHE = {}
+---@type table<integer, {generation: integer, callbacks: fun(details: _my.git_diff.FileDetails?, message: string?)[]}>
+local _DETAILS_PENDING = {}
+
+---@type table<string, integer>
+local _INDEX_GENERATION = {}
+---@type table<string, {generation: integer, lines: string[], missing: boolean}>
+local _INDEX_CACHE = {}
+---@type table<string, {generation: integer, callbacks: fun(lines: string[], missing: boolean)[]}>
+local _INDEX_PENDING = {}
+
+--- Resolve Neovim's special current-buffer handle to a stable buffer number.
+---
+--- A literal `0` cannot be used as a cache key because it names a different
+--- buffer whenever the current window changes.
+---
+---@param buffer integer The buffer handle to resolve.
+---@return integer # The stable buffer handle.
+local function _resolve_buffer(buffer)
+    if buffer == 0 then
+        return vim.api.nvim_get_current_buf()
+    end
+
+    return buffer
+end
+
+--- Get the cache key for an indexed file.
+---
+---@param details _my.git_diff.FileDetails The file details to key.
+---@return string # A key unique to the repository-relative path.
+local function _get_index_key(details)
+    return details.repository .. "\0" .. details.relative_path
+end
+
+--- Fetch git details for `buffer` without consulting the cache.
 ---
 ---@param buffer integer The buffer to inspect.
 ---@param callback fun(details: _my.git_diff.FileDetails?, message: string?): nil
 ---    Callback with file details or an error.
 ---
-function M.get_file_details(buffer, callback)
+local function _fetch_file_details_uncached(buffer, callback)
     local absolute_path = vim.api.nvim_buf_get_name(buffer)
 
     if absolute_path == "" then
@@ -194,6 +231,63 @@ function M.get_file_details(buffer, callback)
     end)
 end
 
+--- Forget the cached file details for `buffer` after its path changes.
+---
+---@param buffer integer The renamed buffer.
+function M.invalidate_file_details(buffer)
+    buffer = _resolve_buffer(buffer)
+    local cached = _DETAILS_CACHE[buffer]
+
+    if cached and cached.details then
+        local key = _get_index_key(cached.details)
+        _INDEX_GENERATION[key] = (_INDEX_GENERATION[key] or 0) + 1
+    end
+
+    _DETAILS_GENERATION[buffer] = (_DETAILS_GENERATION[buffer] or 0) + 1
+end
+
+--- Get git details for `buffer`, sharing cached and in-flight results.
+---
+---@param buffer integer The buffer to inspect.
+---@param callback fun(details: _my.git_diff.FileDetails?, message: string?): nil
+---    Callback with file details or an error.
+function M.get_file_details(buffer, callback)
+    buffer = _resolve_buffer(buffer)
+    local generation = _DETAILS_GENERATION[buffer] or 0
+    local cached = _DETAILS_CACHE[buffer]
+
+    if cached and cached.generation == generation then
+        callback(cached.details, cached.message)
+
+        return
+    end
+
+    local pending = _DETAILS_PENDING[buffer]
+
+    if pending and pending.generation == generation then
+        table.insert(pending.callbacks, callback)
+
+        return
+    end
+
+    pending = { generation = generation, callbacks = { callback } }
+    _DETAILS_PENDING[buffer] = pending
+
+    _fetch_file_details_uncached(buffer, function(details, message)
+        if (_DETAILS_GENERATION[buffer] or 0) == generation then
+            _DETAILS_CACHE[buffer] = { generation = generation, details = details, message = message }
+        end
+
+        if _DETAILS_PENDING[buffer] == pending then
+            _DETAILS_PENDING[buffer] = nil
+        end
+
+        for _, waiting in ipairs(pending.callbacks) do
+            waiting(details, message)
+        end
+    end)
+end
+
 --- Get the HEAD version of `path`.
 ---
 ---@param details _my.git_diff.FileDetails The file details to query.
@@ -216,12 +310,12 @@ function _P.get_head_lines(details, callback)
     )
 end
 
---- Get the index version of `path`.
+--- Fetch the index version of `path` without consulting the cache.
 ---
 ---@param details _my.git_diff.FileDetails The file details to query.
 ---@param callback fun(lines: string[], missing: boolean): nil Callback with the index lines.
 ---
-function M.get_index_lines(details, callback)
+local function _fetch_index_lines_uncached(details, callback)
     M.run_git(
         { "-C", details.repository, "show", ":" .. details.relative_path },
         details.repository,
@@ -236,6 +330,62 @@ function M.get_index_lines(details, callback)
             callback(_split_lines(result.stdout), false)
         end
     )
+end
+
+--- Forget the cached index contents for the file shown by `buffer`.
+---
+---@param buffer integer The buffer whose index entry changed.
+function M.invalidate_index_lines(buffer)
+    buffer = _resolve_buffer(buffer)
+    local cached = _DETAILS_CACHE[buffer]
+
+    if not cached or not cached.details then
+        return
+    end
+
+    local key = _get_index_key(cached.details)
+    _INDEX_GENERATION[key] = (_INDEX_GENERATION[key] or 0) + 1
+end
+
+--- Get the index version of `path`, sharing cached and in-flight results.
+---
+---@param details _my.git_diff.FileDetails The file details to query.
+---@param callback fun(lines: string[], missing: boolean): nil Callback with the index lines.
+function M.get_index_lines(details, callback)
+    local key = _get_index_key(details)
+    local generation = _INDEX_GENERATION[key] or 0
+    local cached = _INDEX_CACHE[key]
+
+    if cached and cached.generation == generation then
+        callback(cached.lines, cached.missing)
+
+        return
+    end
+
+    local pending = _INDEX_PENDING[key]
+
+    if pending and pending.generation == generation then
+        table.insert(pending.callbacks, callback)
+
+        return
+    end
+
+    pending = { generation = generation, callbacks = { callback } }
+    _INDEX_PENDING[key] = pending
+
+    _fetch_index_lines_uncached(details, function(lines, missing)
+        if (_INDEX_GENERATION[key] or 0) == generation then
+            _INDEX_CACHE[key] = { generation = generation, lines = lines, missing = missing }
+        end
+
+        if _INDEX_PENDING[key] == pending then
+            _INDEX_PENDING[key] = nil
+        end
+
+        for _, waiting in ipairs(pending.callbacks) do
+            waiting(lines, missing)
+        end
+    end)
 end
 
 --- Neovim renamed `vim.diff` to `vim.text.diff`. Prefer the newer name.
@@ -749,32 +899,17 @@ function M.apply_cached_patch(details, patch, callback)
         return
     end
 
-    M.run_git(
-        { "-C", details.repository, "apply", "--cached", "--check", path },
-        details.repository,
-        nil,
-        function(check)
-            if check.code ~= 0 then
-                pcall(vim.uv.fs_unlink, path)
+    M.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository, nil, function(result)
+        pcall(vim.uv.fs_unlink, path)
 
-                callback(false, vim.trim(check.stderr))
+        if result.code ~= 0 then
+            callback(false, vim.trim(result.stderr))
 
-                return
-            end
-
-            M.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository, nil, function(result)
-                pcall(vim.uv.fs_unlink, path)
-
-                if result.code ~= 0 then
-                    callback(false, vim.trim(result.stderr))
-
-                    return
-                end
-
-                callback(true, nil)
-            end)
+            return
         end
-    )
+
+        callback(true, nil)
+    end)
 end
 
 return M

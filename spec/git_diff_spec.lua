@@ -234,4 +234,200 @@ diff --git a/file b/file
         assert.equal(0, count)
         assert.equal("one\ntwo\n", partial)
     end)
+
+    it("coalesces and caches file-detail lookups until the buffer is renamed", function()
+        local buffer = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_name(buffer, "/tmp/git-details-cache-" .. buffer .. ".txt")
+
+        local original_run_git = git_diff.run_git
+        local calls = {}
+        ---@type _my.git_diff.FileDetails[]
+        local received = {}
+
+        rawset(git_diff, "run_git", function(arguments, directory, stdin, callback)
+            table.insert(calls, { arguments = arguments, callback = callback, directory = directory, stdin = stdin })
+        end)
+
+        local ok, err = pcall(function()
+            git_diff.get_file_details(buffer, function(details)
+                details = assert(details)
+                table.insert(received, details)
+            end)
+            git_diff.get_file_details(buffer, function(details)
+                details = assert(details)
+                table.insert(received, details)
+            end)
+
+            assert.equal(1, #calls)
+            calls[1].callback({ code = 0, stderr = "", stdout = "/tmp/repository\n" })
+            assert.equal(2, #calls)
+            calls[2].callback({ code = 0, stderr = "", stdout = "file.txt\n" })
+
+            assert.equal(2, #received)
+            assert.equal("file.txt", received[1].relative_path)
+
+            git_diff.get_file_details(buffer, function(details)
+                details = assert(details)
+                table.insert(received, details)
+            end)
+            assert.equal(2, #calls)
+            assert.equal(3, #received)
+
+            git_diff.invalidate_file_details(buffer)
+            git_diff.get_file_details(buffer, function() end)
+            assert.equal(3, #calls)
+        end)
+
+        rawset(git_diff, "run_git", original_run_git)
+        vim.api.nvim_buf_delete(buffer, { force = true })
+
+        if not ok then
+            error(err)
+        end
+    end)
+
+    it("caches current-buffer file details by the resolved buffer handle", function()
+        local first = vim.api.nvim_create_buf(false, true)
+        local second = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_name(first, "/tmp/git-current-buffer-cache-first.txt")
+        vim.api.nvim_buf_set_name(second, "/tmp/git-current-buffer-cache-second.txt")
+
+        local original_run_git = git_diff.run_git
+        local calls = 0
+        rawset(git_diff, "run_git", function(arguments, _, _, callback)
+            calls = calls + 1
+
+            if arguments[4] == "rev-parse" then
+                callback({ code = 0, stderr = "", stdout = "/tmp/repository\n" })
+
+                return
+            end
+
+            callback({
+                code = 0,
+                stderr = "",
+                stdout = vim.fs.basename(arguments[#arguments]) .. "\n",
+            })
+        end)
+
+        local ok, err = pcall(function()
+            vim.api.nvim_set_current_buf(first)
+            local first_details
+            git_diff.get_file_details(0, function(details)
+                first_details = details
+            end)
+
+            vim.api.nvim_set_current_buf(second)
+            local second_details
+            git_diff.get_file_details(0, function(details)
+                second_details = details
+            end)
+
+            assert.equal("git-current-buffer-cache-first.txt", assert(first_details).relative_path)
+            assert.equal("git-current-buffer-cache-second.txt", assert(second_details).relative_path)
+            assert.equal(4, calls)
+
+            vim.api.nvim_set_current_buf(first)
+            git_diff.get_file_details(0, function() end)
+            assert.equal(4, calls)
+        end)
+
+        rawset(git_diff, "run_git", original_run_git)
+        vim.cmd("silent enew!")
+        vim.api.nvim_buf_delete(first, { force = true })
+        vim.api.nvim_buf_delete(second, { force = true })
+
+        if not ok then
+            error(err)
+        end
+    end)
+
+    it("coalesces index reads and fetches again after an index mutation", function()
+        local buffer = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_name(buffer, "/tmp/git-index-cache-" .. buffer .. ".txt")
+
+        local original_run_git = git_diff.run_git
+        ---@type _my.git_diff.FileDetails?
+        local details
+
+        rawset(git_diff, "run_git", function(arguments, _, _, callback)
+            local stdout = arguments[4] == "rev-parse" and "/tmp/repository\n" or "file.txt\n"
+            callback({ code = 0, stderr = "", stdout = stdout })
+        end)
+        git_diff.get_file_details(buffer, function(found)
+            details = found
+        end)
+        details = assert(details)
+
+        local calls = {}
+        local received = {}
+        rawset(git_diff, "run_git", function(arguments, directory, stdin, callback)
+            table.insert(calls, { arguments = arguments, callback = callback, directory = directory, stdin = stdin })
+        end)
+
+        local ok, err = pcall(function()
+            git_diff.get_index_lines(details, function(lines)
+                table.insert(received, lines)
+            end)
+            git_diff.get_index_lines(details, function(lines)
+                table.insert(received, lines)
+            end)
+
+            assert.equal(1, #calls)
+            calls[1].callback({ code = 0, stderr = "", stdout = "one\ntwo\n" })
+            assert.are.same({ { "one", "two" }, { "one", "two" } }, received)
+
+            git_diff.get_index_lines(details, function(lines)
+                table.insert(received, lines)
+            end)
+            assert.equal(1, #calls)
+            assert.equal(3, #received)
+
+            git_diff.invalidate_index_lines(buffer)
+            git_diff.get_index_lines(details, function() end)
+            assert.equal(2, #calls)
+        end)
+
+        rawset(git_diff, "run_git", original_run_git)
+        vim.api.nvim_buf_delete(buffer, { force = true })
+
+        if not ok then
+            error(err)
+        end
+    end)
+
+    it("applies a cached patch with one mutating Git command", function()
+        local original_run_git = git_diff.run_git
+        local calls = {}
+        local success
+
+        rawset(git_diff, "run_git", function(arguments, directory, stdin, callback)
+            table.insert(calls, { arguments = arguments, directory = directory, stdin = stdin })
+            callback({ code = 0, stderr = "", stdout = "" })
+        end)
+
+        local ok, err = pcall(function()
+            git_diff.apply_cached_patch(
+                {
+                    absolute_path = "/tmp/repository/file.txt",
+                    relative_path = "file.txt",
+                    repository = "/tmp/repository",
+                },
+                "patch text",
+                function(applied)
+                    success = applied
+                end
+            )
+
+            assert.is_true(success)
+            assert.equal(1, #calls)
+            assert.are.same({ "-C", "/tmp/repository", "apply", "--cached" }, vim.list_slice(calls[1].arguments, 1, 4))
+        end)
+
+        rawset(git_diff, "run_git", original_run_git)
+
+        if not ok then
+            error(err)
+        end
+    end)
 end)

@@ -60,30 +60,48 @@ local function _get_buffer_path(buffer)
     return vim.fn.fnamemodify(path, ":p")
 end
 
---- Get `path` relative to `repository`, if `path` is inside it.
+--- Normalize a path for cross-platform repository comparisons.
 ---
---- CAVEAT: This compares the two paths as raw strings, which is unreliable on
---- Windows. `git rev-parse --show-toplevel` always reports forward slashes
---- (`C:/Users/...`) while `fnamemodify(..., ":p")` reports backslashes unless
---- 'shellslash' is set, and drive letters can differ in case (`C:` vs `c:`).
---- Either mismatch fails the prefix test, which silently disables the cached
---- repository lookup and the unsaved-buffer hunk merge rather than erroring.
---- Normalizing separators and case before comparing would fix it. This is
---- untested on Windows.
+---@param path string The path to normalize.
+---@return string # The absolute path with forward slashes and no trailing separator.
+local function _normalize_path(path)
+    local normalized = vim.fn.fnamemodify(path, ":p"):gsub("\\", "/")
+
+    if normalized ~= "/" and not normalized:match("^%a:/$") then
+        normalized = normalized:gsub("/+$", "")
+    end
+
+    return normalized
+end
+
+--- Normalize path case for comparison on Windows drive-letter paths.
+---
+---@param path string The already separator-normalized path.
+---@return string # A path suitable for prefix comparisons.
+local function _get_comparison_path(path)
+    if path:match("^%a:") then
+        return path:lower()
+    end
+
+    return path
+end
+
+--- Get `path` relative to `repository`, if `path` is inside it.
 ---
 ---@param repository string The repository root.
 ---@param path string The absolute file path.
 ---@return string? # The repository-relative path, if `path` is inside `repository`.
 local function _get_relative_path_from_repository(repository, path)
-    local repository_prefix = vim.fn.fnamemodify(repository, ":p")
+    local repository_path = _normalize_path(repository)
+    local normalized_path = _normalize_path(path)
+    local separator = repository_path:sub(-1) == "/" and "" or "/"
+    local repository_prefix = repository_path .. separator
 
-    if path:sub(1, #repository_prefix) ~= repository_prefix then
+    if _get_comparison_path(normalized_path):sub(1, #repository_prefix) ~= _get_comparison_path(repository_prefix) then
         return nil
     end
 
-    local relative_path = path:sub(#repository_prefix + 1):gsub("\\", "/")
-
-    return relative_path
+    return normalized_path:sub(#repository_prefix + 1)
 end
 
 --- Get the cached repository state for the current buffer, without running Git.
@@ -393,7 +411,6 @@ end
 ---@param callback fun(): nil Callback after loaded buffer hunks are merged.
 local function _merge_loaded_buffer_hunks(repository, entries, callback)
     local buffers = vim.api.nvim_list_bufs()
-    local index = 1
 
     ---@type table<string, boolean>
     local diffed_relative_paths = {}
@@ -402,29 +419,48 @@ local function _merge_loaded_buffer_hunks(repository, entries, callback)
         diffed_relative_paths[entry.relative_path] = true
     end
 
-    --- Merge the next buffer.
-    local function _next()
-        local buffer = buffers[index]
-        index = index + 1
+    if #buffers == 0 then
+        _sort_cached_entries(entries)
+        callback()
 
-        if not buffer then
-            _sort_cached_entries(entries)
-            callback()
+        return
+    end
 
+    local pending = #buffers
+    ---@type table<integer, {entries: _my.git_hunk_navigation.Entry[], relative_path: string?}>
+    local results = {}
+
+    --- Save one buffer's result and merge all results after every fetch finishes.
+    ---
+    ---@param buffer integer The buffer that finished.
+    ---@param buffer_entries _my.git_hunk_navigation.Entry[] The buffer's hunks.
+    ---@param relative_path string? The buffer's repository-relative path.
+    local function _finish_buffer(buffer, buffer_entries, relative_path)
+        results[buffer] = { entries = buffer_entries, relative_path = relative_path }
+        pending = pending - 1
+
+        if pending > 0 then
             return
         end
 
-        _make_buffer_entries(repository, buffer, diffed_relative_paths, function(buffer_entries, relative_path)
-            if relative_path then
-                _remove_file_entries(entries, relative_path)
-                vim.list_extend(entries, buffer_entries)
-            end
+        for _, ordered_buffer in ipairs(buffers) do
+            local result = results[ordered_buffer]
 
-            _next()
-        end)
+            if result and result.relative_path then
+                _remove_file_entries(entries, result.relative_path)
+                vim.list_extend(entries, result.entries)
+            end
+        end
+
+        _sort_cached_entries(entries)
+        callback()
     end
 
-    _next()
+    for _, buffer in ipairs(buffers) do
+        _make_buffer_entries(repository, buffer, diffed_relative_paths, function(buffer_entries, relative_path)
+            _finish_buffer(buffer, buffer_entries, relative_path)
+        end)
+    end
 end
 
 --- Parse `git diff --unified=0` output into cached navigation entries.
@@ -520,6 +556,69 @@ function M._get_repository_state(repository)
     return _STATE.repositories[repository]
 end
 
+--- Remove staged hunks from the active repository cache without re-running Git.
+---
+--- When `line` is given, only the closest hunk in the buffer is removed.
+--- Otherwise every hunk for the buffer is removed.
+---
+---@param buffer integer The buffer whose hunks were staged.
+---@param line integer? The cursor line used to choose one hunk.
+---@return integer? # The remaining hunk count, or `nil` if the cache could not be reconciled.
+function M.remove_cached_hunks_for_buffer(buffer, line)
+    local repository_state = M._get_repository_state()
+    local path = _get_buffer_path(buffer)
+
+    if not repository_state or not path then
+        return nil
+    end
+
+    ---@type integer[]
+    local matching = {}
+
+    for index, entry in ipairs(repository_state.entries) do
+        if vim.fn.fnamemodify(entry.absolute_path, ":p") == path then
+            table.insert(matching, index)
+        end
+    end
+
+    if #matching == 0 then
+        return nil
+    end
+
+    if line then
+        ---@type integer?
+        local closest_index
+        local closest_distance = math.huge
+
+        for _, index in ipairs(matching) do
+            local entry = repository_state.entries[index]
+            local distance
+
+            if entry.lnum <= line and line <= entry.end_lnum then
+                distance = 0
+            elseif line < entry.lnum then
+                distance = entry.lnum - line
+            else
+                distance = line - entry.end_lnum
+            end
+
+            if distance < closest_distance then
+                closest_index = index
+                closest_distance = distance
+            end
+        end
+
+        table.remove(repository_state.entries, assert(closest_index))
+    else
+        for index = #matching, 1, -1 do
+            table.remove(repository_state.entries, matching[index])
+        end
+    end
+
+    repository_state.index = math.min(repository_state.index, #repository_state.entries)
+    return #repository_state.entries
+end
+
 --- Mark a cached repository as stale.
 ---
 ---@param repository string The repository root to mark stale.
@@ -532,11 +631,6 @@ function _P.mark_stale(repository)
 end
 
 --- Mark any cached repositories containing `buffer` as stale.
----
---- CAVEAT: This duplicates the prefix comparison in
---- `_get_relative_path_from_repository` instead of calling it, so it carries the
---- same Windows separator and drive-letter-case bug documented there. Both sites
---- need the same fix.
 ---
 --- CAVEAT: Staleness is only ever driven by buffer edits, so repository changes
 --- made outside Neovim (`git checkout`, `rebase`, `stash`, another editor) leave
@@ -552,9 +646,7 @@ function M.mark_stale_for_buffer(buffer)
     end
 
     for repository in pairs(_STATE.repositories) do
-        local repository_prefix = vim.fn.fnamemodify(repository, ":p")
-
-        if path:sub(1, #repository_prefix) == repository_prefix then
+        if _get_relative_path_from_repository(repository, path) then
             _P.mark_stale(repository)
         end
     end

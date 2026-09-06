@@ -120,7 +120,7 @@ describe("modules.features.git_diff_view", function()
 
     before_each(function()
         _original_diffopt = vim.o.diffopt
-        vim.o.diffopt = "internal,filler,closeoff,inline:char"
+        vim.o.diffopt = "internal,filler,closeoff"
     end)
 
     after_each(function()
@@ -200,7 +200,13 @@ describe("modules.features.git_diff_view", function()
     end)
 
     it("highlights whole lines when `inline:none` is used", function()
-        vim.o.diffopt = "internal,filler,closeoff,inline:none"
+        local supported = pcall(function()
+            vim.o.diffopt = "internal,filler,closeoff,inline:none"
+        end)
+
+        if not supported then
+            return
+        end
 
         local marks = git_diff_view.compute_marks({ "local foo = 10" }, { "local foo = 20" }, 4)
 

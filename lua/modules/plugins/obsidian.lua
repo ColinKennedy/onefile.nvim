@@ -264,12 +264,22 @@ end
 
 --- Find all markdown files in `workspace_root` recursively.
 ---
+--- CAVEAT: `vim.fn.glob()` on Windows does not reliably recurse through a `**`
+--- pattern built from forward slashes, so the pattern is converted to native
+--- separators before the call. Results are normalized back to forward
+--- slashes afterward so every caller compares paths the same way regardless
+--- of platform.
+---
 ---@param workspace_root string The workspace to scan.
 ---@return string[] # Sorted, normalized markdown file paths.
 function _P.get_markdown_files(workspace_root)
-    local paths = vim.fs.find(function(name)
-        return name:lower():sub(-3) == ".md"
-    end, { limit = math.huge, path = workspace_root, type = "file" })
+    local template = vim.fs.joinpath(workspace_root, "**", "*.md")
+
+    if vim.fn.has("win32") == 1 then
+        template = template:gsub("/", "\\")
+    end
+
+    local paths = vim.fn.glob(template, true, true)
 
     for index, path in ipairs(paths) do
         paths[index] = _P.normalize_path(path)

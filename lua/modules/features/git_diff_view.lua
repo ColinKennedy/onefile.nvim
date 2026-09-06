@@ -28,7 +28,7 @@ local _MAXIMUM_INLINE_LENGTH = 2000
 --- Neovim renamed `vim.diff` to `vim.text.diff`. Prefer the newer name.
 ---
 ---@type fun(old_text: string, new_text: string, options: _my.git_diff_view.DiffOptions): integer[][]?
----@diagnostic disable-next-line: undefined-field
+---@diagnostic disable-next-line: undefined-field, deprecated
 local _diff = vim.text and vim.text.diff or vim.diff
 
 ---@class _my.git_diff_view.Region A changed byte range within a single line.
@@ -114,29 +114,29 @@ end
 ---
 function _P.get_diff_options()
     ---@type _my.git_diff_view.DiffOptions
-    local options = { ctxlen = 0, result_type = "indices" }
+    local options = { ctxlen = 0, result_type = "indices" } -- deadcode: ignore DC05
 
     for _, value in ipairs(_P.get_diff_option_values()) do
         if value == "iblank" then
-            options.ignore_blank_lines = true
+            options.ignore_blank_lines = true -- deadcode: ignore DC05
         elseif value == "iwhite" then
-            options.ignore_whitespace_change = true
+            options.ignore_whitespace_change = true -- deadcode: ignore DC05
         elseif value == "iwhiteall" then
-            options.ignore_whitespace = true
+            options.ignore_whitespace = true -- deadcode: ignore DC05
         elseif value == "iwhiteeol" then
-            options.ignore_whitespace_change_at_eol = true
+            options.ignore_whitespace_change_at_eol = true -- deadcode: ignore DC05
         elseif value == "indent-heuristic" then
-            options.indent_heuristic = true
+            options.indent_heuristic = true -- deadcode: ignore DC05
         else
             local algorithm = value:match("^algorithm:(%a+)$")
 
             if algorithm then
-                options.algorithm = algorithm
+                options.algorithm = algorithm -- deadcode: ignore DC05
             else
                 local linematch = tonumber(value:match("^linematch:(%d+)$") or "")
 
                 if linematch then
-                    options.linematch = linematch
+                    options.linematch = linematch -- deadcode: ignore DC05
                 end
             end
         end
@@ -723,7 +723,7 @@ end
 ---
 ---@param buffer integer? The buffer to update. Defaults to the current buffer.
 ---
-function M.update(buffer)
+function _P.update(buffer)
     local current = buffer or vim.api.nvim_get_current_buf()
 
     if not _P.is_wanted_buffer(current) or not _P.is_supported_buffer(current) then
@@ -782,7 +782,7 @@ function _P.refresh()
     end
 
     for buffer, _ in pairs(wanted) do
-        M.update(buffer)
+        _P.update(buffer)
     end
 end
 
@@ -836,7 +836,7 @@ vim.api.nvim_create_autocmd({ "BufWritePost", "InsertLeave", "TextChanged", "Tex
         if event.event ~= "TextChangedI" then
             _clear_timer(buffer)
             vim.schedule(function()
-                M.update(buffer)
+                _P.update(buffer)
             end)
 
             return
@@ -849,7 +849,7 @@ vim.api.nvim_create_autocmd({ "BufWritePost", "InsertLeave", "TextChanged", "Tex
         _TIMERS_BY_BUFFER[buffer]:stop()
         _TIMERS_BY_BUFFER[buffer]:start(_TEXT_CHANGED_I_DEBOUNCE_MS, 0, function()
             vim.schedule(function()
-                M.update(buffer)
+                _P.update(buffer)
             end)
         end)
     end,

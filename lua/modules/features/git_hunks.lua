@@ -1,5 +1,13 @@
 --- Stage and unstage visual selections from unsaved buffer edits.
 
+---@alias _my.git_hunks.Callback fun(success: boolean, message: string?)
+
+---@class _my.git_hunks.Module
+---@field apply_closest_hunk fun(action: _my.git_hunks.Action, callback?: _my.git_hunks.Callback, keep_cache?: boolean)
+---@field apply_current_file fun(action: "stage" | "reset", callback?: _my.git_hunks.Callback, keep_cache?: boolean)
+
+---@type _my.git_hunks.Module
+---@diagnostic disable-next-line: missing-fields
 local M = {}
 local _P = {}
 

@@ -390,7 +390,7 @@ end
 
 --- Neovim renamed `vim.diff` to `vim.text.diff`. Prefer the newer name.
 ---
----@diagnostic disable-next-line: undefined-field
+---@diagnostic disable-next-line: undefined-field, deprecated
 local _diff = vim.text and vim.text.diff or vim.diff
 
 --- Join lines into diff-ready text.

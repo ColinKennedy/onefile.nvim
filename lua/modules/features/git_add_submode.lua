@@ -14,6 +14,7 @@ local _AUGROUP = vim.api.nvim_create_augroup("my.git_add_submode", { clear = tru
 local _ACTIVE = false
 
 --- The Normal-mode keys the submode temporarily takes over.
+---@type string[]
 local _SUBMODE_KEYS = { "y", "n", "N", "a", "v", "q", "<Esc>" }
 
 --- The prior mapping for each submode key, saved before overriding it.
@@ -21,7 +22,7 @@ local _SUBMODE_KEYS = { "y", "n", "N", "a", "v", "q", "<Esc>" }
 --- `false` means the key had no prior mapping (fall back to Neovim's builtin
 --- behavior on restore instead of calling `mapset`).
 ---
----@type table<string, table|false>
+---@type table<string, vim.api.keyset.get_keymap|false>
 local _SAVED_KEYMAPS = {}
 
 ---@type integer? The floating legend window, while active.
@@ -30,6 +31,7 @@ local _LEGEND_WINDOW = nil
 local _LEGEND_BUFFER = nil
 
 -- NOTE: Every line must stay under 10 characters so the legend window stays tiny.
+---@type string[]
 local _LEGEND_LINES = { "y stage", "n skip", "N prev", "a all", "v diff", "q exit", "esc exit" }
 
 --- Save the current Normal-mode mapping for `key`, then replace it with `callback`.

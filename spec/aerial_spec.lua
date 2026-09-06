@@ -111,6 +111,14 @@ local function flatten_symbol_names(symbols)
     return names
 end
 
+--- Normalize path separators so Windows-native and forward-slash paths compare equal.
+---
+---@param path string The path to normalize.
+---@return string # `path` with every backslash converted to a forward slash.
+local function to_forward_slashes(path)
+    return (path:gsub("\\", "/"))
+end
+
 --- Find the first visible aerial window.
 ---
 ---@return integer? # The aerial window, if visible.
@@ -569,7 +577,7 @@ describe("modules.plugins.aerial", function()
         local code = aerial._serialize_session_restore()
 
         assert.is_truthy(code:find('require("modules.plugins.aerial").restore_session', 1, true))
-        assert.is_truthy(code:find(source_path, 1, true))
+        assert.is_truthy(to_forward_slashes(code):find(to_forward_slashes(source_path), 1, true))
 
         os.remove(source_path)
     end)
@@ -612,8 +620,8 @@ describe("modules.plugins.aerial", function()
 
         local code = aerial._serialize_session_restore()
 
-        assert.is_truthy(code:find(second_path, 1, true))
-        assert.is_nil(code:find(first_path, 1, true))
+        assert.is_truthy(to_forward_slashes(code):find(to_forward_slashes(second_path), 1, true))
+        assert.is_nil(to_forward_slashes(code):find(to_forward_slashes(first_path), 1, true))
 
         aerial._close_all()
         vim.cmd("silent edit " .. vim.fn.fnameescape(second_path))

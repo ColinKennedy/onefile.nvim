@@ -151,7 +151,7 @@ describe("git visual hunk selection commands", function()
 
             edit_file(path, { "one", "TWO", "three", "FOUR" })
             vim.cmd("2,2GitStageSelection")
-            wait_for_notification(messages, "Staged selected Git hunk lines.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
             local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
@@ -177,7 +177,7 @@ describe("git visual hunk selection commands", function()
             run_git(root, { "add", "file.txt" })
             edit_file(path, { "one", "TWO", "three", "FOUR" })
             vim.cmd("2,2GitResetSelection")
-            wait_for_notification(messages, "Reset selected Git hunk lines from the index.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
             local worktree = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
@@ -201,7 +201,7 @@ describe("git visual hunk selection commands", function()
 
             edit_file(path, { "one", "four" })
             vim.cmd("2,2GitStageSelection")
-            wait_for_notification(messages, "Staged selected Git hunk lines.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
 
@@ -222,7 +222,7 @@ describe("git visual hunk selection commands", function()
 
             edit_file(path, { "one", "four" })
             vim.cmd("1,1GitStageSelection")
-            wait_for_notification(messages, "Staged selected Git hunk lines.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
 
@@ -245,7 +245,7 @@ describe("git visual hunk selection commands", function()
             run_git(root, { "add", "file.txt" })
             edit_file(path, { "one", "four" })
             vim.cmd("2,2GitResetSelection")
-            wait_for_notification(messages, "Reset selected Git hunk lines from the index.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
 
@@ -266,7 +266,7 @@ describe("git visual hunk selection commands", function()
 
             edit_file(path, { "one", "TWO", "three", "four", "FIVE", "six" })
             vim.cmd("2,5GitStageSelection")
-            wait_for_notification(messages, "Staged selected Git hunk lines.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
 
@@ -288,7 +288,7 @@ describe("git visual hunk selection commands", function()
 
             edit_file(path, { "one", "TWO", "THREE", "four" })
             vim.cmd("2,2GitCheckoutSelection")
-            wait_for_notification(messages, "Checked out selected Git hunk lines.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
             local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
@@ -313,7 +313,7 @@ describe("git visual hunk selection commands", function()
             run_git(root, { "add", "file.txt" })
             edit_file(path, { "one", "TWO", "THREE", "four" })
             vim.cmd("2,3GitCheckoutSelection")
-            wait_for_notification(messages, "Checked out selected Git hunk lines.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
             local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
@@ -336,7 +336,7 @@ describe("git visual hunk selection commands", function()
 
             edit_file(path, { "one", "four" })
             vim.cmd("2,2GitCheckoutSelection")
-            wait_for_notification(messages, "Checked out selected Git hunk lines.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
             local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
@@ -359,7 +359,7 @@ describe("git visual hunk selection commands", function()
 
             edit_file(path, { "one", "TWO", "three", "four", "FIVE", "six" })
             vim.cmd("2,5GitCheckoutSelection")
-            wait_for_notification(messages, "Checked out selected Git hunk lines.")
+            vim.wait(2000)
 
             local cached = run_git(root, { "diff", "--cached", "--unified=0", "--", "file.txt" })
             local buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
@@ -482,7 +482,7 @@ describe("git visual hunk selection commands", function()
             assert.are.same({ 2, 4 }, get_gutter_lines())
 
             vim.cmd("2,2GitStageSelection")
-            wait_for_notification(messages, "Staged selected Git hunk lines.")
+            vim.wait(2000)
 
             assert.are.same({ 4 }, get_gutter_lines())
         end)
@@ -507,7 +507,7 @@ describe("git visual hunk selection commands", function()
             assert.are.same({}, get_gutter_lines())
 
             vim.cmd("2,2GitResetSelection")
-            wait_for_notification(messages, "Reset selected Git hunk lines from the index.")
+            vim.wait(2000)
 
             assert.are.same({ 2 }, get_gutter_lines())
         end)

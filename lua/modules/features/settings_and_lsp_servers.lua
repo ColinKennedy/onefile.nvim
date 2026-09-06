@@ -55,11 +55,6 @@ vim.api.nvim_create_autocmd("FileType", {
     end,
 })
 
-vim.g.python_host_prog = "/bin/python"
--- Reference: https://www.inmotionhosting.com/support/server/linux/install-python-3-9-centos-7/
--- vim.g.python3_host_prog = "/usr/local/bin/python3.7"
-vim.g.python3_host_prog = "/bin/python3.10"
-
 -- Force Neovim to have one statusline for all buffers (rather than one-per-buffer)
 --
 -- Reference: https://github.com/neovim/neovim/pull/17266

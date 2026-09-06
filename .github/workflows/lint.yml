@@ -128,6 +128,11 @@ jobs:
 
     - name: Lint
       run: |
+        # We use SSH in the `Makefile` but GitHub Actions cannot authenticate
+        # those clones. Rewrite GitHub SSH URLs to HTTPS in CI only.
+        export GIT_CONFIG=~/.gitconfig
+        git config url."https://github.com/".insteadOf git@github.com:
+
         make typer
 
   llscheck:

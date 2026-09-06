@@ -494,7 +494,7 @@ function _P.finish(options, lines, code)
 
     if options.jump_first and first_valid_index then
         require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
-            vim.cmd.cc(first_valid_index)
+            vim.cmd("silent cc " .. first_valid_index)
         end)
     end
 end

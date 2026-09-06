@@ -620,8 +620,8 @@ describe("modules.plugins.aerial", function()
 
         local code = aerial._serialize_session_restore()
 
-        assert.is_truthy(code:find(second_path, 1, true))
-        assert.is_nil(code:find(first_path, 1, true))
+        assert.is_truthy(to_forward_slashes(code):find(to_forward_slashes(second_path), 1, true))
+        assert.is_nil(to_forward_slashes(code):find(to_forward_slashes(first_path), 1, true))
 
         aerial._close_all()
         vim.cmd("silent edit " .. vim.fn.fnameescape(second_path))

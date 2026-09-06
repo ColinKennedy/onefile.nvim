@@ -32,4 +32,6 @@ jobs:
         uses: ColinKennedy/nvim-checkhealth-gh-action@v1.1.1
         with:
           executable: 'nvim -u "spec/minimal_init.lua"'
-          checks: "*"
+          # Skip vim.health because it validates the CI runner's terminal, and
+          # Neovim nightly treats its missing graphics protocol as an error.
+          checks: "vim.deprecated vim.lsp vim.provider vim.treesitter"

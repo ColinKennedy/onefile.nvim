@@ -935,7 +935,7 @@ end
 ---@param repository string The repository root.
 ---@return string # The labelled, shortened repository root.
 function M._get_quickfix_title(repository)
-    return "Git: " .. vim.fn.fnamemodify(repository, ":~")
+    return "Git: " .. (vim.fn.fnamemodify(repository, ":~"):gsub("\\", "/"))
 end
 
 --- Load repository hunks into the cache and quickfix list.

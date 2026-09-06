@@ -78,9 +78,14 @@ end
 --- Refresh Git-dependent UI after an index mutation.
 ---
 ---@param buffer integer The buffer that changed.
-local function _refresh_git_views(buffer)
+---@param keep_navigation_cache boolean? If `true`, the caller updates the navigation cache itself.
+local function _refresh_git_views(buffer, keep_navigation_cache)
+    require("modules.utilities.git_diff").invalidate_index_lines(buffer)
     require("modules.features.git_gutter").update(buffer)
-    require("modules.features.git_hunk_navigation").mark_stale_for_buffer(buffer)
+
+    if not keep_navigation_cache then
+        require("modules.features.git_hunk_navigation").mark_stale_for_buffer(buffer)
+    end
 end
 
 ---@class _my.git_hunks.RangeCommandOptions
@@ -174,6 +179,7 @@ end
 
 ---@class _my.git_hunks.ApplyOptions
 ---@field callback? fun(success: boolean, message: string?): nil Called once the action finishes.
+---@field keep_navigation_cache? boolean If `true`, the caller updates the navigation cache itself.
 ---@field quiet boolean? If `true`, report nothing. The caller summarizes instead.
 
 --- Run a hunk operation using already-resolved texts and range.
@@ -226,7 +232,7 @@ local function _apply_selection_from_details(action, buffer, data, diff, start_l
 
         _set_buffer_text(buffer, checkout_text)
         _report_success()
-        _refresh_git_views(buffer)
+        _refresh_git_views(buffer, options.keep_navigation_cache)
         callback(true, nil)
 
         return
@@ -254,7 +260,7 @@ local function _apply_selection_from_details(action, buffer, data, diff, start_l
                 end
 
                 _report_success()
-                _refresh_git_views(buffer)
+                _refresh_git_views(buffer, options.keep_navigation_cache)
                 callback(true, nil)
             end)
         end
@@ -333,7 +339,8 @@ end
 ---
 ---@param action "stage" | "reset" The whole-file operation to run.
 ---@param callback? fun(success: boolean, message: string?): nil Called once the action finishes.
-function _P.apply_current_file(action, callback)
+---@param keep_navigation_cache boolean? If `true`, the caller updates the navigation cache itself.
+function _P.apply_current_file(action, callback, keep_navigation_cache)
     local git_diff = require("modules.utilities.git_diff")
 
     local buffer = vim.api.nvim_get_current_buf()
@@ -380,7 +387,7 @@ function _P.apply_current_file(action, callback)
                     vim.notify("Reset current Git file from the index.", vim.log.levels.INFO)
                 end
 
-                _refresh_git_views(buffer)
+                _refresh_git_views(buffer, keep_navigation_cache)
 
                 if callback then
                     callback(true, nil)
@@ -830,7 +837,8 @@ end
 ---
 ---@param action _my.git_hunks.Action The hunk operation to run.
 ---@param callback? fun(success: boolean, message: string?): nil Called once the action finishes.
-function _P.apply_closest_hunk(action, callback)
+---@param keep_navigation_cache boolean? If `true`, the caller updates the navigation cache itself.
+function _P.apply_closest_hunk(action, callback, keep_navigation_cache)
     local git_diff = require("modules.utilities.git_diff")
 
     local buffer = vim.api.nvim_get_current_buf()
@@ -897,7 +905,7 @@ function _P.apply_closest_hunk(action, callback)
                         diff,
                         start_line,
                         end_line,
-                        { callback = callback }
+                        { callback = callback, keep_navigation_cache = keep_navigation_cache }
                     )
                 end)
             end)

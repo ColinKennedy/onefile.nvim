@@ -121,9 +121,8 @@ end
 
 --- Wait for an async submode step to settle.
 ---
---- Staging steps chain several sequential Git subprocesses (hash-object,
---- update-index, a no-index diff, `apply --cached --check`, `apply --cached`,
---- then a full repository reload), so this leaves generous headroom.
+--- Staging steps chain several sequential Git subprocesses, so this leaves
+--- generous headroom for slower CI machines.
 ---
 ---@param predicate fun(): boolean The condition to wait for.
 local function wait_for(predicate)
@@ -331,11 +330,20 @@ describe("modules.features.git_add_submode", function()
             end)
             assert.equal("a.txt", current_file_name())
 
+            local original_load = git_hunk_navigation._load
+            local reloads = 0
+            rawset(git_hunk_navigation, "_load", function(arguments, callback)
+                reloads = reloads + 1
+                original_load(arguments, callback)
+            end)
+
             press_keys("y")
             wait_for(function()
                 return entries_count(root) == 1
             end)
+            rawset(git_hunk_navigation, "_load", original_load)
 
+            assert.equal(0, reloads)
             assert.matches("%-two\n%+TWO", run_git(root, { "diff", "--cached", "--unified=0" }))
             assert.equal("b.txt", current_file_name())
             assert.is_true(git_add_submode.is_active())
@@ -349,6 +357,68 @@ describe("modules.features.git_add_submode", function()
             assert.is_false(git_add_submode.is_active())
             assert.is_nil(find_legend_window())
             assert.is_true(vim.tbl_isempty(vim.fn.maparg("y", "n", false, true)))
+        end)
+    end)
+
+    it("reloads the hunk list after an edit made while Git mode is active", function()
+        with_repo(function(root)
+            commit_file(root, "file.txt", "one\ntwo\nthree\nfour\nfive\n")
+            edit_file(vim.fs.joinpath(root, "file.txt"), { "one", "TWO", "three", "four", "five" })
+
+            git_add_submode.start()
+            wait_for(function()
+                return git_add_submode.is_active()
+            end)
+
+            vim.api.nvim_buf_set_lines(0, 3, 4, false, { "FOUR" })
+            vim.api.nvim_exec_autocmds("TextChanged", { buffer = 0 })
+            assert.is_true(assert(git_hunk_navigation._get_repository_state(root)).stale)
+
+            local original_load = git_hunk_navigation._load
+            local reloads = 0
+            rawset(git_hunk_navigation, "_load", function(arguments, callback)
+                reloads = reloads + 1
+                original_load(arguments, callback)
+            end)
+
+            press_keys("y")
+            wait_for(function()
+                return entries_count(root) == 1 and vim.api.nvim_win_get_cursor(0)[1] == 4
+            end)
+            rawset(git_hunk_navigation, "_load", original_load)
+
+            assert.equal(1, reloads)
+            assert.matches("%-two\n%+TWO", run_git(root, { "diff", "--cached", "--unified=0" }))
+            assert.equal("FOUR", vim.api.nvim_buf_get_lines(0, 3, 4, false)[1])
+            assert.is_true(git_add_submode.is_active())
+        end)
+    end)
+
+    it("sees edits made after exiting when Git mode is immediately restarted", function()
+        with_repo(function(root)
+            commit_file(root, "file.txt", "one\ntwo\nthree\nfour\nfive\nsix\n")
+            edit_file(vim.fs.joinpath(root, "file.txt"), { "one", "TWO", "three", "four", "five", "six" })
+
+            git_add_submode.start()
+            wait_for(function()
+                return git_add_submode.is_active()
+            end)
+            press_keys("<Esc>")
+            wait_for(function()
+                return not git_add_submode.is_active()
+            end)
+
+            vim.api.nvim_buf_set_lines(0, 4, 5, false, { "FIVE" })
+            vim.api.nvim_exec_autocmds("TextChanged", { buffer = 0 })
+            git_add_submode.start()
+            wait_for(function()
+                return git_add_submode.is_active() and entries_count(root) == 2
+            end)
+
+            local state = assert(git_hunk_navigation._get_repository_state(root))
+            assert.equal(2, #state.entries)
+            assert.equal(2, state.entries[1].lnum)
+            assert.equal(5, state.entries[2].lnum)
         end)
     end)
 

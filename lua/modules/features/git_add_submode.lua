@@ -192,9 +192,19 @@ function _P.deactivate(message)
     end
 end
 
---- Reload the hunk cache, then either finish the submode or jump to the next hunk.
-function _P.advance_or_finish()
-    _P.reload(function(state)
+--- Update the hunk cache locally, then either finish or jump to the next hunk.
+---
+---@param buffer integer The buffer whose hunks were staged.
+---@param line integer? The staged hunk line, or `nil` when the whole file was staged.
+function _P.advance_or_finish(buffer, line)
+    local git_hunk_navigation = require("modules.features.git_hunk_navigation")
+    local remaining = git_hunk_navigation.remove_cached_hunks_for_buffer(buffer, line)
+    local repository_state = git_hunk_navigation._get_repository_state()
+
+    --- Finish after falling back to a full reload when the local cache did not match.
+    ---
+    ---@param state _my.git_hunk_navigation.RepositoryState?
+    local function _finish(state)
         if not state then
             _P.deactivate("Git add is done.")
 
@@ -202,16 +212,27 @@ function _P.advance_or_finish()
         end
 
         vim.cmd.GitDiffNext()
-    end)
+    end
+
+    if remaining == nil or (repository_state and repository_state.stale) then
+        _P.reload(_finish)
+
+        return
+    end
+
+    _finish(remaining > 0 and repository_state or nil)
 end
 
 --- Stage the hunk under the cursor, then advance.
 function _P.on_y()
+    local buffer = vim.api.nvim_get_current_buf()
+    local line = vim.api.nvim_win_get_cursor(0)[1]
+
     require("modules.features.git_hunks").apply_closest_hunk("stage", function(success)
         if success then
-            _P.advance_or_finish()
+            _P.advance_or_finish(buffer, line)
         end
-    end)
+    end, true)
 end
 
 --- Skip the current hunk and advance, wrapping at the end of the list.
@@ -226,11 +247,13 @@ end
 
 --- Stage every hunk in the current file, then advance to the next file.
 function _P.on_a()
+    local buffer = vim.api.nvim_get_current_buf()
+
     require("modules.features.git_hunks").apply_current_file("stage", function(success)
         if success then
-            _P.advance_or_finish()
+            _P.advance_or_finish(buffer, nil)
         end
-    end)
+    end, true)
 end
 
 --- Toggle the Git diff view for the current window.

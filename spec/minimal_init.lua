@@ -5,6 +5,20 @@ local _CURRENT_RELATIVE_DIRECTORY = _CURRENT_FILE:match("(.+[/\\])")
 local _CURRENT_ABSOLUTE_DIRECTORY = vim.fn.fnamemodify(_CURRENT_RELATIVE_DIRECTORY, ":p:h")
 local _PROJECT_ROOT_DIRECTORY = vim.fs.dirname(_CURRENT_ABSOLUTE_DIRECTORY)
 
+-- NOTE: `toggle_terminal` specs open a real terminal job. Without this, they
+-- fall back to the user's interactive shell (e.g. a bare, banner-printing
+-- `cmd.exe` on Windows CI runners), which sits waiting for input and can
+-- swallow stray typeahead queued by earlier specs. Use a non-interactive
+-- command instead: it still keeps the terminal buffer alive long enough for
+-- the specs to inspect it, but it never reads a command line from stdin.
+if not os.getenv("NEOVIM_SHELL_COMMAND") then
+    if vim.fn.has("win32") == 1 then
+        vim.env.NEOVIM_SHELL_COMMAND = (os.getenv("ComSpec") or "cmd.exe") .. ' /d /c "ping -n 6 127.0.0.1 >nul"'
+    else
+        vim.env.NEOVIM_SHELL_COMMAND = (os.getenv("SHELL") or "sh") .. " -c 'sleep 5'"
+    end
+end
+
 package.path = package.path
     .. ";"
     .. _PROJECT_ROOT_DIRECTORY

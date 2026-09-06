@@ -132,10 +132,13 @@ describe("LSP commands", function()
     it("has descriptions for both LSP commands", function()
         local commands = vim.api.nvim_get_commands({ builtin = false })
 
-        assert.equal("Show LSP clients attached to the current buffer.", commands.LspClients.definition)
+        assert.equal(
+            "Show LSP clients attached to the current buffer.",
+            rawget(commands.LspClients, "desc") or commands.LspClients.definition
+        )
         assert.equal(
             "Show capabilities for LSP clients attached to the current buffer.",
-            commands.LspCapabilities.definition
+            rawget(commands.LspCapabilities, "desc") or commands.LspCapabilities.definition
         )
     end)
 end)

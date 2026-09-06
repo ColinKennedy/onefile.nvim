@@ -592,6 +592,7 @@ function M.remove_cached_hunks_for_buffer(buffer, line)
 
         for _, index in ipairs(matching) do
             local entry = repository_state.entries[index]
+            ---@type integer
             local distance
 
             if entry.lnum <= line and line <= entry.end_lnum then

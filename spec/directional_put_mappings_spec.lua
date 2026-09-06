@@ -217,10 +217,10 @@ describe("directional put mappings", function()
         assert.equal(5, math.max(visual_start, cursor[1]))
     end)
 
-    it("selects multiline characterwise text inserted with the clipboard pp mapping", function()
+    it("selects multiline characterwise text inserted with an explicit-register pp mapping", function()
         make_buffer({ "", "", "" })
         vim.fn.setreg(
-            "+",
+            "a",
             table.concat({
                 "Sens. James Lankford and Jacky Rosen will introduce a sweeping, bipartisan bill Tuesday aimed "
                     .. "at combating antisemitism.",
@@ -232,7 +232,7 @@ describe("directional put mappings", function()
         )
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
 
-        press_keys([["+pp]])
+        press_keys([["app]])
         press_keys("gp")
 
         local visual_start = vim.fn.getpos("v")[2]
@@ -242,7 +242,7 @@ describe("directional put mappings", function()
         assert.equal(4, math.max(visual_start, cursor[1]))
     end)
 
-    it("does not select the whole buffer after clipboard pp in blank space", function()
+    it("does not select the whole buffer after explicit-register pp in blank space", function()
         make_buffer({
             "# title",
             "",
@@ -262,7 +262,7 @@ describe("directional put mappings", function()
             "tail",
         })
         vim.fn.setreg(
-            "+",
+            "a",
             table.concat({
                 "Sens. James Lankford and Jacky Rosen will introduce a sweeping, bipartisan bill Tuesday aimed "
                     .. "at combating antisemitism.",
@@ -274,7 +274,7 @@ describe("directional put mappings", function()
         )
         vim.api.nvim_win_set_cursor(0, { 12, 0 })
 
-        press_keys([["+pp]])
+        press_keys([["app]])
         press_keys("gp")
 
         local visual_start = vim.fn.getpos("v")[2]

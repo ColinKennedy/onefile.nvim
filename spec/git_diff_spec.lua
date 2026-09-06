@@ -2,6 +2,20 @@ package.path = "lua/?.lua;" .. package.path
 
 local git_diff = require("modules.utilities.git_diff")
 
+--- Build a scratch buffer name whose directory actually exists.
+---
+--- `git_diff` bails out early when a buffer's directory is missing, so a
+--- hardcoded `/tmp/...` name silently short-circuits every lookup on Windows,
+--- where there is no `/tmp`.
+---
+---@param name string The desired file name.
+---@return string # An absolute path inside a real, existing directory.
+local function scratch_path(name)
+    local directory = vim.fn.fnamemodify(vim.fn.tempname(), ":h")
+
+    return vim.fs.joinpath(directory, name)
+end
+
 describe("modules.utilities.git_diff", function()
     it("reports add, change, and delete hunks", function()
         local hunks = git_diff.compute_hunks({ "one", "two", "three", "four" }, {
@@ -237,7 +251,7 @@ diff --git a/file b/file
 
     it("coalesces and caches file-detail lookups until the buffer is renamed", function()
         local buffer = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_name(buffer, "/tmp/git-details-cache-" .. buffer .. ".txt")
+        vim.api.nvim_buf_set_name(buffer, scratch_path("git-details-cache-" .. buffer .. ".txt"))
 
         local original_run_git = git_diff.run_git
         ---@type {arguments: string[], callback: _my.git_diff.SystemCallback, directory: string, stdin: string?}[]
@@ -290,8 +304,8 @@ diff --git a/file b/file
     it("caches current-buffer file details by the resolved buffer handle", function()
         local first = vim.api.nvim_create_buf(false, true)
         local second = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_name(first, "/tmp/git-current-buffer-cache-first.txt")
-        vim.api.nvim_buf_set_name(second, "/tmp/git-current-buffer-cache-second.txt")
+        vim.api.nvim_buf_set_name(first, scratch_path("git-current-buffer-cache-first.txt"))
+        vim.api.nvim_buf_set_name(second, scratch_path("git-current-buffer-cache-second.txt"))
 
         local original_run_git = git_diff.run_git
         local calls = 0
@@ -347,7 +361,7 @@ diff --git a/file b/file
 
     it("coalesces index reads and fetches again after an index mutation", function()
         local buffer = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_name(buffer, "/tmp/git-index-cache-" .. buffer .. ".txt")
+        vim.api.nvim_buf_set_name(buffer, scratch_path("git-index-cache-" .. buffer .. ".txt"))
 
         local original_run_git = git_diff.run_git
         ---@type _my.git_diff.FileDetails?

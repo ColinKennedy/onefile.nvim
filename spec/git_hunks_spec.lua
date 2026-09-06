@@ -33,6 +33,7 @@ end
 local function make_repo()
     local root = vim.fn.tempname()
     assert.equal(1, vim.fn.mkdir(root, "p"))
+    root = vim.uv.fs_realpath(root) or root
 
     local result = vim.system({ "git", "-C", root, "init" }, { text = true }):wait()
     assert.equal(0, result.code, result.stderr)

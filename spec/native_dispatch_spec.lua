@@ -297,6 +297,7 @@ describe("native dispatch", function()
         local path = vim.fn.tempname() .. ".lua"
 
         vim.fn.writefile({ "first", "second", "third" }, path)
+        path = vim.uv.fs_realpath(path) or path
         vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
 
         native_dispatch._P.finish({

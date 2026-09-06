@@ -330,7 +330,33 @@ function _P.dedent_snippets()
     local function _dedent(text)
         text = text:gsub("\n[ ]+$", "\n")
 
-        return (vim.text.indent(0, text))
+        if vim.text and vim.text.indent then
+            return vim.text.indent(0, text)
+        end
+
+        local minimum_indent
+
+        for line in text:gmatch("[^\n]+") do
+            if line:find("%S") then
+                local indent = #(line:match("^%s*") or "")
+
+                minimum_indent = math.min(minimum_indent or indent, indent)
+            end
+        end
+
+        if not minimum_indent or minimum_indent == 0 then
+            return text
+        end
+
+        return (
+            text:gsub("[^\n]+", function(line)
+                if not line:find("%S") then
+                    return line
+                end
+
+                return line:sub(minimum_indent + 1)
+            end)
+        )
     end
 
     for _, snippets in pairs(_SNIPPETS) do

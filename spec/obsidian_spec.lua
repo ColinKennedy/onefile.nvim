@@ -295,6 +295,7 @@ describe("modules.plugins.obsidian", function()
 
         write_note(inside, {})
         write_note(outside, {})
+        root = vim.uv.fs_realpath(root) or root
         obsidian.set_vaults_root_for_tests(root)
 
         vim.cmd("silent edit " .. vim.fn.fnameescape(inside))
@@ -444,6 +445,8 @@ describe("modules.plugins.obsidian", function()
 
         write_tagged_note(first, { "First" }, { "foo" })
         write_tagged_note(second, { "Second" }, { "foo/bar" })
+        root = vim.uv.fs_realpath(root) or root
+        second = vim.uv.fs_realpath(second) or second
         obsidian.set_vaults_root_for_tests(root)
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -504,6 +507,8 @@ describe("modules.plugins.obsidian", function()
         write_tagged_note(child, { "Child Note" }, { "foo/bar/fizz" })
         write_tagged_note(parent, { "Parent Note" }, { "foo/bar" })
         write_tagged_note(unrelated, { "Unrelated Note" }, { "other" })
+        root = vim.uv.fs_realpath(root) or root
+        parent = vim.uv.fs_realpath(parent) or parent
         obsidian.set_vaults_root_for_tests(root)
 
         local ok, error_message = pcall(function()
@@ -555,6 +560,9 @@ describe("modules.plugins.obsidian", function()
         write_note(current, {}, { "[[foo bar]]" })
         write_note(second, { "foo bar" })
         write_note(first, { "Foo Bar" })
+        root = vim.uv.fs_realpath(root) or root
+        current = vim.uv.fs_realpath(current) or current
+        first = vim.uv.fs_realpath(first) or first
         obsidian.set_vaults_root_for_tests(root)
 
         vim.cmd("silent edit " .. vim.fn.fnameescape(current))

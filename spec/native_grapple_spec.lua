@@ -35,6 +35,7 @@ end
 local function make_repository()
     local root = vim.fn.tempname()
     assert.equal(1, vim.fn.mkdir(root, "p"))
+    root = vim.uv.fs_realpath(root) or root
 
     run_git(root, { "init" })
     run_git(root, { "config", "user.email", "test@example.com" })

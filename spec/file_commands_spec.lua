@@ -17,7 +17,7 @@ local function make_directory()
 
     assert.equal(1, vim.fn.mkdir(root, "p"))
 
-    return root
+    return vim.uv.fs_realpath(root) or root
 end
 
 --- Run a Git command inside `root`.

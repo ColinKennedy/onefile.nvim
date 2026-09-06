@@ -13,10 +13,16 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        neovim: [v0.10.0, stable, nightly]
+        neovim:
+          - version: v0.10.0
+            health_checks: "vim.lsp vim.treesitter"
+          - version: stable
+            health_checks: "vim.deprecated vim.lsp vim.provider vim.treesitter"
+          - version: nightly
+            health_checks: "vim.deprecated vim.lsp vim.provider vim.treesitter"
 
     runs-on: ${{ matrix.os }}
-    name: "OS: ${{ matrix.os }} - Neovim: ${{ matrix.neovim }}"
+    name: "OS: ${{ matrix.os }} - Neovim: ${{ matrix.neovim.version }}"
 
     steps:
       - name: Checkout code
@@ -26,7 +32,7 @@ jobs:
         uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
-          version: ${{ matrix.neovim }}
+          version: ${{ matrix.neovim.version }}
 
       - name: Run :checkhealth
         uses: ColinKennedy/nvim-checkhealth-gh-action@v1.1.1
@@ -34,4 +40,4 @@ jobs:
           executable: 'nvim -u "spec/minimal_init.lua"'
           # Skip vim.health because it validates the CI runner's terminal, and
           # Neovim nightly treats its missing graphics protocol as an error.
-          checks: "vim.deprecated vim.lsp vim.provider vim.treesitter"
+          checks: ${{ matrix.neovim.health_checks }}

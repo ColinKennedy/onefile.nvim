@@ -110,6 +110,14 @@ _P.servers = {
 ---@param config_lsp? fun(name: string, config: vim.lsp.Config): nil Test seam for `vim.lsp.config`.
 ---@param enable_lsp? fun(name: string): nil Test seam for `vim.lsp.enable`.
 function M._configure_lsp_servers(config_lsp, enable_lsp)
+    if
+        not config_lsp
+        and not enable_lsp
+        and (type(vim.lsp.config) ~= "function" or type(vim.lsp.enable) ~= "function")
+    then
+        return
+    end
+
     config_lsp = config_lsp or function(name, config)
         vim.lsp.config(name, config)
     end

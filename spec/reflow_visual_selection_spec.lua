@@ -24,8 +24,17 @@ local function press(keys)
 end
 
 describe("reflow visual selection", function()
+    ---@type boolean
+    local original_showmode
+
+    before_each(function()
+        original_showmode = vim.o.showmode
+        vim.o.showmode = false
+    end)
+
     after_each(function()
         vim.cmd("silent enew!")
+        vim.o.showmode = original_showmode
     end)
 
     --- Get the current visual selection's selected line range.

@@ -265,7 +265,10 @@ describe("modules.plugins.obsidian", function()
         write_note(other_workspace, { "foo bar" })
         obsidian.set_vaults_root_for_tests(root)
 
-        assert.equal(first, obsidian.find_note_by_alias(vim.fs.joinpath(root, "foo"), "foo bar"))
+        assert.equal(
+            obsidian.normalize_path(first),
+            obsidian.find_note_by_alias(vim.fs.joinpath(root, "foo"), "foo bar")
+        )
         vim.fn.delete(root, "rf")
     end)
 
@@ -384,8 +387,8 @@ describe("modules.plugins.obsidian", function()
         obsidian.set_vaults_root_for_tests(root)
 
         assert.same({
-            { display = "anonymous", path = anonymous, tags = { "foo" } },
-            { display = "Some Alias", path = aliased, tags = { "foo/bar" } },
+            { display = "anonymous", path = obsidian.normalize_path(anonymous), tags = { "foo" } },
+            { display = "Some Alias", path = obsidian.normalize_path(aliased), tags = { "foo/bar" } },
         }, obsidian.get_tagged_notes())
         vim.fn.delete(root, "rf")
     end)
@@ -430,7 +433,7 @@ describe("modules.plugins.obsidian", function()
         }, captured_values[1])
 
         assert.True(captured_options[2].multiple_selection)
-        assert.same({ { display = "Some Alias", value = note } }, captured_values[2])
+        assert.same({ { display = "Some Alias", value = obsidian.normalize_path(note) } }, captured_values[2])
         vim.fn.delete(root, "rf")
     end)
 
@@ -472,7 +475,7 @@ describe("modules.plugins.obsidian", function()
         captured_options.confirm({ { display = "Second", score = 1, value = second } })
         vim.o.shortmess = original_shortmess
 
-        assert.equal(second, vim.api.nvim_buf_get_name(0))
+        assert.equal(obsidian.normalize_path(second), obsidian.normalize_path(vim.api.nvim_buf_get_name(0)))
         vim.fn.delete(root, "rf")
     end)
 
@@ -544,7 +547,7 @@ describe("modules.plugins.obsidian", function()
             error(error_message, 0)
         end
 
-        assert.equal(parent, vim.api.nvim_buf_get_name(0))
+        assert.equal(obsidian.normalize_path(parent), obsidian.normalize_path(vim.api.nvim_buf_get_name(0)))
 
         -- NOTE: Let asynchronous git-gutter work finish before the note buffer is wiped.
         vim.wait(200)
@@ -569,7 +572,7 @@ describe("modules.plugins.obsidian", function()
         vim.api.nvim_win_set_cursor(0, { 6, 3 })
         obsidian.go_to_definition()
 
-        assert.equal(first, vim.api.nvim_buf_get_name(0))
+        assert.equal(obsidian.normalize_path(first), obsidian.normalize_path(vim.api.nvim_buf_get_name(0)))
         vim.fn.delete(root, "rf")
     end)
 end)

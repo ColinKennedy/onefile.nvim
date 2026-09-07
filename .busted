@@ -1,3 +1,5 @@
+local is_windows = package.config:sub(1, 1) == "\\"
+
 return {
   _all = {
     coverage = false,
@@ -5,7 +7,8 @@ return {
     -- temporary Lua runner before the test helper loads. The runner is then
     -- deleted, causing the watcher callback to repeatedly fail with EPERM.
     -- Disable only that test-harness watcher before Busted executes its script.
-    lua = "nvim --clean -U NONE -N -i NONE --cmd \"lua pcall(function() vim.lsp._watchfiles._watchfunc = function() return function() end end end)\" -l",
+    lua = "nvim --clean -U NONE -N -i NONE --cmd \"lua vim._watch.watch = function() return function() end end\" -l",
+    output = is_windows and "plainTerminal" or "utfTerminal",
   },
   default = {
     helper = "./spec/minimal_init.lua",

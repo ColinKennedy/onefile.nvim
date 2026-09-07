@@ -310,7 +310,7 @@ describe("native dispatch", function()
             path .. ":2:1:found needle",
         })
 
-        assert.equal(path, vim.api.nvim_buf_get_name(0))
+        assert.equal(vim.fs.normalize(path), vim.fs.normalize(vim.api.nvim_buf_get_name(0)))
         assert.are.same({ 2, 0 }, vim.api.nvim_win_get_cursor(0))
 
         vim.fn.delete(path)

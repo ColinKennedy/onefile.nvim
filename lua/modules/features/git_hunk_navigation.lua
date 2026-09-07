@@ -86,6 +86,16 @@ local function _get_comparison_path(path)
     return path
 end
 
+--- Check whether two paths identify the same location across separator and
+--- Windows drive-letter case differences.
+---
+---@param left string The first path to compare.
+---@param right string The second path to compare.
+---@return boolean # Whether the normalized paths are equal.
+local function _paths_equal(left, right)
+    return _get_comparison_path(_normalize_path(left)) == _get_comparison_path(_normalize_path(right))
+end
+
 --- Get `path` relative to `repository`, if `path` is inside it.
 ---
 ---@param repository string The repository root.
@@ -392,7 +402,7 @@ local function _make_buffer_entries(repository, buffer, diffed_relative_paths, c
     local git_diff = require("modules.utilities.git_diff")
 
     git_diff.get_file_details(buffer, function(details)
-        if not details or details.repository ~= repository then
+        if not details or not _paths_equal(details.repository, repository) then
             callback({}, nil)
 
             return
@@ -772,7 +782,7 @@ local function _get_current_location(repository, callback)
     local git_diff = require("modules.utilities.git_diff")
 
     git_diff.get_file_details(0, function(details)
-        if not details or details.repository ~= repository then
+        if not details or not _paths_equal(details.repository, repository) then
             callback(nil, 1)
 
             return

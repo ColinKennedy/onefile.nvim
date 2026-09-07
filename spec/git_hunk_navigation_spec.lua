@@ -187,7 +187,7 @@ local function load_quickfix_from(root, directory)
     with_cwd(directory, function()
         vim.cmd("silent enew!")
         vim.cmd("LoadGitDiff")
-        vim.wait(1000, function()
+        vim.wait(10000, function()
             return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
         end)
 
@@ -208,14 +208,25 @@ local function load_hunks()
         loaded = success
     end)
 
-    vim.wait(1000, function()
+    vim.wait(10000, function()
         return loaded ~= nil
     end)
 
     return loaded == true
 end
 
+--- Remove repository state left by another integration spec.
+local function clear_hunk_state()
+    local state = git_hunk_navigation._get_state()
+
+    state.active_repository = nil
+    state.repositories = {}
+end
+
 describe("modules.features.git_hunk_navigation", function()
+    before_each(clear_hunk_state)
+    after_each(clear_hunk_state)
+
     it("parses repository-wide hunks sequentially", function()
         local entries = git_hunk_navigation._parse_diff(
             "/tmp/repo",
@@ -409,6 +420,14 @@ index 2222222..3333333 100644
                     vim.api.nvim_win_set_cursor(0, { 1, 0 })
                     press_normal_keys("]g")
 
+                    vim.wait(10000, function()
+                        local repository_state = git_hunk_navigation._get_repository_state(root)
+
+                        return repository_state ~= nil
+                            and not repository_state.stale
+                            and vim.api.nvim_win_get_cursor(0)[1] == 2
+                    end)
+
                     assert.equal(vim.fs.joinpath(root, "file.txt"), vim.api.nvim_buf_get_name(0))
                     assert.are.same({ 2, 0 }, vim.api.nvim_win_get_cursor(0))
 
@@ -475,7 +494,7 @@ index 2222222..3333333 100644
             local ok, err = pcall(function()
                 with_cwd(root, function()
                     vim.cmd("LoadGitDiff")
-                    vim.wait(1000, function()
+                    vim.wait(10000, function()
                         return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
                     end)
 

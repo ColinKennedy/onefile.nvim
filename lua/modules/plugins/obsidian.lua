@@ -206,7 +206,22 @@ end
 ---@param path string Some file or directory path.
 ---@return string # The normalized path.
 function _P.normalize_path(path)
-    return vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
+    local absolute = vim.fn.fnamemodify(path, ":p")
+    local resolved = vim.uv.fs_realpath(absolute) or absolute
+
+    return (vim.fs.normalize(resolved):gsub("\\", "/"))
+end
+
+--- Normalize path case for comparison on Windows drive-letter paths.
+---
+---@param path string An already normalized path.
+---@return string # A path suitable for identity and prefix comparisons.
+local function _get_comparison_path(path)
+    if path:match("^%a:") then
+        return path:lower()
+    end
+
+    return path
 end
 
 --- Get the Obsidian workspace root for `path`, if any.
@@ -215,13 +230,16 @@ end
 ---@return string? # The workspace root, if `path` is inside a vault workspace.
 function _P.get_workspace_root_for_path(path)
     local vault_root = _P.get_vaults_root_path()
-    local ok, relative = pcall(vim.fs.relpath, _P.normalize_path(vault_root), _P.normalize_path(path))
+    local normalized_root = _P.normalize_path(vault_root):gsub("/+$", "")
+    local normalized_path = _P.normalize_path(path)
+    local root_prefix = normalized_root .. "/"
 
-    if not ok or not relative or relative == ".." or relative:match("^%.%.[/\\]") then
+    if _get_comparison_path(normalized_path):sub(1, #root_prefix) ~= _get_comparison_path(root_prefix) then
         return nil
     end
 
-    local workspace_name = relative:match("^([^/\\]+)[/\\]")
+    local relative = normalized_path:sub(#root_prefix + 1)
+    local workspace_name = relative:match("^([^/]+)/")
 
     if not workspace_name then
         return nil
@@ -258,22 +276,12 @@ end
 
 --- Find all markdown files in `workspace_root` recursively.
 ---
---- CAVEAT: `vim.fn.glob()` on Windows does not reliably recurse through a `**`
---- pattern built from forward slashes, so the pattern is converted to native
---- separators before the call. Results are normalized back to forward
---- slashes afterward so every caller compares paths the same way regardless
---- of platform.
----
 ---@param workspace_root string The workspace to scan.
 ---@return string[] # Sorted, normalized markdown file paths.
 function _P.get_markdown_files(workspace_root)
-    local template = vim.fs.joinpath(workspace_root, "**", "*.md")
-
-    if vim.fn.has("win32") == 1 then
-        template = template:gsub("/", "\\")
-    end
-
-    local paths = vim.fn.glob(template, true, true)
+    local paths = vim.fs.find(function(name)
+        return name:lower():sub(-3) == ".md"
+    end, { limit = math.huge, path = workspace_root, type = "file" })
 
     for index, path in ipairs(paths) do
         paths[index] = _P.normalize_path(path)

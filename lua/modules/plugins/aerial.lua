@@ -1501,14 +1501,22 @@ end
 ---@param source_name string The source buffer path to find.
 ---@return integer? # The matching window, if visible.
 local function _find_visible_source_window(source_name)
-    local target = vim.fn.fnamemodify(source_name, ":p")
+    local target = vim.fn.fnamemodify(source_name, ":p"):gsub("\\", "/")
+
+    if target:match("^%a:") then
+        target = target:lower()
+    end
 
     for _, window in ipairs(vim.api.nvim_list_wins()) do
         if _is_regular_source_window(window) then
             local buffer = vim.api.nvim_win_get_buf(window)
 
             if not _is_aerial_buffer(buffer) then
-                local candidate = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buffer), ":p")
+                local candidate = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buffer), ":p"):gsub("\\", "/")
+
+                if candidate:match("^%a:") then
+                    candidate = candidate:lower()
+                end
 
                 if candidate == target then
                     return window
@@ -1624,6 +1632,13 @@ function M._serialize_session_restore()
 
     if #entries == 0 then
         return ""
+    end
+
+    -- Lua string serialization escapes Windows backslashes, which makes the
+    -- generated sidecar harder to inspect and compare with Neovim paths.
+    -- Windows accepts forward slashes, so persist one portable path form.
+    for _, entry in ipairs(entries) do
+        entry.source_name = entry.source_name:gsub("\\", "/")
     end
 
     return 'require("modules.plugins.aerial").restore_session(' .. vim.inspect(entries) .. ")"

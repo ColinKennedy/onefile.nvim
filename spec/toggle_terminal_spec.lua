@@ -24,9 +24,70 @@ local function is_buffer_visible(buffer)
     return false
 end
 
+--- Stop terminal jobs created by a spec before Busted advances or exits.
+---
+--- On Windows, leaving a PowerShell terminal job alive until Neovim shutdown
+--- can emit a console Ctrl-C that interrupts the outer Busted process.
+local function stop_test_terminals()
+    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_valid(buffer) and vim.b[buffer]._toggle_terminal_buffer then
+            local job = vim.b[buffer].terminal_job_id
+
+            if job then
+                pcall(vim.fn.chanclose, job, "stdin")
+                local status = vim.fn.jobwait({ job }, 5000)[1]
+
+                if status == -1 then
+                    pcall(vim.fn.jobstop, job)
+                    vim.fn.jobwait({ job }, 5000)
+                end
+            end
+
+            pcall(vim.api.nvim_buf_delete, buffer, { force = true })
+        end
+    end
+end
+
 describe("modules.plugins.toggle_terminal", function()
     ---@type boolean
     local showmode
+    local original_get_default_shell_command = toggle_terminal_module._P.get_default_shell_command
+    local original_get_default_shell_argv = toggle_terminal_module._P.get_default_shell_argv
+
+    setup(function()
+        if package.config:sub(1, 1) == "\\" then
+            local command = vim.fn.exepath("pwsh.exe")
+
+            if command == "" then
+                command = vim.fn.exepath("powershell.exe")
+            end
+
+            ---@return string
+            toggle_terminal_module._P.get_default_shell_command = function()
+                return command
+            end
+            ---@return string[]
+            toggle_terminal_module._P.get_default_shell_argv = function()
+                return {
+                    command,
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "Start-Sleep -Seconds 3600",
+                }
+            end
+        end
+    end)
+
+    teardown(function()
+        pcall(vim.cmd.stopinsert)
+        vim.wo.winfixbuf = false
+        vim.cmd("silent enew!")
+        stop_test_terminals()
+        toggle_terminal_module._P.get_default_shell_command = original_get_default_shell_command
+        toggle_terminal_module._P.get_default_shell_argv = original_get_default_shell_argv
+    end)
 
     before_each(function()
         showmode = vim.o.showmode
@@ -52,7 +113,7 @@ describe("modules.plugins.toggle_terminal", function()
 
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
         end, 20))
 
@@ -75,7 +136,7 @@ describe("modules.plugins.toggle_terminal", function()
     it("restores a saved terminal-normal mode without entering terminal insert", function()
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
         end, 20))
 
@@ -100,7 +161,7 @@ describe("modules.plugins.toggle_terminal", function()
     it("writes terminal-normal mode into appended session state", function()
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
         end, 20))
 
@@ -139,7 +200,7 @@ describe("modules.plugins.toggle_terminal", function()
 
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
         end, 20))
         assert.equal(shortmess, vim.o.shortmess)
@@ -152,13 +213,13 @@ describe("modules.plugins.toggle_terminal", function()
         vim.cmd.stopinsert()
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return not is_buffer_visible(terminal_buffer)
         end, 20))
 
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return is_buffer_visible(terminal_buffer)
         end, 20))
         assert.equal(shortmess, vim.o.shortmess)

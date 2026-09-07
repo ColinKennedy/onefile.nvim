@@ -467,9 +467,9 @@ describe("selector UI", function()
         press("<C-n>")
         assert.equal(1, render_count)
 
-        vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return render_count == 2
-        end)
+        end))
 
         local preview_window = get_selector_preview_window("markdown")
         local preview_buffer = vim.api.nvim_win_get_buf(preview_window)

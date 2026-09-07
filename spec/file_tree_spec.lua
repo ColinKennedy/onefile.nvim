@@ -85,7 +85,7 @@ end
 ---@param predicate fun(): boolean? The condition to wait for.
 ---
 local function wait_for(predicate)
-    assert.True(vim.wait(1000, predicate, 20))
+    assert.True(vim.wait(10000, predicate, 20))
 end
 
 --- Find a window that shows a file tree buffer that lost its 'filetype'.

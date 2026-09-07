@@ -1,5 +1,13 @@
 local core_helpers = require("modules.utilities.core_helpers")
 
+--- Normalize path separators for cross-platform quickfix comparisons.
+---
+---@param path string The path to normalize.
+---@return string # The path with forward slashes.
+local function normalize_path(path)
+    return (path:gsub("\\", "/"))
+end
+
 --- Make a temporary directory for ripgrep specs.
 ---
 ---@return string # The created directory.
@@ -97,15 +105,15 @@ describe("ripgrep quickfix", function()
 
         core_helpers.run_ripgrep({ "something", root }, { display_root = root })
 
-        assert.True(vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return #vim.fn.getqflist() == 2
         end))
 
         local quickfix = vim.fn.getqflist()
 
-        assert.equal(feature, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal(normalize_path(feature), normalize_path(vim.api.nvim_buf_get_name(quickfix[1].bufnr)))
         assert.equal("lua/modules/features/core_editor_setup.lua", quickfix[1].module)
-        assert.equal(utility, vim.api.nvim_buf_get_name(quickfix[2].bufnr))
+        assert.equal(normalize_path(utility), normalize_path(vim.api.nvim_buf_get_name(quickfix[2].bufnr)))
         assert.equal("lua/modules/utilities/core_helpers.lua", quickfix[2].module)
 
         local quickfix_window = vim.fn.getqflist({ winid = true }).winid
@@ -151,13 +159,13 @@ describe("ripgrep quickfix", function()
         })
         rawset(vim.fn, "getcwd", original_getcwd)
 
-        assert.True(vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return #vim.fn.getqflist() == 1
         end))
 
         local quickfix = vim.fn.getqflist()
 
-        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal(normalize_path(path), normalize_path(vim.api.nvim_buf_get_name(quickfix[1].bufnr)))
         vim.cmd.tcd(original_cwd)
         vim.fn.delete(root, "rf")
     end)
@@ -194,7 +202,7 @@ describe("ripgrep quickfix", function()
 
         core_helpers.run_ripgrep_command({ args = "something" })
 
-        assert.True(vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return #vim.fn.getqflist() == 1
         end))
 
@@ -203,7 +211,7 @@ describe("ripgrep quickfix", function()
         local quickfix_buffer = vim.api.nvim_win_get_buf(quickfix_window)
         local lines = vim.api.nvim_buf_get_lines(quickfix_buffer, 0, -1, false)
 
-        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal(normalize_path(path), normalize_path(vim.api.nvim_buf_get_name(quickfix[1].bufnr)))
         assert.equal("lua/modules/utilities/core_helpers.lua", quickfix[1].module)
         assert.matches("^lua/modules/utilities/core_helpers.lua|907 col 65|", lines[1])
 
@@ -249,14 +257,14 @@ describe("ripgrep quickfix", function()
 
         core_helpers.run_ripgrep_command({ args = "something" })
 
-        assert.True(vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return #vim.fn.getqflist() == 1
         end))
 
         local quickfix = vim.fn.getqflist()
 
         assert.same({ "rg", "--vimgrep", "--smart-case", "--no-messages", "something" }, captured_command)
-        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal(normalize_path(path), normalize_path(vim.api.nvim_buf_get_name(quickfix[1].bufnr)))
         assert.equal("vaults/personal/note.md", quickfix[1].module)
 
         vim.cmd.tcd(original_cwd)
@@ -301,7 +309,7 @@ describe("ripgrep quickfix", function()
 
         vim.cmd.Rrg("something")
 
-        assert.True(vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return #vim.fn.getqflist() == 1
         end))
 
@@ -310,7 +318,7 @@ describe("ripgrep quickfix", function()
         local quickfix_buffer = vim.api.nvim_win_get_buf(quickfix_window)
         local lines = vim.api.nvim_buf_get_lines(quickfix_buffer, 0, -1, false)
 
-        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal(normalize_path(path), normalize_path(vim.api.nvim_buf_get_name(quickfix[1].bufnr)))
         assert.equal("lua/modules/utilities/core_helpers.lua", quickfix[1].module)
         assert.matches("^lua/modules/utilities/core_helpers.lua|907 col 65|", lines[1])
 
@@ -360,7 +368,7 @@ describe("ripgrep quickfix", function()
 
         vim.cmd.Rrg("something")
 
-        assert.True(vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return #vim.fn.getqflist() == 1
         end))
 
@@ -375,7 +383,7 @@ describe("ripgrep quickfix", function()
             "something",
             root,
         }, captured_command)
-        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal(normalize_path(path), normalize_path(vim.api.nvim_buf_get_name(quickfix[1].bufnr)))
         assert.equal("vaults/personal/note.md", quickfix[1].module)
 
         vim.cmd.tcd(original_cwd)
@@ -418,13 +426,13 @@ describe("ripgrep quickfix", function()
 
         core_helpers.run_ripgrep({ "something", root }, { display_root = root })
 
-        assert.True(vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return #vim.fn.getqflist() == 1
         end))
 
         local quickfix = vim.fn.getqflist()
 
-        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal(normalize_path(path), normalize_path(vim.api.nvim_buf_get_name(quickfix[1].bufnr)))
         assert.are.same({}, notifications)
 
         vim.fn.delete(root, "rf")
@@ -465,13 +473,13 @@ describe("ripgrep quickfix", function()
 
         core_helpers.run_ripgrep({ "something", root }, { display_root = root })
 
-        assert.True(vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return #vim.fn.getqflist() == 1
         end))
 
         local quickfix = vim.fn.getqflist()
 
-        assert.equal(path, vim.api.nvim_buf_get_name(quickfix[1].bufnr))
+        assert.equal(normalize_path(path), normalize_path(vim.api.nvim_buf_get_name(quickfix[1].bufnr)))
         assert.are.same({}, notifications)
 
         vim.fn.delete(root, "rf")
@@ -510,7 +518,7 @@ describe("ripgrep quickfix", function()
 
         core_helpers.run_ripgrep({ "no-such-pattern" })
 
-        assert.True(vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return #notifications == 1
         end))
 

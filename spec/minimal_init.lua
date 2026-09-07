@@ -10,6 +10,10 @@ local _PROJECT_ROOT_DIRECTORY = vim.fs.dirname(_CURRENT_ABSOLUTE_DIRECTORY)
 -- before the process exits, which can drop the trailing output entirely.
 io.stdout:setvbuf("no")
 
+-- Busted invokes Neovim differently across platforms, so `_G.arg[0]` is not
+-- a reliable way for the configuration to recognize the test harness.
+vim.g.my_is_running_busted = true
+
 -- NOTE: `toggle_terminal` specs open a real terminal job. Without this, they
 -- fall back to the user's interactive shell (e.g. a bare, banner-printing
 -- `cmd.exe` on Windows CI runners), which sits waiting for input and can

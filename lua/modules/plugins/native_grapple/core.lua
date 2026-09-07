@@ -208,7 +208,15 @@ function _P.watch_head(context)
     end
 
     local watch_directory = vim.uv.os_uname().sysname == "Windows_NT"
-    local watch_path = watch_directory and context.git_dir or context.head_path
+    local watch_path = assert(context.head_path)
+
+    if watch_directory then
+        if not context.git_dir then
+            return
+        end
+
+        watch_path = assert(context.git_dir)
+    end
 
     local ok = watcher:start(watch_path, {}, function(_, filename)
         if not watch_directory or filename == nil or filename == "HEAD" then

@@ -144,6 +144,10 @@ end
 ---
 ---@return boolean # If this process is running Busted, return `true`.
 function _P.is_running_busted()
+    if vim.g.my_is_running_busted then
+        return true
+    end
+
     local arguments = _G.arg or {}
 
     return tostring(arguments[0] or ""):match("busted") ~= nil

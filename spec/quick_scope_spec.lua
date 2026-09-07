@@ -3,6 +3,7 @@ local quick_scope = require("modules.plugins.quick_scope")
 --- Save a global variable and return its current value.
 ---
 ---@param name string The global variable name without `g:`.
+-- typer: ignore-next-line[disallowed-any]
 ---@return any # The previous value.
 local function save_global(name)
     return vim.g[name]
@@ -11,6 +12,7 @@ end
 --- Restore a global variable to a previous value.
 ---
 ---@param name string The global variable name without `g:`.
+-- typer: ignore-next-line[disallowed-any]
 ---@param value any The value to restore.
 local function restore_global(name, value)
     vim.g[name] = value
@@ -35,7 +37,7 @@ end
 
 --- Get the columns from a match result.
 ---
----@param match table The match returned by `getmatches()`.
+---@param match vim.fn.getmatches.ret.item The match returned by `getmatches()`.
 ---@return integer[] # Sorted 1-or-more columns.
 local function get_match_columns(match)
     ---@type integer[]
@@ -53,7 +55,7 @@ local function get_match_columns(match)
 end
 
 describe("quick scope", function()
-    ---@type table<string, any>
+    ---@type table<string, any>  -- typer: ignore[disallowed-any]
     local saved_options = {}
 
     before_each(function()
@@ -122,20 +124,20 @@ describe("quick scope", function()
             restore_global(option, value)
         end
 
-        quick_scope.unhighlight_line()
+        quick_scope._unhighlight_line()
     end)
 
     it("chooses one cheap target per word from the cursor outward", function()
         local line = 'items = [item.split("_")[0] for item in os.listdir(directory)]'
 
-        local highlights = quick_scope.get_line_highlights(line, 1, 11)
+        local highlights = quick_scope._get_line_highlights(line, 1, 11)
 
         assert.are.same({ 2, 15, 26, 29, 39, 48, 56 }, get_columns(highlights.primary))
         assert.are.same({ 33, 41 }, get_columns(highlights.secondary))
     end)
 
     it("excludes the current word from highlights", function()
-        local highlights = quick_scope.get_line_highlights('items = [item.split("_")[0]', 1, 11)
+        local highlights = quick_scope._get_line_highlights('items = [item.split("_")[0]', 1, 11)
 
         assert.is_false(vim.tbl_contains(get_columns(highlights.primary), 10))
         assert.is_false(vim.tbl_contains(get_columns(highlights.primary), 11))
@@ -148,7 +150,7 @@ describe("quick scope", function()
     end)
 
     it("does not highlight syntax punctuation", function()
-        local highlights = quick_scope.get_line_highlights('items = [item.split("_")[0]', 1, 11)
+        local highlights = quick_scope._get_line_highlights('items = [item.split("_")[0]', 1, 11)
         local primary_columns = get_columns(highlights.primary)
 
         assert.is_false(vim.tbl_contains(primary_columns, 14))
@@ -161,7 +163,7 @@ describe("quick scope", function()
         vim.g.qs_second_highlight = 0
 
         local line = 'items = [item.split("_")[0] for item in os.listdir(directory)]'
-        local highlights = quick_scope.get_line_highlights(line, 1, 11)
+        local highlights = quick_scope._get_line_highlights(line, 1, 11)
 
         assert.are.same({}, highlights.secondary)
     end)
@@ -169,7 +171,7 @@ describe("quick scope", function()
     it("does not compute highlights on overlong lines", function()
         vim.g.qs_max_chars = 3
 
-        local highlights = quick_scope.get_line_highlights("abc1", 1, 1)
+        local highlights = quick_scope._get_line_highlights("abc1", 1, 1)
 
         assert.are.same({}, highlights.primary)
         assert.are.same({}, highlights.secondary)
@@ -182,7 +184,7 @@ describe("quick scope", function()
         vim.api.nvim_buf_set_lines(buffer, 0, -1, false, { line })
         vim.api.nvim_win_set_cursor(0, { 1, 10 })
 
-        quick_scope.highlight_line()
+        quick_scope._highlight_line()
 
         local matches = vim.fn.getmatches()
 
@@ -201,7 +203,7 @@ describe("quick scope", function()
         vim.api.nvim_open_term(buffer, {})
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
 
-        quick_scope.highlight_line()
+        quick_scope._highlight_line()
 
         local matches = vim.fn.getmatches()
 

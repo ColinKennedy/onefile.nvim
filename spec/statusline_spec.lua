@@ -14,16 +14,17 @@ local function contains(text, pattern)
 end
 
 describe("modules.features.statusline", function()
+    ---@type fun(path: string?): string
     local original_get_statusline
 
     before_each(function()
         original_get_statusline = git_status.get_statusline
-        core_helpers.delete_all_bookmarks()
+        core_helpers._delete_all_bookmarks()
     end)
 
     after_each(function()
         git_status.get_statusline = original_get_statusline
-        core_helpers.delete_all_bookmarks()
+        core_helpers._delete_all_bookmarks()
     end)
 
     it("does not render git-detail or grapple separators when both are empty", function()
@@ -69,25 +70,25 @@ describe("modules.features.statusline", function()
     end)
 
     it("elides long hyphenated ticket branch names", function()
-        local branch = core_editor_setup.elide_git_branch_name("ASC-1234-some_really_long_description_here_003")
+        local branch = core_editor_setup._elide_git_branch_name("ASC-1234-some_really_long_description_here_003")
 
         assert.equal("ASC-1234-..._here_003", branch)
     end)
 
     it("elides long underscored ticket branch names", function()
-        local branch = core_editor_setup.elide_git_branch_name("ABC-1234_some_really_long_description_here_003")
+        local branch = core_editor_setup._elide_git_branch_name("ABC-1234_some_really_long_description_here_003")
 
         assert.equal("ABC-1234_..._here_003", branch)
     end)
 
     it("keeps long non-ticket branch names unchanged", function()
-        local branch = core_editor_setup.elide_git_branch_name("some_really_long_description_here_003")
+        local branch = core_editor_setup._elide_git_branch_name("some_really_long_description_here_003")
 
         assert.equal("some_really_long_description_here_003", branch)
     end)
 
     it("keeps short ticket branch names unchanged", function()
-        local branch = core_editor_setup.elide_git_branch_name("ASC-1234-short")
+        local branch = core_editor_setup._elide_git_branch_name("ASC-1234-short")
 
         assert.equal("ASC-1234-short", branch)
     end)

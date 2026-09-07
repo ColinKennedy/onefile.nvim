@@ -4,7 +4,10 @@
 --- Seriously, why isn't this Neovim's default behavior?
 ---
 
+---@class _my.reflow_visual_selection
 local M = {}
+
+---@class _my.reflow_visual_selection._P
 local _P = {}
 
 --- Get the selected range from the current visual selection.
@@ -84,7 +87,7 @@ end
 --- Reflow the visual selection and make `gv` select the reflowed selection.
 ---
 ---@param command "gq"|"gw" The visual-mode formatting command to run.
-function M.reflow_visual_selection(command)
+function _P.reflow_visual_selection(command)
     local start_line, start_column, end_line = _P.get_visual_range()
     local line_count_before = vim.api.nvim_buf_line_count(0)
 
@@ -97,19 +100,20 @@ function M.reflow_visual_selection(command)
 end
 
 vim.keymap.set("x", "gq", function()
-    M.reflow_visual_selection("gq")
+    _P.reflow_visual_selection("gq")
 end, {
     desc = "Reflow text and make gv reselect the reflowed selection.",
     silent = true,
 })
 
 vim.keymap.set("x", "gw", function()
-    M.reflow_visual_selection("gw")
+    _P.reflow_visual_selection("gw")
 end, {
     desc = "Reflow text without moving the cursor and make gv reselect the reflowed selection.",
     silent = true,
 })
 
+---@type _my.reflow_visual_selection._P
 M._P = _P
 
 return M

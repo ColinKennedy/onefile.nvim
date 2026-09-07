@@ -1,5 +1,7 @@
 --- Define insert-mode auto-pair mappings for brackets, quotes, and backspace cleanup.
 
+local M = {}
+
 --- Whenever `character` is typed, check if we want to move the cursor right instead.
 ---
 --- If `character` like `")"` is already in the buffer and is the cursor is
@@ -87,6 +89,54 @@ for _, character in ipairs(_CLOSING_PAIRS) do
     _define_close_mapping(character)
 end
 
+--- Split an empty pair across three lines and keep the cursor on the inner line.
+---
+---@return string? # The keys to feed when the cursor is not inside an empty pair.
+---
+function M.split_pair_on_enter()
+    local line = vim.api.nvim_get_current_line()
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local row, column = cursor[1], cursor[2]
+    local previous_character = line:sub(column, column)
+    local next_character = line:sub(column + 1, column + 1)
+
+    if _ASYMMETRIC_PAIRS[previous_character] ~= next_character then
+        return "<CR>"
+    end
+
+    local base_indent = line:match("^%s*") or ""
+    local shiftwidth = math.max(vim.fn.shiftwidth(), 1)
+    local inner_indent = base_indent .. string.rep(" ", shiftwidth)
+    local before_cursor = line:sub(1, column)
+    local after_cursor = line:sub(column + 1)
+
+    vim.api.nvim_buf_set_lines(0, row - 1, row, false, {
+        before_cursor,
+        inner_indent,
+        base_indent .. after_cursor,
+    })
+    vim.api.nvim_win_set_cursor(0, { row + 1, #inner_indent })
+end
+
+---@return string # The keys to feed after handling <CR>.
+local function _split_pair_on_enter()
+    local line = vim.api.nvim_get_current_line()
+    local column = vim.api.nvim_win_get_cursor(0)[2]
+    local previous_character = line:sub(column, column)
+    local next_character = line:sub(column + 1, column + 1)
+
+    if _ASYMMETRIC_PAIRS[previous_character] ~= next_character then
+        return "<CR>"
+    end
+
+    return "<Cmd>lua require('modules.features.auto_pairs').split_pair_on_enter()<CR>"
+end
+
+vim.keymap.set("i", "<CR>", _split_pair_on_enter, {
+    expr = true,
+    desc = "Split an empty pair across three lines.",
+})
+
 vim.keymap.set("i", "<BS>", function()
     local line = vim.api.nvim_get_current_line()
     local column = vim.api.nvim_win_get_cursor(0)[2]
@@ -101,3 +151,5 @@ vim.keymap.set("i", "<BS>", function()
 
     return "<BS>"
 end, { expr = true, desc = "Delete the open and close pair characters at once." })
+
+return M

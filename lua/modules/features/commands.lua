@@ -5,6 +5,43 @@ local _REPOSITORY_ROOT = { ".git" }
 local _REPOSITORY_OR_PROJECT_ROOT = vim.deepcopy(_REPOSITORY_ROOT)
 table.insert(_REPOSITORY_OR_PROJECT_ROOT, "pyproject.toml")
 
+--- Get the current Git repository root.
+---
+---@return string? # The Git repository root, if one was found.
+local function _get_git_repository_root()
+    local core_helpers = require("modules.utilities.core_helpers")
+    local result = vim.system(
+        { core_helpers.GIT_EXECUTABLE, "-C", vim.fn.getcwd(), "rev-parse", "--show-toplevel" },
+        { text = true }
+    ):wait()
+
+    if result.code ~= 0 then
+        return nil
+    end
+
+    local root = vim.trim(result.stdout or "")
+
+    if root == "" then
+        return nil
+    end
+
+    return root
+end
+
+--- Change Neovim's directory to the current Git repository root.
+local function _cd_to_git_repository_root()
+    local root = _get_git_repository_root()
+
+    if not root then
+        vim.notify("No Git repository root was found.", vim.log.levels.ERROR)
+
+        return
+    end
+
+    vim.cmd("silent cd " .. vim.fn.fnameescape(root))
+    vim.notify(string.format('cd\'ed to "%s"', root), vim.log.levels.INFO)
+end
+
 --- Notify that `command` cannot be run for the current buffer.
 ---
 ---@param command string The command name that failed.
@@ -107,7 +144,10 @@ local function _move_current_file(options)
 
     local ok, error_message = pcall(function()
         vim.api.nvim_buf_call(buffer, function()
-            vim.cmd("silent keepalt saveas! " .. vim.fn.fnameescape(target))
+            require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
+                vim.api.nvim_buf_set_name(buffer, target)
+                vim.cmd("silent! keepalt write!")
+            end)
         end)
     end)
 
@@ -120,6 +160,72 @@ local function _move_current_file(options)
     if vim.fn.delete(source) ~= 0 then
         _notify_buffer_command_error("Move", string.format('could not delete "%s".', source))
     end
+end
+
+--- Close non-terminal sibling windows and delete every unprotected buffer.
+---
+---@param options vim.api.keyset.create_user_command.command_args The command options.
+local function _buffer_only(options)
+    local include_terminals = false
+
+    if options.args ~= "" then
+        if options.args ~= "--all" then
+            vim.notify(string.format('Unknown BufferOnly argument "%s".', options.args), vim.log.levels.ERROR)
+
+            return
+        end
+
+        include_terminals = true
+    end
+
+    local current_window = vim.api.nvim_get_current_win()
+    local current_buffer = vim.api.nvim_get_current_buf()
+    ---@type table<integer, boolean>
+    local protected_buffers = { [current_buffer] = true }
+
+    for _, window in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        local buffer = vim.api.nvim_win_get_buf(window)
+        local is_terminal = vim.bo[buffer].buftype == "terminal"
+
+        if window ~= current_window then
+            if is_terminal then
+                protected_buffers[buffer] = true
+            else
+                pcall(vim.api.nvim_win_close, window, true)
+            end
+        end
+    end
+
+    if not include_terminals then
+        for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].buftype == "terminal" then
+                protected_buffers[buffer] = true
+            end
+        end
+    end
+
+    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].buflisted and not protected_buffers[buffer] then
+            local is_terminal = vim.bo[buffer].buftype == "terminal"
+            local ok, error_message = pcall(vim.api.nvim_buf_delete, buffer, { force = is_terminal })
+
+            if not ok then
+                vim.notify(string.format("Could not delete buffer %d: %s", buffer, error_message), vim.log.levels.WARN)
+            end
+        end
+    end
+end
+
+--- Complete :BufferOnly arguments.
+---
+---@param argument_lead string The current argument fragment.
+---@return string[] # Matching arguments.
+local function _complete_buffer_only(argument_lead)
+    if ("--all"):sub(1, #argument_lead) == argument_lead then
+        return { "--all" }
+    end
+
+    return {}
 end
 
 --- Send command-line text to an adjacent tmux pane.
@@ -167,17 +273,17 @@ end
 ---
 ---@param directory string The path on-disk to start searching from within.
 ---@param options {fargs: string[]} User-provided arguments to add to the `rg` command.
----
 local function _run_rg(directory, options)
     ---@type string[]
-    local command = { "Rg" }
+    local command = {}
     vim.list_extend(command, options.fargs)
     table.insert(command, directory)
-    vim.cmd(vim.fn.join(command, " "))
+    require("modules.utilities.core_helpers").run_ripgrep(command, { display_root = directory })
 end
 
 vim.api.nvim_create_user_command("Crg", function(options)
     local path = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
+    ---@type string
     local directory
 
     if path == "" then
@@ -221,6 +327,15 @@ end, {
 vim.api.nvim_create_user_command("Pcd", function()
     require("modules.utilities.core_helpers").cd_to_parent_project_root()
 end, { nargs = 0, desc = "From the [P]roject, [c]hange [d]irectory." })
+vim.api.nvim_create_user_command("Gcd", _cd_to_git_repository_root, {
+    desc = "From the [G]it repository, [c]hange [d]irectory.",
+    nargs = 0,
+})
+vim.api.nvim_create_user_command("BufferOnly", _buffer_only, {
+    complete = _complete_buffer_only,
+    desc = ":only, but window-aware",
+    nargs = "?",
+})
 vim.api.nvim_create_user_command("Delete", _delete_current_file, {
     nargs = 0,
     desc = "Delete the current file and its buffer.",

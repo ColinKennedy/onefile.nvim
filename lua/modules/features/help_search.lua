@@ -13,10 +13,11 @@ function _P.get_tag_files(paths)
 
     for _, path in ipairs(paths) do
         local name = vim.fs.basename(path)
+        ---@type string?
         local found_language
 
         if name == "tags" then
-            found_language = require("modules.utilities.core_helpers")._ENGLISH_LANGUAGE
+            found_language = require("modules.utilities.core_helpers").ENGLISH_LANGUAGE
             output[found_language] = (output[found_language] or {})
             table.insert(output[found_language], path)
         elseif name:match("^tags%-..$") then
@@ -83,7 +84,7 @@ function _P.select_helptag(vim_options)
     ---@type string[]
     local options = {}
 
-    for _, path in ipairs(tag_paths[core_helpers._ENGLISH_LANGUAGE]) do
+    for _, path in ipairs(tag_paths[core_helpers.ENGLISH_LANGUAGE]) do
         _read_file_lines_async(path, function(lines)
             for _, line in ipairs(lines) do
                 if line:match("%s+") then
@@ -93,6 +94,7 @@ function _P.select_helptag(vim_options)
         end)
     end
 
+    ---@type string?
     local input
 
     if vim_options.args ~= "" then

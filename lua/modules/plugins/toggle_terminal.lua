@@ -1,6 +1,9 @@
 --- A lightweight "toggleterminal". Use <space>T to open and close it.
 
+---@class _my.toggle_terminal
 local M = {}
+
+---@class _my.toggle_terminal._P
 local _P = {}
 
 ---@type table<integer, _my.ToggleTerminal>
@@ -19,6 +22,7 @@ local _NEXT_NUMBER = 0
 local _STARTING_MODE = _Mode.insert -- NOTE: Start off in insert mode
 
 local _IS_VIM_ENTERED = false
+---@type string?
 local _DEFAULT_SHELL_COMMAND = nil
 local _TERMINAL_MODE_VARIABLE = "_toggle_terminal_mode"
 ---@type table<string, string>
@@ -89,10 +93,65 @@ local function _is_neovim_command(command)
     return name == "nvim" or name == "nvim.exe" or name == "neovim" or name == "neovim.exe"
 end
 
+--- Parse a command string into argv without asking a shell to evaluate it.
+---
+---@param text string The raw command text.
+---@return string[] # Parsed command arguments.
+function _P.parse_argv(text)
+    ---@type string[]
+    local arguments = {}
+    ---@type string[]
+    local current = {}
+    ---@type string?
+    local quote = nil
+    local escaping = false
+
+    local index = 1
+
+    while index <= #text do
+        local character = text:sub(index, index)
+        local next_character = text:sub(index + 1, index + 1)
+
+        if escaping then
+            table.insert(current, character)
+            escaping = false
+        elseif character == "\\" and (next_character == "\\" or next_character == '"' or next_character == "'") then
+            escaping = true
+        elseif quote ~= nil then
+            if character == quote then
+                quote = nil
+            else
+                table.insert(current, character)
+            end
+        elseif character == '"' or character == "'" then
+            quote = character
+        elseif character:match("%s") then
+            if #current > 0 then
+                table.insert(arguments, table.concat(current))
+                current = {}
+            end
+        else
+            table.insert(current, character)
+        end
+
+        index = index + 1
+    end
+
+    if escaping then
+        table.insert(current, "\\")
+    end
+
+    if #current > 0 then
+        table.insert(arguments, table.concat(current))
+    end
+
+    return arguments
+end
+
 --- Get the shell command to use for toggleterminal buffers.
 ---
 ---@return string
-local function _get_default_shell_command()
+function _P.get_default_shell_command()
     if _DEFAULT_SHELL_COMMAND then
         return _DEFAULT_SHELL_COMMAND
     end
@@ -118,6 +177,25 @@ local function _get_default_shell_command()
     _DEFAULT_SHELL_COMMAND = shell
 
     return _DEFAULT_SHELL_COMMAND
+end
+
+--- Get the shell argv to use for toggleterminal buffers.
+---
+---@return string[] # The argv-style shell command.
+function _P.get_default_shell_argv()
+    local command = _P.get_default_shell_command()
+
+    if vim.fn.executable(command) == 1 then
+        return { command }
+    end
+
+    local argv = _P.parse_argv(command)
+
+    if #argv == 0 then
+        return { _is_windows() and (os.getenv("ComSpec") or "cmd.exe") or (os.getenv("SHELL") or "sh") }
+    end
+
+    return argv
 end
 
 --- Suggest a new terminal name, starting with `name`, that is unique.
@@ -148,7 +226,7 @@ end
 
 --- Check whether `mode` is a tracked toggle-terminal mode.
 ---
----@param mode any The mode to inspect.
+---@param mode string? The mode to inspect. Unset or unrecognized values are invalid.
 ---@return boolean # Whether `mode` can be stored for a toggle terminal.
 local function _is_valid_mode(mode)
     return mode == _Mode.insert or mode == _Mode.normal or mode == _Mode.unknown
@@ -258,7 +336,8 @@ end
 local function _create_terminal(buffer)
     if not buffer then
         local terminal = require("modules.utilities.core_helpers").with_file_messages_suppressed(function()
-            local command = _get_default_shell_command()
+            local command = _P.get_default_shell_command()
+            local argv = _P.get_default_shell_argv()
             local terminal_name = _suggest_name("term://" .. command)
 
             buffer = vim.api.nvim_create_buf(false, true)
@@ -268,11 +347,11 @@ local function _create_terminal(buffer)
             vim.api.nvim_buf_set_name(buffer, terminal_name)
             _initialize_terminal_buffer(buffer)
 
-            local job = vim.fn.jobstart(command, { term = true })
+            local job = vim.fn.jobstart(argv, { term = true })
 
             if job <= 0 then
                 vim.api.nvim_buf_delete(buffer, { force = true })
-                error(string.format('Failed to start terminal shell "%s".', command), 0)
+                error(string.format('Failed to start terminal shell "%s".', table.concat(argv, " ")), 0)
             end
 
             vim.api.nvim_buf_set_name(buffer, terminal_name)
@@ -389,7 +468,7 @@ end
 --- Get all toggle-terminal modes that should be written to Session.vim.
 ---
 ---@return table<string, string> # Terminal buffer names to saved modes.
-function M.get_session_modes()
+function _P.get_session_modes()
     if vim.bo.buftype == "terminal" then
         _handle_term_leave(vim.fn.bufnr())
     end
@@ -412,7 +491,7 @@ end
 ---
 ---@param session string The session file to update.
 function M.append_session_state(session)
-    local modes = M.get_session_modes()
+    local modes = _P.get_session_modes()
 
     if next(modes) == nil then
         return
@@ -554,11 +633,13 @@ function _P.setup_commands()
     vim.api.nvim_create_user_command(
         "ToggleTerminal",
         _toggle_terminal,
-        { desc = "Open / Close a terminal at the bottom of the tab", nargs = 0 }
+        { desc = "Toggle Terminal, in a split at the bottom of the current tab.", nargs = 0 }
     )
 end
 
 _P.setup_autocommands()
+_P.setup_commands()
+
 vim.keymap.set(
     "n",
     "<space>T",
@@ -566,6 +647,7 @@ vim.keymap.set(
     { desc = "Toggle [T]erminal, in a split at the bottom of the current tab." }
 )
 
+---@type _my.toggle_terminal._P
 M._P = _P
 
 return M

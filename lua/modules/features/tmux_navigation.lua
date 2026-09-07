@@ -1,5 +1,6 @@
 --- Move between Neovim windows and adjacent tmux panes with the same keys.
 
+local M = {}
 local _P = {}
 
 ---@alias _my.tmux.DirectionKey "h" | "j" | "k" | "l"
@@ -7,9 +8,7 @@ local _P = {}
 
 ---@class _my.tmux.DirectionDetails
 ---@field description _my.tmux.DirectionName
----@field edge _my.tmux.DirectionName|"bottom"|"top"
 ---@field resize_amount integer
----@field resize_direction _my.tmux.DirectionName
 ---@field send_target string
 ---@field tmux string
 ---@field tmux_resize_amount integer
@@ -21,36 +20,28 @@ local _DIRECTION_NAMES = { "left", "down", "up", "right" }
 local _DIRECTIONS = {
     h = {
         description = "left",
-        edge = "left",
         resize_amount = 5,
-        resize_direction = "left",
         send_target = "{left-of}",
         tmux = "L",
         tmux_resize_amount = 3,
     },
     j = {
         description = "down",
-        edge = "bottom",
         resize_amount = 2,
-        resize_direction = "down",
         send_target = "{down-of}",
         tmux = "D",
         tmux_resize_amount = 3,
     },
     k = {
         description = "up",
-        edge = "top",
         resize_amount = 2,
-        resize_direction = "up",
         send_target = "{up-of}",
         tmux = "U",
         tmux_resize_amount = 3,
     },
     l = {
         description = "right",
-        edge = "right",
         resize_amount = 5,
-        resize_direction = "right",
         send_target = "{right-of}",
         tmux = "R",
         tmux_resize_amount = 3,
@@ -92,45 +83,6 @@ local function _leave_terminal_mode_if_needed()
         require("modules.plugins.toggle_terminal").save_terminal_state()
     end)
     vim.cmd.stopinsert()
-end
-
----@return _my.window.Edge[]?
-local function _get_current_window_edges()
-    local window = vim.api.nvim_get_current_win()
-    local screen_width = vim.o.columns
-    local screen_height = vim.o.lines - vim.o.cmdheight
-    local configuration = vim.api.nvim_win_get_config(window)
-
-    if not configuration.relative or configuration.relative ~= "" then
-        return nil
-    end
-
-    local position = vim.api.nvim_win_get_position(window)
-    local row = position[1]
-    local column = position[2]
-    local height = vim.api.nvim_win_get_height(window)
-    local width = vim.api.nvim_win_get_width(window)
-
-    ---@type _my.window.Edge[]
-    local edges = {}
-
-    if row == 0 then
-        table.insert(edges, "top")
-    end
-
-    if (row + height + 1) == screen_height then
-        table.insert(edges, "bottom")
-    end
-
-    if column == 0 then
-        table.insert(edges, "left")
-    end
-
-    if (column + width) == screen_width then
-        table.insert(edges, "right")
-    end
-
-    return edges
 end
 
 --- Split text into tmux `send-keys` arguments.
@@ -192,42 +144,61 @@ local function _notify_send_tmux_error(message)
     vim.notify(":SendTmux " .. message, vim.log.levels.ERROR)
 end
 
----@param direction "h" | "j" | "k" | "l"
----@return boolean
-local function _is_on_directional_edge(direction)
-    local edges = _get_current_window_edges()
+--- The tmux format that reports whether the active pane touches an edge.
+---
+---@type table<_my.tmux.DirectionKey, string>
+local _PANE_EDGE_FORMAT = {
+    h = "#{pane_at_left}",
+    j = "#{pane_at_bottom}",
+    k = "#{pane_at_top}",
+    l = "#{pane_at_right}",
+}
 
-    if not edges then
+--- Check whether the current window has a Neovim split in `direction`.
+---
+---@param direction _my.tmux.DirectionKey
+---@return boolean
+local function _has_split_in_direction(direction)
+    return vim.fn.winnr(direction) ~= vim.fn.winnr()
+end
+
+--- Check whether a tmux pane sits next to Neovim in `direction`.
+---
+--- `#{pane_at_<edge>}` is `1` when the active tmux pane is flush against that
+--- edge of its window (so nothing is beyond it) and `0` when another pane is
+--- adjacent. We only consult tmux when Neovim itself has no split to resize in
+--- that direction, which is what lets alt-j resize a tmux pane sitting below the
+--- bottom-most split instead of resizing Neovim.
+---
+---@param direction _my.tmux.DirectionKey
+---@return boolean
+local function _has_adjacent_tmux_pane(direction)
+    if not require("modules.utilities.core_helpers").in_tmux() then
         return false
     end
 
-    return vim.tbl_contains(edges, _DIRECTIONS[direction].edge)
+    local output = vim.fn.system({ "tmux", "display-message", "-p", "-F", _PANE_EDGE_FORMAT[direction] })
+
+    return vim.trim(output) == "0"
 end
 
----@param direction "h" | "j" | "k" | "l"
----@return boolean
-local function _is_on_tmux_resize_edge(direction)
-    local edges = _get_current_window_edges()
-
-    if not edges then
-        return false
+--- Describe what borders the current window on `direction`'s side.
+---
+--- Neovim splits take priority; tmux is only consulted when there is no split,
+--- so a normal grid cell never shells out to tmux.
+---
+---@param direction _my.tmux.DirectionKey
+---@return "split" | "pane" | nil
+local function _neighbor_kind(direction)
+    if _has_split_in_direction(direction) then
+        return "split"
     end
 
-    if direction == "j" or direction == "k" then
-        return vim.tbl_contains(edges, "bottom")
+    if _has_adjacent_tmux_pane(direction) then
+        return "pane"
     end
 
-    return vim.tbl_contains(edges, "right")
-end
-
----@param direction "h" | "j" | "k" | "l"
----@return integer
-local function _get_resize_dimension(direction)
-    if direction == "j" or direction == "k" then
-        return vim.api.nvim_win_get_height(0)
-    end
-
-    return vim.api.nvim_win_get_width(0)
+    return nil
 end
 
 ---@param direction "h" | "j" | "k" | "l"
@@ -245,27 +216,45 @@ function _P.move(direction)
 end
 
 ---@param direction "h" | "j" | "k" | "l"
-function _P.resize(direction)
+function M._resize(direction)
     local core_helpers = require("modules.utilities.core_helpers")
     local details = _DIRECTIONS[direction]
 
-    if core_helpers.in_tmux() and _is_on_tmux_resize_edge(direction) then
+    -- NOTE: Both keys on an axis act on the *same* divider. Vertically that is
+    -- the cell below when one exists (otherwise the cell above); horizontally the
+    -- cell to the right when one exists (otherwise the left). A "cell" is a
+    -- Neovim split or a tmux pane -- both are detected and handled seamlessly.
+    local vertical = direction == "j" or direction == "k"
+    local far = vertical and "j" or "l"
+    local near = vertical and "k" or "h"
+
+    local target = far
+    local kind = _neighbor_kind(far)
+
+    if not kind then
+        target = near
+        kind = _neighbor_kind(near)
+    end
+
+    if not kind then
+        -- The window fills the whole axis with no split or pane beyond it.
+        return
+    end
+
+    if kind == "pane" then
+        -- Move the shared tmux border in the key's geometric direction (j down,
+        -- k up, h left, l right); tmux moves whichever border that touches.
         _run_tmux_pane_command(direction, "resize-pane")
 
         return
     end
 
-    local before = _get_resize_dimension(direction)
+    -- Resize within Neovim. The key grows the current window when it pushes the
+    -- targeted divider away from the window and shrinks it otherwise, which
+    -- reduces to: grow when the key points at the targeted side.
+    local amount = (direction == target) and details.resize_amount or -details.resize_amount
 
-    core_helpers.resize_window(details.resize_direction, details.resize_amount)
-
-    if before ~= _get_resize_dimension(direction) then
-        return
-    end
-
-    if _is_on_directional_edge(direction) then
-        _run_tmux_pane_command(direction, "resize-pane")
-    end
+    core_helpers.resize_window(vertical and "height" or "width", amount)
 end
 
 --- Build the tmux command used to send text to an adjacent pane.
@@ -273,7 +262,7 @@ end
 ---@param direction_name _my.tmux.DirectionName The adjacent tmux pane direction.
 ---@param text string The text to send. Literal `<CR>` is converted to Enter.
 ---@return string[] # The `tmux send-keys` command arguments.
-function _P.get_send_text_arguments(direction_name, text)
+function M._get_send_text_arguments(direction_name, text)
     local direction = _DIRECTION_BY_NAME[direction_name]
     local details = _DIRECTIONS[direction]
     ---@type string[]
@@ -295,13 +284,13 @@ function _P.send_text(direction_name, text)
         return
     end
 
-    vim.fn.system(_P.get_send_text_arguments(direction_name, text))
+    vim.fn.system(M._get_send_text_arguments(direction_name, text))
 end
 
 --- Parse and run a `:SendTmux` command.
 ---
 ---@param arguments string The raw command arguments.
-function _P.send_text_from_command(arguments)
+function M.send_text_from_command(arguments)
     local direction, text = _parse_send_tmux_arguments(arguments)
 
     if not direction or not text then
@@ -318,7 +307,7 @@ end
 ---@param argument_lead string The current argument fragment.
 ---@param command_line string The whole command line.
 ---@return string[] # Matching direction names.
-function _P.complete_send_text(argument_lead, command_line)
+function M.complete_send_text(argument_lead, command_line)
     local arguments = command_line:match("^%s*%S+%s*(.*)$") or ""
 
     if arguments:match("^%S+%s+") then
@@ -330,6 +319,21 @@ function _P.complete_send_text(argument_lead, command_line)
     end, _DIRECTION_NAMES)
 end
 
+--- Whether alt+<key> needs a second, raw keymap to be usable.
+---
+--- Terminals report alt+<key> as `<Esc>` followed by `<key>`. Neovim folds that
+--- pair back into `<M-key>` only when the second byte lands within
+--- `'ttimeoutlen'`. Windows routes terminal input through ConPTY, which breaks
+--- that fold, so `<M-j>` never matches and Neovim falls back to running `<Esc>`
+--- and then a plain `j` -- the cursor moves and the window keeps its size.
+---
+--- Binding the raw `<Esc><key>` sequence makes the resize work anyway. The cost
+--- is Windows-only: pressing `<Esc>` and then `h`/`j`/`k`/`l` within
+--- `'timeoutlen'` resizes instead of moving the cursor.
+---
+---@type boolean
+local _NEEDS_RAW_ALT_KEYMAPS = vim.fn.has("win32") == 1
+
 for direction, details in pairs(_DIRECTIONS) do
     vim.keymap.set({ "n", "t" }, "<C-" .. direction .. ">", function()
         _P.move(direction)
@@ -339,11 +343,20 @@ for direction, details in pairs(_DIRECTIONS) do
     })
 
     vim.keymap.set({ "n", "t" }, "<M-" .. direction .. ">", function()
-        _P.resize(direction)
+        M._resize(direction)
     end, {
         desc = string.format('Resize the "%s" split or tmux pane.', details.description),
         silent = true,
     })
+
+    if _NEEDS_RAW_ALT_KEYMAPS then
+        vim.keymap.set({ "n", "t" }, "<Esc>" .. direction, function()
+            M._resize(direction)
+        end, {
+            desc = string.format('Resize the "%s" split or tmux pane (raw alt+%s).', details.description, direction),
+            silent = true,
+        })
+    end
 end
 
-return _P
+return M

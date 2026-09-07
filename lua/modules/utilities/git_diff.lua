@@ -17,12 +17,6 @@ local _P = {}
 
 ---@alias _my.git_diff.SystemCallback fun(result: _my.git_diff.SystemResult): nil
 
----@class _my.git_diff.Operation
----@field type "add" | "delete" | "equal"
----@field old_line integer?
----@field new_line integer?
----@field text string
-
 ---@class _my.git_diff.Hunk
 ---@field type "add" | "change" | "delete"
 ---@field line integer
@@ -30,14 +24,6 @@ local _P = {}
 ---@field old_count integer
 ---@field new_start integer
 ---@field new_count integer
-
----@class _my.git_diff.ChangeGroup
----@field old_start integer
----@field old_count integer
----@field new_start integer
----@field new_count integer
----@field deletes _my.git_diff.Operation[]
----@field adds _my.git_diff.Operation[]
 
 ---@class _my.git_diff.SelectionHunk
 ---@field old_start integer
@@ -96,19 +82,6 @@ local function _split_lines(text)
     return lines
 end
 
---- Join `lines` into a newline-terminated string.
----
----@param lines string[] Some lines to join.
----@return string # The joined text.
----
-function _P.join_lines(lines)
-    if #lines == 0 then
-        return ""
-    end
-
-    return table.concat(lines, "\n") .. "\n"
-end
-
 --- Run a git command asynchronously.
 ---
 ---@param arguments string[] Git arguments, without the leading executable.
@@ -116,9 +89,9 @@ end
 ---@param stdin string? Optional standard input.
 ---@param callback _my.git_diff.SystemCallback The callback that receives the command result.
 ---
-function _P.run_git(arguments, directory, stdin, callback)
+function M.run_git(arguments, directory, stdin, callback)
     ---@type string[]
-    local command = { core_helpers._GIT_EXECUTABLE }
+    local command = { core_helpers.GIT_EXECUTABLE }
     vim.list_extend(command, arguments)
 
     local success, message = pcall(function()
@@ -144,16 +117,6 @@ function _P.run_git(arguments, directory, stdin, callback)
     end
 end
 
---- Run a git command asynchronously.
----
----@param arguments string[] Git arguments, without the leading executable.
----@param directory string The directory to run within.
----@param stdin string? Optional standard input.
----@param callback _my.git_diff.SystemCallback The callback that receives the command result.
-function M.run_git(arguments, directory, stdin, callback)
-    _P.run_git(arguments, directory, stdin, callback)
-end
-
 --- Get the first path from Git path-list output.
 ---
 ---@param text string The Git command stdout.
@@ -164,13 +127,50 @@ function _P.first_git_path(text)
     return first and vim.trim(first) or ""
 end
 
---- Get git details for `buffer`.
+---@type table<integer, integer>
+local _DETAILS_GENERATION = {}
+---@type table<integer, {generation: integer, details: _my.git_diff.FileDetails?, message: string?}>
+local _DETAILS_CACHE = {}
+---@type table<integer, {generation: integer, callbacks: fun(details: _my.git_diff.FileDetails?, message: string?)[]}>
+local _DETAILS_PENDING = {}
+
+---@type table<string, integer>
+local _INDEX_GENERATION = {}
+---@type table<string, {generation: integer, lines: string[], missing: boolean}>
+local _INDEX_CACHE = {}
+---@type table<string, {generation: integer, callbacks: fun(lines: string[], missing: boolean)[]}>
+local _INDEX_PENDING = {}
+
+--- Resolve Neovim's special current-buffer handle to a stable buffer number.
+---
+--- A literal `0` cannot be used as a cache key because it names a different
+--- buffer whenever the current window changes.
+---
+---@param buffer integer The buffer handle to resolve.
+---@return integer # The stable buffer handle.
+local function _resolve_buffer(buffer)
+    if buffer == 0 then
+        return vim.api.nvim_get_current_buf()
+    end
+
+    return buffer
+end
+
+--- Get the cache key for an indexed file.
+---
+---@param details _my.git_diff.FileDetails The file details to key.
+---@return string # A key unique to the repository-relative path.
+local function _get_index_key(details)
+    return details.repository .. "\0" .. details.relative_path
+end
+
+--- Fetch git details for `buffer` without consulting the cache.
 ---
 ---@param buffer integer The buffer to inspect.
 ---@param callback fun(details: _my.git_diff.FileDetails?, message: string?): nil
 ---    Callback with file details or an error.
 ---
-function M.get_file_details(buffer, callback)
+local function _fetch_file_details_uncached(buffer, callback)
     local absolute_path = vim.api.nvim_buf_get_name(buffer)
 
     if absolute_path == "" then
@@ -187,7 +187,7 @@ function M.get_file_details(buffer, callback)
         return
     end
 
-    _P.run_git({ "-C", directory, "rev-parse", "--show-toplevel" }, directory, nil, function(repository)
+    M.run_git({ "-C", directory, "rev-parse", "--show-toplevel" }, directory, nil, function(repository)
         if repository.code ~= 0 then
             callback(nil, "Current buffer is not inside a git repository.")
 
@@ -196,7 +196,7 @@ function M.get_file_details(buffer, callback)
 
         local repository_path = vim.trim(repository.stdout)
 
-        _P.run_git(
+        M.run_git(
             { "-C", repository_path, "ls-files", "--full-name", "--deduplicate", "--", absolute_path },
             repository_path,
             nil,
@@ -213,7 +213,7 @@ function M.get_file_details(buffer, callback)
                     return
                 end
 
-                _P.run_git(
+                M.run_git(
                     { "-C", repository_path, "rev-parse", "--show-prefix" },
                     repository_path,
                     nil,
@@ -231,13 +231,70 @@ function M.get_file_details(buffer, callback)
     end)
 end
 
+--- Forget the cached file details for `buffer` after its path changes.
+---
+---@param buffer integer The renamed buffer.
+function M.invalidate_file_details(buffer)
+    buffer = _resolve_buffer(buffer)
+    local cached = _DETAILS_CACHE[buffer]
+
+    if cached and cached.details then
+        local key = _get_index_key(cached.details)
+        _INDEX_GENERATION[key] = (_INDEX_GENERATION[key] or 0) + 1
+    end
+
+    _DETAILS_GENERATION[buffer] = (_DETAILS_GENERATION[buffer] or 0) + 1
+end
+
+--- Get git details for `buffer`, sharing cached and in-flight results.
+---
+---@param buffer integer The buffer to inspect.
+---@param callback fun(details: _my.git_diff.FileDetails?, message: string?): nil
+---    Callback with file details or an error.
+function M.get_file_details(buffer, callback)
+    buffer = _resolve_buffer(buffer)
+    local generation = _DETAILS_GENERATION[buffer] or 0
+    local cached = _DETAILS_CACHE[buffer]
+
+    if cached and cached.generation == generation then
+        callback(cached.details, cached.message)
+
+        return
+    end
+
+    local pending = _DETAILS_PENDING[buffer]
+
+    if pending and pending.generation == generation then
+        table.insert(pending.callbacks, callback)
+
+        return
+    end
+
+    pending = { generation = generation, callbacks = { callback } }
+    _DETAILS_PENDING[buffer] = pending
+
+    _fetch_file_details_uncached(buffer, function(details, message)
+        if (_DETAILS_GENERATION[buffer] or 0) == generation then
+            _DETAILS_CACHE[buffer] = { generation = generation, details = details, message = message }
+        end
+
+        if _DETAILS_PENDING[buffer] == pending then
+            _DETAILS_PENDING[buffer] = nil
+        end
+
+        for _, waiting in ipairs(pending.callbacks) do
+            waiting(details, message)
+        end
+    end)
+end
+
 --- Get the HEAD version of `path`.
 ---
 ---@param details _my.git_diff.FileDetails The file details to query.
 ---@param callback fun(lines: string[], missing: boolean): nil Callback with the HEAD lines.
 ---
 function _P.get_head_lines(details, callback)
-    _P.run_git(
+    M.run_git(
         { "-C", details.repository, "show", "HEAD:" .. details.relative_path },
         details.repository,
         nil,
@@ -253,13 +310,13 @@ function _P.get_head_lines(details, callback)
     )
 end
 
---- Get the index version of `path`.
+--- Fetch the index version of `path` without consulting the cache.
 ---
 ---@param details _my.git_diff.FileDetails The file details to query.
 ---@param callback fun(lines: string[], missing: boolean): nil Callback with the index lines.
 ---
-function M.get_index_lines(details, callback)
-    _P.run_git(
+local function _fetch_index_lines_uncached(details, callback)
+    M.run_git(
         { "-C", details.repository, "show", ":" .. details.relative_path },
         details.repository,
         nil,
@@ -275,156 +332,90 @@ function M.get_index_lines(details, callback)
     )
 end
 
---- Build a dynamic-programming table for longest common subsequence.
+--- Forget the cached index contents for the file shown by `buffer`.
 ---
----@param old_lines string[] The old file lines.
----@param new_lines string[] The new file lines.
----@return integer[][] # The LCS table.
----
-local function _make_lcs_table(old_lines, new_lines)
-    ---@type integer[][]
-    local table_ = {}
+---@param buffer integer The buffer whose index entry changed.
+function M.invalidate_index_lines(buffer)
+    buffer = _resolve_buffer(buffer)
+    local cached = _DETAILS_CACHE[buffer]
 
-    for old_index = 0, #old_lines do
-        ---@type integer[]
-        table_[old_index] = {}
-
-        for new_index = 0, #new_lines do
-            table_[old_index][new_index] = 0
-        end
+    if not cached or not cached.details then
+        return
     end
 
-    for old_index = #old_lines - 1, 0, -1 do
-        for new_index = #new_lines - 1, 0, -1 do
-            if old_lines[old_index + 1] == new_lines[new_index + 1] then
-                table_[old_index][new_index] = table_[old_index + 1][new_index + 1] + 1
-            else
-                table_[old_index][new_index] =
-                    math.max(table_[old_index + 1][new_index], table_[old_index][new_index + 1])
-            end
-        end
-    end
-
-    return table_
+    local key = _get_index_key(cached.details)
+    _INDEX_GENERATION[key] = (_INDEX_GENERATION[key] or 0) + 1
 end
 
---- Compute line-level diff operations from `old_lines` to `new_lines`.
+--- Get the index version of `path`, sharing cached and in-flight results.
 ---
----@param old_lines string[] The original lines.
----@param new_lines string[] The changed lines.
----@return _my.git_diff.Operation[] # The diff operations.
----
-function _P.compute_operations(old_lines, new_lines)
-    local table_ = _make_lcs_table(old_lines, new_lines)
-    local old_index = 1
-    local new_index = 1
-    ---@type _my.git_diff.Operation[]
-    local operations = {}
+---@param details _my.git_diff.FileDetails The file details to query.
+---@param callback fun(lines: string[], missing: boolean): nil Callback with the index lines.
+function M.get_index_lines(details, callback)
+    local key = _get_index_key(details)
+    local generation = _INDEX_GENERATION[key] or 0
+    local cached = _INDEX_CACHE[key]
 
-    while old_index <= #old_lines and new_index <= #new_lines do
-        if old_lines[old_index] == new_lines[new_index] then
-            table.insert(operations, {
-                old_line = old_index,
-                new_line = new_index,
-                text = old_lines[old_index],
-                type = "equal",
-            })
-            old_index = old_index + 1
-            new_index = new_index + 1
-        elseif table_[old_index][new_index - 1] >= table_[old_index - 1][new_index] then
-            table.insert(operations, {
-                old_line = old_index,
-                text = old_lines[old_index],
-                type = "delete",
-            })
-            old_index = old_index + 1
-        else
-            table.insert(operations, {
-                new_line = new_index,
-                text = new_lines[new_index],
-                type = "add",
-            })
-            new_index = new_index + 1
+    if cached and cached.generation == generation then
+        callback(cached.lines, cached.missing)
+
+        return
+    end
+
+    local pending = _INDEX_PENDING[key]
+
+    if pending and pending.generation == generation then
+        table.insert(pending.callbacks, callback)
+
+        return
+    end
+
+    pending = { generation = generation, callbacks = { callback } }
+    _INDEX_PENDING[key] = pending
+
+    _fetch_index_lines_uncached(details, function(lines, missing)
+        if (_INDEX_GENERATION[key] or 0) == generation then
+            _INDEX_CACHE[key] = { generation = generation, lines = lines, missing = missing }
         end
-    end
 
-    while old_index <= #old_lines do
-        table.insert(operations, {
-            old_line = old_index,
-            text = old_lines[old_index],
-            type = "delete",
-        })
-        old_index = old_index + 1
-    end
+        if _INDEX_PENDING[key] == pending then
+            _INDEX_PENDING[key] = nil
+        end
 
-    while new_index <= #new_lines do
-        table.insert(operations, {
-            new_line = new_index,
-            text = new_lines[new_index],
-            type = "add",
-        })
-        new_index = new_index + 1
-    end
-
-    return operations
+        for _, waiting in ipairs(pending.callbacks) do
+            waiting(lines, missing)
+        end
+    end)
 end
 
---- Group adjacent changed operations together.
+--- Neovim renamed `vim.diff` to `vim.text.diff`. Prefer the newer name.
 ---
----@param operations _my.git_diff.Operation[] The operations to group.
----@return _my.git_diff.ChangeGroup[] # The changed groups.
+---@diagnostic disable-next-line: undefined-field, deprecated
+local _diff = vim.text and vim.text.diff or vim.diff
+
+--- Join lines into diff-ready text.
 ---
-function _P.get_change_groups(operations)
-    ---@type _my.git_diff.ChangeGroup[]
-    local groups = {}
-    local index = 1
-    local old_cursor = 1
-    local new_cursor = 1
-
-    while index <= #operations do
-        local operation = operations[index]
-
-        if operation.type == "equal" then
-            old_cursor = old_cursor + 1
-            new_cursor = new_cursor + 1
-            index = index + 1
-        else
-            local old_start = old_cursor
-            local new_start = new_cursor
-            ---@type _my.git_diff.Operation[]
-            local deletes = {}
-            ---@type _my.git_diff.Operation[]
-            local adds = {}
-
-            while operations[index] and operations[index].type ~= "equal" do
-                local changed = operations[index]
-
-                if changed.type == "delete" then
-                    table.insert(deletes, changed)
-                    old_cursor = old_cursor + 1
-                else
-                    table.insert(adds, changed)
-                    new_cursor = new_cursor + 1
-                end
-
-                index = index + 1
-            end
-
-            table.insert(groups, {
-                adds = adds,
-                deletes = deletes,
-                new_count = #adds,
-                new_start = new_start,
-                old_count = #deletes,
-                old_start = old_start,
-            })
-        end
+---@param lines string[] The lines to join.
+---@return string # The text, always ending in a newline unless it is empty.
+---
+local function _join_diff_lines(lines)
+    if #lines == 0 then
+        return ""
     end
 
-    return groups
+    return table.concat(lines, "\n") .. "\n"
 end
 
 --- Convert line changes into sign-friendly hunks.
+---
+--- Delegates to the native `vim.diff`/`vim.text.diff` (the same xdiff engine
+--- `git` itself uses) instead of a hand-rolled LCS diff, since the LCS table is
+--- O(#old_lines * #new_lines) and became a multi-second stall on large files.
+---
+--- `vim.diff`'s zero-count (pure add/delete) hunks anchor one line earlier than
+--- this module's callers expect (real unified-diff convention anchors on the
+--- line *before* the change; callers here anchor on the line *after*), so
+--- zero-count sides get shifted by one to keep the existing anchor contract.
 ---
 ---@param old_lines string[] The original lines.
 ---@param new_lines string[] The changed lines.
@@ -434,20 +425,36 @@ function M.compute_hunks(old_lines, new_lines)
     old_lines = _normalize_hunk_lines(old_lines)
     new_lines = _normalize_hunk_lines(new_lines)
 
-    local groups = _P.get_change_groups(_P.compute_operations(old_lines, new_lines))
+    local ok, raw_hunks =
+        pcall(_diff, _join_diff_lines(old_lines), _join_diff_lines(new_lines), { result_type = "indices", ctxlen = 0 })
+
+    if not ok or type(raw_hunks) ~= "table" then
+        return {}
+    end
+
     ---@type _my.git_diff.Hunk[]
     local hunks = {}
 
-    for _, group in ipairs(groups) do
+    for _, entry in ipairs(raw_hunks) do
+        local old_start, old_count, new_start, new_count = entry[1], entry[2], entry[3], entry[4]
+
+        if old_count == 0 then
+            old_start = old_start + 1
+        end
+
+        if new_count == 0 then
+            new_start = new_start + 1
+        end
+
         local kind = "add"
 
-        if group.old_count > 0 and group.new_count > 0 then
+        if old_count > 0 and new_count > 0 then
             kind = "change"
-        elseif group.old_count > 0 then
+        elseif old_count > 0 then
             kind = "delete"
         end
 
-        local line = group.new_start
+        local line = new_start
 
         if line > #new_lines then
             line = math.max(#new_lines, 1)
@@ -456,10 +463,10 @@ function M.compute_hunks(old_lines, new_lines)
         ---@cast kind "add" | "change" | "delete"
         table.insert(hunks, {
             line = line,
-            new_count = group.new_count,
-            new_start = group.new_start,
-            old_count = group.old_count,
-            old_start = group.old_start,
+            new_count = new_count,
+            new_start = new_start,
+            old_count = old_count,
+            old_start = old_start,
             type = kind,
         })
     end
@@ -540,7 +547,7 @@ end
 ---@param diff string The output from `git diff --unified=0`.
 ---@return _my.git_diff.SelectionHunk[] # The parsed hunks.
 ---
-function _P.parse_selection_diff(diff)
+function M.parse_selection_diff(diff)
     ---@type _my.git_diff.SelectionHunk[]
     local hunks = {}
     ---@type _my.git_diff.SelectionHunk?
@@ -572,14 +579,6 @@ function _P.parse_selection_diff(diff)
     return hunks
 end
 
---- Parse a zero-context unified diff into hunks.
----
----@param diff string The output from `git diff --unified=0`.
----@return _my.git_diff.SelectionHunk[] # The parsed hunks.
-function M.parse_selection_diff(diff)
-    return _P.parse_selection_diff(diff)
-end
-
 --- Build text containing only selected changes from `base_text` to `target_text`.
 ---
 ---@param base_text string The text to patch from.
@@ -596,7 +595,7 @@ function M.build_selection_target(base_text, target_text, diff, start_line, end_
 
     local base_lines, base_has_eol = _P.split_git_text(base_text)
     local _, target_has_eol = _P.split_git_text(target_text)
-    local hunks = _P.parse_selection_diff(diff)
+    local hunks = M.parse_selection_diff(diff)
 
     ---@type string[]
     local output = {}
@@ -652,6 +651,7 @@ function M.build_selection_target(base_text, target_text, diff, start_line, end_
                     table.insert(output, added)
                 end
             elseif removed then
+                ---@type boolean
                 local selected
 
                 if hunk.new_count == 0 then
@@ -677,25 +677,6 @@ function M.build_selection_target(base_text, target_text, diff, start_line, end_
     local has_eol = selected_changes > 0 and target_has_eol or base_has_eol
 
     return _P.join_git_text(output, has_eol), selected_changes
-end
-
---- Build lines that contain only selected buffer changes applied to HEAD.
----
----@param old_lines string[] The original lines.
----@param new_lines string[] The changed buffer lines.
----@param start_line integer The first selected buffer line.
----@param end_line integer The last selected buffer line.
----@param callback fun(lines: string[]): nil Callback with the partially-applied file lines.
----
-function _P.make_selected_lines(old_lines, new_lines, start_line, end_line, callback)
-    local base_text = _P.join_lines(old_lines)
-    local target_text = _P.join_lines(new_lines)
-
-    M.build_zero_context_diff(base_text, target_text, function(diff)
-        local partial_text = M.build_selection_target(base_text, target_text, diff or "", start_line, end_line)
-
-        callback(_split_lines(partial_text))
-    end)
 end
 
 --- Write `text` without using Vim's line-based writefile behavior.
@@ -779,7 +760,7 @@ local function _build_no_index_diff(base_text, target_text, context, callback)
 
     local success, start_error = pcall(function()
         vim.system({
-            core_helpers._GIT_EXECUTABLE,
+            core_helpers.GIT_EXECUTABLE,
             "diff",
             "--no-index",
             "--unified=" .. context,
@@ -861,7 +842,7 @@ end
 ---@param object string The object name to read.
 ---@param callback fun(text: string?, message: string?): nil Callback with blob text or an error.
 function M.get_blob_text(details, object, callback)
-    _P.run_git({ "-C", details.repository, "show", object }, details.repository, nil, function(result)
+    M.run_git({ "-C", details.repository, "show", object }, details.repository, nil, function(result)
         if result.code ~= 0 then
             callback(nil, result.stderr)
 
@@ -877,7 +858,7 @@ end
 ---@param details _my.git_diff.FileDetails The file details to use.
 ---@param callback fun(has_unmerged: boolean): nil Callback with whether unmerged entries exist.
 function M.has_unmerged_entries(details, callback)
-    _P.run_git(
+    M.run_git(
         {
             "-C",
             details.repository,
@@ -918,37 +899,17 @@ function M.apply_cached_patch(details, patch, callback)
         return
     end
 
-    _P.run_git(
-        { "-C", details.repository, "apply", "--cached", "--check", path },
-        details.repository,
-        nil,
-        function(check)
-            if check.code ~= 0 then
-                pcall(vim.uv.fs_unlink, path)
+    M.run_git({ "-C", details.repository, "apply", "--cached", path }, details.repository, nil, function(result)
+        pcall(vim.uv.fs_unlink, path)
 
-                callback(false, vim.trim(check.stderr))
+        if result.code ~= 0 then
+            callback(false, vim.trim(result.stderr))
 
-                return
-            end
-
-            _P.run_git(
-                { "-C", details.repository, "apply", "--cached", path },
-                details.repository,
-                nil,
-                function(result)
-                    pcall(vim.uv.fs_unlink, path)
-
-                    if result.code ~= 0 then
-                        callback(false, vim.trim(result.stderr))
-
-                        return
-                    end
-
-                    callback(true, nil)
-                end
-            )
+            return
         end
-    )
+
+        callback(true, nil)
+    end)
 end
 
 return M

@@ -6,11 +6,17 @@ local M = {}
 ---@field line integer The 1-or-more line number.
 ---@field column integer The 0-or-more column.
 
----@class _my.code_argument_toggle.Pair
+---@class _my.code_argument_toggle.PartialPair
+---    An open delimiter whose matching close delimiter has not been found yet.
+---    It becomes a `_my.code_argument_toggle.Pair` once `close` is filled in.
 ---@field open _my.code_argument_toggle.Position The opening delimiter.
----@field close _my.code_argument_toggle.Position The closing delimiter.
+---@field close _my.code_argument_toggle.Position? The closing delimiter, once found.
 ---@field open_character string The opening delimiter text.
 ---@field close_character string The closing delimiter text.
+
+---@class _my.code_argument_toggle.Pair : _my.code_argument_toggle.PartialPair
+---    A delimiter pair whose closing delimiter is known.
+---@field close _my.code_argument_toggle.Position The closing delimiter.
 
 ---@type table<string, string>
 local _OPEN_TO_CLOSE = {
@@ -74,7 +80,7 @@ end
 ---@param cursor _my.code_argument_toggle.Position The cursor position.
 ---@return _my.code_argument_toggle.Pair? # The containing delimiter pair, if any.
 local function _find_pair(lines, cursor)
-    ---@type any[]
+    ---@type _my.code_argument_toggle.PartialPair[]
     local stack = {}
     ---@type string?
     local quote = nil
@@ -84,7 +90,7 @@ local function _find_pair(lines, cursor)
 
         for column = 1, #line do
             local character = line:sub(column, column)
-            ---@type {line: integer, column: integer}
+            ---@type _my.code_argument_toggle.Position
             local position = { line = line_number, column = column - 1 }
 
             if quote ~= nil then
@@ -109,6 +115,7 @@ local function _find_pair(lines, cursor)
                 if candidate ~= nil and candidate.open_character == _CLOSE_TO_OPEN[character] then
                     table.remove(stack)
                     candidate.close = position
+                    ---@cast candidate _my.code_argument_toggle.Pair
 
                     local contains_cursor = _compare_positions(candidate.open, cursor) <= 0
                         and _compare_positions(cursor, candidate.close) <= 0
@@ -296,7 +303,7 @@ local function _replace_pair(pair, replacement)
 end
 
 --- Toggle the bracketed code around the cursor.
-function M.toggle()
+function M._toggle()
     local buffer = vim.api.nvim_get_current_buf()
     local lines = _get_lines(buffer)
     local cursor = vim.api.nvim_win_get_cursor(0)
@@ -317,7 +324,7 @@ function M.toggle()
     _replace_pair(pair, replacement)
 end
 
-vim.keymap.set("n", "<leader>sa", M.toggle, {
+vim.keymap.set("n", "<leader>sa", M._toggle, {
     desc = "Toggle bracketed code between single-line and multiline arguments.",
 })
 

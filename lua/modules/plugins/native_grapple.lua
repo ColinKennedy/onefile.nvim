@@ -50,6 +50,7 @@ end, { desc = "Delete bookmark." })
 vim.api.nvim_create_autocmd({ "DirChanged", "FocusGained", "ShellCmdPost", "TermClose" }, {
     group = vim.api.nvim_create_augroup("my.native_grapple.branch_sync", { clear = true }),
     callback = function(args)
+        ---@type string?
         local reference_path
 
         if args.event == "DirChanged" then
@@ -77,7 +78,7 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
     desc = "Save native grapple marks and close branch watchers.",
 })
 
-require("modules.features.core_editor_setup")._SESSION_MANAGER:register_session_write_pre_callback(
+require("modules.features.core_editor_setup").SESSION_MANAGER:register_session_write_pre_callback(
     ".nvim.marks.lua",
     function()
         local core = require("modules.plugins.native_grapple.core")

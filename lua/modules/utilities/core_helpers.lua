@@ -1,5 +1,19 @@
 --- Shared utility functions, type definitions, constants, and state for the Neovim configuration.
 
+---@class _my.core_helpers
+---@field ENGLISH_LANGUAGE string The Neovim `:help` language tag for English.
+---@field BOOKMARK_MINIMUM integer The lowest bookmark index.
+---@field BOOKMARK_MAXIMUM integer The highest bookmark index.
+---@field LSP_GROUP integer The augroup that starts LSP servers.
+---@field SNIPPET_AUGROUP integer The augroup that drives snippet completion.
+---@field TERMINAL_GROUP integer The augroup that customizes terminal behavior.
+---@field GIT_EXECUTABLE string The `git` command to run.
+---@field RIPGREP_EXECUTABLE string The `rg` command to run.
+---@field SESSIONS_DIRECTORY_NAME string The directory that stores branch-aware sessions.
+---@field VIM_SESSION_FILE_NAME string The conventional Vim session file name.
+---@field VIMSCRIPT_COMMENT_MARKER string The character that starts a Vimscript comment.
+---@field SESSIONX_NAME string The VCS-root session file name.
+---@field IS_NERDFONT_ALLOWED boolean If `true`, icons may use Nerd Font glyphs.
 local M = {}
 local _P = {}
 
@@ -24,8 +38,13 @@ local _P = {}
 ---@field menu string The sub-category / grouping.
 ---@field word string The word or phrase display text to show in the completion row.
 
+---@alias _my.selector_gui.Value string|integer
+---    A raw, un-deserialized selector option, as handed to `select_from_options`.
+---    Buffer selectors pass buffer numbers. Everything else passes text.
+
 ---@class _my.selector_gui.entry.Deserialized The formatted option used by the selector GUI.
 ---@field display string The text to show in the pop-up.
+-- typer: ignore-next-line[disallowed-any]
 ---@field value any The original data, unformatted.
 
 ---@class _my.selector_gui.HeaderChunk A highlighted bit of selector header text.
@@ -61,22 +80,18 @@ local _P = {}
 ---    A group of LSP-related settings to initialize with.
 ---@field name string
 ---    The name of the LSP.
----@field filetypes string[] | string
----    The Vim filetype(s) that the LSp is meant for.
----@field callback fun(event: _my.lsp.ServerDefinition.callback.parameter): nil
----    The function that sets up the LSP.
-
----@class _my.lsp.ServerDefinition.callback.parameter All details to handle LSP setup.
----@field buf integer The Vim buffer to attach the LSP server onto.
+---@field config vim.lsp.Config|fun(): vim.lsp.Config
+---    The config that Neovim should enable for the LSP.
 
 ---@class _neovim.commandline.Options Raw data that gets passed from `nvim_create_user_command`
 ---@field args string The input that a user writes to the command.
 
 ---@class _my.selector_gui.State An internal state tracker for the selector floating window.
 ---@field input string The currently-written user prompt input.
----@field all string[] All possible options to consider.
+---@field all _my.selector_gui.Value[] All possible options to consider.
 ---@field filtered _my.selector_gui.entry.Selection[] All options that match with `input`.
 ---@field selected integer The selected index.
+-- typer: ignore-next-line[disallowed-any]
 ---@field selected_by_value table<any, _my.selector_gui.entry.Selection>
 ---    Entries explicitly selected in multi-select mode.
 
@@ -100,7 +115,7 @@ local _P = {}
 ---    Custom "close selection GUI" behavior.
 ---@field confirm fun(value: _my.selector_gui.entry.Selection|_my.selector_gui.entry.Selection[]): nil
 ---    The function that runs on-selection.
----@field deserialize (fun(value: any): _my.selector_gui.entry.Deserialized)?
+---@field deserialize (fun(value: _my.selector_gui.Value): _my.selector_gui.entry.Deserialized)?
 ---    Format the incoming data, if needed. This is needed when
 ---    `_my.selector_gui.entry.Selection.value` and `_my.selector_gui.entry.Selection.display` are differing values.
 ---@field sort_score (fun(entry: _my.selector_gui.entry.Selection, input: string): number?)?
@@ -128,10 +143,10 @@ local _P = {}
 
 ---@type string[]
 local _ALL_CONTIGUOUS_PROJECT_ROOT_MARKERS = { "CMakeLists.txt", "__init__.py" }
-M._ENGLISH_LANGUAGE = "en"
+M.ENGLISH_LANGUAGE = "en"
 
 ---@type string[]
-M._LUA_ROOT_PATHS = {
+M.LUA_ROOT_PATHS = {
     ".luacheckrc",
     ".luarc.json",
     ".luarc.jsonc",
@@ -164,7 +179,7 @@ function M.with_file_messages_suppressed(callback)
     return result
 end
 
-local _ALL_SINGLE_PROJECT_ROOTS = vim.tbl_deep_extend("force", {}, M._LUA_ROOT_PATHS)
+local _ALL_SINGLE_PROJECT_ROOTS = vim.tbl_deep_extend("force", {}, M.LUA_ROOT_PATHS)
 _ALL_SINGLE_PROJECT_ROOTS = vim.list_extend(_ALL_SINGLE_PROJECT_ROOTS, {
     -- Language-Agnostic
     ".editorconfig",
@@ -190,20 +205,20 @@ _ALL_SINGLE_PROJECT_ROOTS = vim.list_extend(_ALL_SINGLE_PROJECT_ROOTS, {
     "init.vim",
 })
 
-M._BOOKMARK_MINIMUM = 1
-M._BOOKMARK_MAXIMUM = 9
+M.BOOKMARK_MINIMUM = 1
+M.BOOKMARK_MAXIMUM = 9
 
 ---@type integer?
 local _CURRENT_RIPGREP_COMMAND = nil
 
 ---@type table<string, string>
-M._FILETYPE_TO_TREESITTER = { python = "python" }
-M._LSP_GROUP = vim.api.nvim_create_augroup("my.lsp.start", { clear = true })
-M._SNIPPET_AUGROUP = vim.api.nvim_create_augroup("my.snippet.completion", { clear = true })
-M._TERMINAL_GROUP = vim.api.nvim_create_augroup("my.terminal.behavior", { clear = true })
+M.FILETYPE_TO_TREESITTER = { python = "python" }
+M.LSP_GROUP = vim.api.nvim_create_augroup("my.lsp.start", { clear = true })
+M.SNIPPET_AUGROUP = vim.api.nvim_create_augroup("my.snippet.completion", { clear = true })
+M.TERMINAL_GROUP = vim.api.nvim_create_augroup("my.terminal.behavior", { clear = true })
 
-M._GIT_EXECUTABLE = os.getenv("NEOVIM_GIT_EXECUTABLE_PATH") or "git"
-M._RIPGREP_EXECUTABLE = os.getenv("NEOVIM_RIPGREP_EXECUTABLE_PATH") or "rg"
+M.GIT_EXECUTABLE = os.getenv("NEOVIM_GIT_EXECUTABLE_PATH") or "git"
+M.RIPGREP_EXECUTABLE = os.getenv("NEOVIM_RIPGREP_EXECUTABLE_PATH") or "rg"
 
 ---@type table<string, boolean>
 local _LANGUAGES_CACHE = {}
@@ -211,18 +226,18 @@ local _LANGUAGES_CACHE = {}
 ---@type table<string, _my.Snippet[]>
 local _SNIPPETS = {}
 
-M._SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
+M.SESSIONS_DIRECTORY_NAME = os.getenv("NEOVIM_SESSIONS_DIRECTORY_NAME") or ".sessions"
 
 -- NOTE: Don't mess with this variable unless you know what you're doing.
 ---@type table<string, _my.Snippet>
-M._TRIGGER_TO_SNIPPET_CACHE = {}
+M.TRIGGER_TO_SNIPPET_CACHE = {}
 
 -- NOTE: This is a normal Vim convention for session names.
-M._VIM_SESSION_FILE_NAME = "Session.vim"
+M.VIM_SESSION_FILE_NAME = "Session.vim"
 
-M._VIMSCRIPT_COMMENT_MARKER = '"'
+M.VIMSCRIPT_COMMENT_MARKER = '"'
 
-M._SESSIONX_NAME = "Sessionx.vim"
+M.SESSIONX_NAME = "Sessionx.vim"
 
 M.IS_NERDFONT_ALLOWED = true
 
@@ -277,37 +292,6 @@ function M.has_treesitter_parser(name)
     return _LANGUAGES_CACHE[name]
 end
 
---- Check if `left` and `right` have the same contents.
----
---- Note: Order does not matter.
----
----@generic T: any
----@param left T[] Some flat array to check.
----@param right T[] Another flat array to check.
----@return boolean # If `left` and `right` have the same contents return `true`.
----
-function _P.is_arrays_equal(left, right)
-    if #left ~= #right then
-        return false
-    end
-
-    ---@generic T: any
-    ---@type table<T, boolean>
-    local lookup = {}
-
-    for _, value in ipairs(left) do
-        lookup[value] = true
-    end
-
-    for _, value in ipairs(right) do
-        if not lookup[value] then
-            return false
-        end
-    end
-
-    return true
-end
-
 --- Check if Vim `mark` is set already.
 ---
 ---@param mark string The Vim mark name. e.g. `"A"`.
@@ -336,15 +320,6 @@ function _P.is_start_of_source_line(details)
     return (text_up_to_the_trigger:match("^%s*$"))
 end
 
---- Check if `text` is 100% whitespace.
----
----@param text string Some line of text.
----@return boolean # If `text` has any non-whitespace, return `false`.
----
-function _P.is_whitespace(text)
-    return string.match(text, "^%s*$") ~= nil
-end
-
 --- Remove leading spaces across all snippets.
 function _P.dedent_snippets()
     --- Remove all common, leading whitespace from text.
@@ -355,7 +330,34 @@ function _P.dedent_snippets()
     local function _dedent(text)
         text = text:gsub("\n[ ]+$", "\n")
 
-        return (vim.text.indent(0, text))
+        if vim.text and vim.text.indent then
+            return (vim.text.indent(0, text))
+        end
+
+        ---@type integer
+        local minimum_indent
+
+        for line in text:gmatch("[^\n]+") do
+            if line:find("%S") then
+                local indent = #(line:match("^%s*") or "")
+
+                minimum_indent = math.min(minimum_indent or indent, indent)
+            end
+        end
+
+        if not minimum_indent or minimum_indent == 0 then
+            return text
+        end
+
+        return (
+            text:gsub("[^\n]+", function(line)
+                if not line:find("%S") then
+                    return line
+                end
+
+                return line:sub(minimum_indent + 1)
+            end)
+        )
     end
 
     for _, snippets in pairs(_SNIPPETS) do
@@ -645,7 +647,7 @@ end
 function M.compute_snippet_completion_options(data)
     -- NOTE: Re-populate the cache with snippets which match the completion menu
     ---@type table<string, _my.Snippet>
-    M._TRIGGER_TO_SNIPPET_CACHE = {}
+    M.TRIGGER_TO_SNIPPET_CACHE = {}
 
     local snippets = _SNIPPETS[data.file_type] or {}
 
@@ -659,77 +661,11 @@ function M.compute_snippet_completion_options(data)
                 kind = snippet.kind or "Snippet",
                 word = snippet.trigger,
             })
-            M._TRIGGER_TO_SNIPPET_CACHE[snippet.trigger] = snippet
+            M.TRIGGER_TO_SNIPPET_CACHE[snippet.trigger] = snippet
         end
     end
 
     return output
-end
-
---- Calls `caller` once after we stop requesting for `caller` after `milliseconds`.
----
---- If you call `caller` really often (e.g. because of user keyboard input)
---- this function makes sure that the requests aren't spammed to Neovim.
----
----@generic _Parameters : any
----@generic _Return : any
----@param caller (fun(...: _Parameters): _Return) A function to track and debounce.
----@param timeout integer A 1-or-more milliseconds to wait. Usually you'll want 50+.
----@param first boolean? Whether to use the arguments of the first call to `caller` or not.
----@return fun(...: _Parameters): _Return # The wrapped function.
----
-function _P.debounce_trailing(caller, timeout, first)
-    local timer = vim.uv.new_timer()
-
-    if not timer then
-        error("Unable to debounce the function. No timer could be created!", 2)
-    end
-
-    local wrapped
-
-    if not first then
-        --- Debounce `caller` and use the last arguments of the last debounced call.
-        function wrapped(...)
-            ---@type unknown[]
-            local argv = { ... }
-            local argc = select("#", ...)
-
-            timer:start(timeout, 0, function()
-                pcall(
-                    vim.schedule_wrap(function()
-                        pcall(function()
-                            timer:stop()
-                            timer:close()
-                        end)
-
-                        caller(unpack(argv, 1, argc))
-                    end),
-                    unpack(argv, 1, argc)
-                )
-            end)
-        end
-    else
-        local argv, argc
-
-        --- Debounce `caller` and use the first arguments of the last debounced call.
-        function wrapped(...)
-            argv = argv or { ... }
-            argc = argc or select("#", ...)
-
-            timer:start(timeout, 0, function()
-                pcall(vim.schedule_wrap(function()
-                    pcall(function()
-                        timer:stop()
-                        timer:close()
-                    end)
-
-                    caller(unpack(argv, 1, argc))
-                end))
-            end)
-        end
-    end
-
-    return wrapped
 end
 
 --- Remove `candidates` if they start with `base`.
@@ -868,6 +804,11 @@ function M.get_deferred_shell_command_results(command, on_fail, on_update)
         end
     end)
 
+    --- Get the option at `i`, if it has been read from stdout yet.
+    ---
+    ---@param i integer A 1-or-more index into the found options.
+    ---@return string? # The found option, if any.
+    ---
     local function generate_value(i)
         return options[i]
     end
@@ -892,23 +833,6 @@ function M.get_deferred_shell_command_results(command, on_fail, on_update)
     return output
 end
 
---- Crop `text` if it is longer than `maximum`.
----
----@param text string A long message that possibly crop.
----@param maximum integer? A 1-or-more value. If not given, a "good" default value is used.
----@return string # The simplified text.
----
-function _P.get_elided_left_text(text, maximum)
-    maximum = maximum or 40
-    local count = #text
-
-    if count <= maximum then
-        return text
-    end
-
-    return "..." .. text:sub(count - maximum, count)
-end
-
 --- Elide-right the `text`. Make `"something long here"` into `"something long..."`.
 ---
 ---@param text string The text to possibly crop.
@@ -924,54 +848,6 @@ function _P.get_elided_right_text(text, maximum)
     end
 
     return text:sub(1, maximum - 3) .. "..."
-end
-
---- Compute the levenshtein distance between `a` and `b`.
----
----@param a string
----    A word or phrase to match against.
----@param b string
----    A word or phrase to match against.
----@return number
----    Some number indicating similarity between `a` and `b`. Higher values
----    means they are not similar and 0 means "it's an exact match".
----
-function _P.levenshtein(a, b)
-    local len_a, len_b = #a, #b
-
-    if len_a == 0 then
-        return len_b
-    end
-
-    if len_b == 0 then
-        return len_a
-    end
-
-    ---@type integer[]
-    local previous = {}
-
-    for index_b = 0, len_b do
-        previous[index_b] = index_b
-    end
-
-    for index_a = 1, len_a do
-        ---@type integer[]
-        local current = {}
-
-        current[0] = index_a
-
-        local character_a = a:sub(index_a, index_a)
-
-        for index_b = 1, len_b do
-            local character_b = b:sub(index_b, index_b)
-            local cost = (character_a == character_b) and 0 or 1
-            current[index_b] = math.min(current[index_b - 1] + 1, previous[index_b] + 1, previous[index_b - 1] + cost)
-        end
-
-        previous = current
-    end
-
-    return previous[len_b]
 end
 
 -- TODO: I think the code below make not scale well. Consider replacing with
@@ -1069,6 +945,7 @@ function M.get_fuzzy_match_score(query, candidate)
         local score = 0
         local streak = 0
         local last_match = 0
+        ---@type integer?
         local first_match = nil
 
         for candidate_index = 1, #candidate_ do
@@ -1183,22 +1060,6 @@ function M.get_nearest_project_root(source)
     return _P.get_topmost_contiguous_project_root_marker(source, _ALL_CONTIGUOUS_PROJECT_ROOT_MARKERS)
 end
 
---- Tokenize `text`, ignoring all whitespace.
----
----@param text string Some user input to separate.
----@return string[] # The tokenized values.
----
-function _P.get_split_words(text)
-    ---@type string[]
-    local output = {}
-
-    for word in text:gmatch("%S+") do
-        table.insert(output, word)
-    end
-
-    return output
-end
-
 --- Starting from `directory`, look for `names` to indicate a project root.
 ---
 ---@param directory string
@@ -1213,6 +1074,7 @@ end
 function _P.get_topmost_contiguous_project_root_marker(directory, names)
     local found_yet = false
     local current = directory
+    ---@type string?
     local previous = nil
 
     while current and previous ~= current do
@@ -1238,47 +1100,6 @@ end
 ---
 function M.get_vim_mark_from_bookmark_index(index)
     return string.char(64 + index) -- A=65, B=66, etc.
-end
-
----@retrn _my.window.Edge[] Get all edges of the screen that the current window touches.
-function _P.get_window_edges()
-    local window = vim.api.nvim_get_current_win()
-    local screen_width = vim.o.columns
-    local screen_height = vim.o.lines - vim.o.cmdheight
-
-    local configuration = vim.api.nvim_win_get_config(window)
-
-    if not configuration.relative or configuration.relative ~= "" then
-        -- NOTE: We skip floating windows
-        return nil
-    end
-
-    local pos = vim.api.nvim_win_get_position(window)
-    local row = pos[1]
-    local col = pos[2]
-    local height = vim.api.nvim_win_get_height(window)
-    local width = vim.api.nvim_win_get_width(window)
-
-    ---@type _my.window.Edge[]
-    local edges = {}
-
-    if row == 0 then
-        table.insert(edges, "top")
-    end
-
-    if (row + height + 1) == screen_height then
-        table.insert(edges, "bottom")
-    end
-
-    if col == 0 then
-        table.insert(edges, "left")
-    end
-
-    if (col + width) == screen_width then
-        table.insert(edges, "right")
-    end
-
-    return edges
 end
 
 --- Find the top-level project, if any, and then cd Neovim to it.
@@ -1359,31 +1180,10 @@ function M.complete_relative(text)
 end
 
 --- Delete all grapple bookmarks (so we can start from scratch).
-function M.delete_all_bookmarks()
+function M._delete_all_bookmarks()
     for index, _, _ in M.iter_bookmarks() do
-        M.delete_bookmark(index)
+        _P.delete_bookmark(index)
     end
-end
-
---- Save `:h autochdir`, run `caller`, and then restore it.
----
----@generic T : any
----@param caller fun(): T Some function to call and (hopefully) return.
----@return T? # The return value of `caller`, assuming it did not error.
----
-function _P.enable_autochdir(caller)
-    local original = vim.o.autochdir
-    vim.o.autochdir = true
-    local success, result = pcall(caller)
-    vim.o.autochdir = original
-
-    if not success then
-        vim.notify(result, vim.log.levels.ERROR)
-
-        return nil
-    end
-
-    return result
 end
 
 --- Move to the next or previous diagnostic message in the current buffer.
@@ -1392,11 +1192,14 @@ end
 ---    If `true`, search forwards in the buffer. If `false`, search backwards.
 ---@param severity (string | integer)?
 ---    The type of severity to filter for. If no `severity` is given, allow anything.
+---@return fun(): nil
+---    A callback that does the diagnostic jump when it is called.
 ---
 function M.go_to_diagnostic(next, severity)
     severity = severity and vim.diagnostic.severity[severity] or nil
 
     if vim.diagnostic.jump then
+        ---@type integer
         local count
 
         if next then
@@ -1425,7 +1228,7 @@ end
 ---    The number of bookmarks to jump. Usually this value is
 ---    just `1`, meaning "next bookmark" and `-1`, meaning "previous bookmark".
 ---
-function M.go_to_relative_bookmark(offset)
+function _P.go_to_relative_bookmark(offset)
     --- Open or load an existing Vim `buffer`.
     ---
     ---@param buffer {index: integer, path: string}
@@ -1469,13 +1272,13 @@ end
 ---    The full path to the Vim buffer.
 ---
 function M.iter_bookmarks()
-    local index = M._BOOKMARK_MINIMUM - 1
+    local index = M.BOOKMARK_MINIMUM - 1
 
     return function()
         while true do
             index = index + 1
 
-            if index > M._BOOKMARK_MAXIMUM then
+            if index > M.BOOKMARK_MAXIMUM then
                 return nil
             end
 
@@ -1498,7 +1301,7 @@ end
 ---
 ---@param mark string The Vim mark to jump to (or apply) to the current buffer.
 ---
-function M.mark_current_buffer_as_bookmark(mark)
+function _P.mark_current_buffer_as_bookmark(mark)
     if not _P.is_mark_defined(mark) then
         vim.cmd.mark(mark) -- Set the mark
     else
@@ -1512,27 +1315,6 @@ function M.mark_current_buffer_as_bookmark(mark)
             vim.cmd('normal! `"')
         end)
     end
-end
-
---- Find the next-available bookmark number and set the current buffer to it.
-function M.mark_current_buffer_as_next_bookmark()
-    local maximum
-
-    for index = M._BOOKMARK_MINIMUM, M._BOOKMARK_MAXIMUM do
-        local mark = M.get_vim_mark_from_bookmark_index(index)
-
-        if _P.is_mark_defined(mark) then
-            maximum = index
-        end
-    end
-
-    local next_index = 1
-
-    if maximum then
-        next_index = ((maximum + 1) % M._BOOKMARK_MAXIMUM) + 1
-    end
-
-    M.mark_current_buffer_as_bookmark(M.get_vim_mark_from_bookmark_index(next_index))
 end
 
 --- Open `text` relative path using the current directory as a root.
@@ -1565,7 +1347,7 @@ function M.push_stash_by_name()
         end
 
         ---@type string[]
-        local command = { M._GIT_EXECUTABLE, "stash", "push", "--message", input }
+        local command = { M.GIT_EXECUTABLE, "stash", "push", "--message", input }
 
         if not M.exists_command(command[1]) then
             vim.notify("Cannot create state. No `git` command was found.", vim.log.levels.ERROR)
@@ -1605,7 +1387,7 @@ end
 ---
 ---@param index integer 1-to-9 bookmark logical index.
 ---
-function M.delete_bookmark(index)
+function _P.delete_bookmark(index)
     local mark = M.get_vim_mark_from_bookmark_index(index)
     vim.cmd.delmarks(mark)
 end
@@ -1615,7 +1397,7 @@ end
 ---@param mark string A Vim mark to set. e.g. `"A"`.
 ---@param buffer integer | string A 0-or-more buffer to modify
 ---
-function M.reset_bookmark(mark, buffer)
+function _P.reset_bookmark(mark, buffer)
     --- Save the current buffer, call `caller`, and then return to the current buffer.
     ---
     ---@param caller fun(): nil Something to call and restore later.
@@ -1649,64 +1431,24 @@ function M.reset_bookmark(mark, buffer)
     end
 end
 
---- Resize the current window `distance` along `direction`.
+--- Grow or shrink the current window along one axis.
 ---
----@param direction _my.window.Direction top/down/left/right movement of the current window.
----@param distance integer How far to resize the window.
+--- This is a dumb executor: the caller decides the axis and the signed amount.
+--- `"height"` runs `:resize` (which resizes the whole row of the current window)
+--- and `"width"` runs `:vertical resize` (which resizes the current window and
+--- its horizontal neighbour). A positive `amount` grows the current window, a
+--- negative one shrinks it.
 ---
-function M.resize_window(direction, distance)
-    local edges = _P.get_window_edges()
+---@param axis "height" | "width" Which dimension to change.
+---@param amount integer Signed rows/columns to resize by (`+` grows, `-` shrinks).
+---
+function M.resize_window(axis, amount)
+    local argument = (amount >= 0 and "+" or "") .. amount
 
-    if not edges then
-        return
-    end
-
-    local sign = "+"
-
-    if direction == "up" then
-        if vim.tbl_contains(edges, "top") and vim.tbl_contains(edges, "bottom") then
-            -- NOTE: There is no split that we can resize in this direction. Stop early.
-            return
-        end
-
-        if vim.tbl_contains(edges, "top") then
-            sign = "-"
-        end
-
-        vim.cmd.resize(sign .. distance)
-    elseif direction == "down" then
-        if vim.tbl_contains(edges, "top") and vim.tbl_contains(edges, "bottom") then
-            -- NOTE: There is no split that we can resize in this direction. Stop early.
-            return
-        end
-
-        if vim.tbl_contains(edges, "bottom") then
-            sign = "-"
-        end
-
-        vim.cmd.resize(sign .. distance)
-    elseif direction == "left" then
-        if vim.tbl_contains(edges, "left") and vim.tbl_contains(edges, "right") then
-            -- NOTE: There is no split that we can resize in this direction. Stop early.
-            return
-        end
-
-        if vim.tbl_contains(edges, "left") then
-            sign = "-"
-        end
-
-        vim.cmd(string.format("vertical resize %s%s", sign, distance))
-    elseif direction == "right" then
-        if vim.tbl_contains(edges, "left") and vim.tbl_contains(edges, "right") then
-            -- NOTE: There is no split that we can resize in this direction. Stop early.
-            return
-        end
-
-        if vim.tbl_contains(edges, "right") then
-            sign = "-"
-        end
-
-        vim.cmd(string.format("vertical resize %s%s", sign, distance))
+    if axis == "height" then
+        vim.cmd.resize(argument)
+    else
+        vim.cmd("vertical resize " .. argument)
     end
 end
 
@@ -1717,15 +1459,6 @@ end
 ---
 function M.lstrip(text)
     return text:match("^%s*(.-)$")
-end
-
---- Remove whitespace from the end of `text`.
----
----@param text string Some text that has whitespace at the end. e.g. `"foo    "`.
----@return string # The removed text. e.g. `"foo"`.
----
-function M.rstrip(text)
-    return text:match("^(.-)%s*$")
 end
 
 --- Run the git `command` and show an error if it fails for some reason.
@@ -1753,7 +1486,7 @@ function _P.run_git_generic_command(command)
         end)
     end
 
-    vim.system({ M._GIT_EXECUTABLE, "-C", directory, command }, { text = true }, _notify_on_error)
+    vim.system({ M.GIT_EXECUTABLE, "-C", directory, command }, { text = true }, _notify_on_error)
 end
 
 --- Call `git pull` from the current working directory.
@@ -1766,10 +1499,10 @@ function M.run_git_push()
     _P.run_git_generic_command("push")
 end
 
---- Run `git add -p` in the current tab's `$PWD` in a new terminal.
-function M.run_git_add_p()
+--- Run `git checkout -p` in the current tab's `$PWD` in a new terminal.
+function M.run_git_checkout_p()
     vim.cmd.split()
-    vim.cmd.terminal(string.format("%s add -p", M._GIT_EXECUTABLE))
+    vim.cmd.terminal(string.format("%s checkout -p", M.GIT_EXECUTABLE))
     vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
 
     local terminal_buffer = vim.api.nvim_get_current_buf()
@@ -1777,22 +1510,114 @@ function M.run_git_add_p()
     M.close_terminal_afterwards(terminal_buffer)
 end
 
---- Run `git checkout -p` in the current tab's `$PWD` in a new terminal.
-function M.run_git_checkout_p()
-    vim.cmd.split()
-    vim.cmd.terminal(string.format("%s checkout -p", M._GIT_EXECUTABLE))
-    vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
+---@class _my.ripgrep.Options
+---@field display_root string? Directory that quickfix paths should be displayed relative to.
 
-    local terminal_buffer = vim.api.nvim_get_current_buf()
+--- Check whether `path` is already absolute.
+---
+--- CAVEAT: `fnamemodify(path, ":p") == path` alone is not reliable here: it
+--- can disagree with `path` over slash direction for an already-absolute
+--- Windows path, which would misclassify it as relative and send it through
+--- `get_ripgrep_absolute_path`'s `joinpath(cwd, path)` fallback -- doubling
+--- the path onto `cwd`. Checking for a POSIX leading `/` or a Windows drive
+--- letter directly avoids depending on `fnamemodify`'s slash behavior.
+---
+---@param path string The path to check.
+---@return boolean # Whether `path` is already absolute.
+function _P.is_absolute_path(path)
+    return path:sub(1, 1) == "/" or path:match("^%a:[/\\]") ~= nil
+end
 
-    M.close_terminal_afterwards(terminal_buffer)
+--- Get an absolute path for a ripgrep result path.
+---
+---@param path string A path printed by ripgrep.
+---@param cwd string The directory where ripgrep was started.
+---@return string # The absolute path.
+function _P.get_ripgrep_absolute_path(path, cwd)
+    if _P.is_absolute_path(path) then
+        return vim.fs.normalize(path)
+    end
+
+    return vim.fs.normalize(vim.fs.joinpath(cwd, path))
+end
+
+--- Get the display path for a ripgrep quickfix entry.
+---
+---@param path string The absolute result path.
+---@param display_root string? Directory that quickfix paths should be displayed relative to.
+---@return string # The display path.
+function _P.get_ripgrep_display_path(path, display_root)
+    if not display_root then
+        return _P.cleanup_path(path)
+    end
+
+    local relative = vim.fs.relpath(vim.fs.normalize(display_root), path)
+
+    return relative or _P.cleanup_path(path)
+end
+
+--- Parse one `--vimgrep`-formatted ripgrep output line.
+---
+--- CAVEAT: A naive `([^:]+):(%d+):(%d+):(.*)` pattern breaks on Windows
+--- drive-letter paths (e.g. `C:\foo\bar.lua:10:5:text`): Lua's pattern
+--- matching tries every start position until the whole pattern matches, so it
+--- skips past the drive letter's own colon and matches starting right after
+--- it, silently dropping the drive letter from the captured filename. This
+--- strips a leading drive letter first, if any, and reattaches it afterward.
+---
+---@param line string One line of `--vimgrep` output.
+---@return string? # The matched file path, if the line matched.
+---@return string? # The matched line number, as text.
+---@return string? # The matched column number, as text.
+---@return string? # The matched text.
+function _P.parse_ripgrep_vimgrep_line(line)
+    local drive, rest = line:match("^(%a:)([^:]*:%d+:%d+:.*)$")
+
+    if drive then
+        local filename, matched_line, column, text = rest:match("^([^:]*):(%d+):(%d+):(.*)$")
+
+        if filename then
+            return drive .. filename, matched_line, column, text
+        end
+
+        return nil
+    end
+
+    return line:match("([^:]+):(%d+):(%d+):(.*)")
+end
+
+--- Check whether ripgrep stderr only contains filesystem access warnings.
+---
+---@param stderr string The stderr text printed by ripgrep.
+---@return boolean # Whether stderr only has `rg: path: ... (os error N)` warnings.
+function _P.is_ripgrep_filesystem_warning(stderr)
+    local saw_warning = false
+
+    for line in vim.gsplit(stderr, "\n") do
+        line = vim.trim(line)
+
+        if line ~= "" then
+            if not line:match("^rg: .+:%s+.*%(os error %d+%)$") then
+                return false
+            end
+
+            saw_warning = true
+        end
+    end
+
+    return saw_warning
 end
 
 --- Run raw ripgrep `command`.
 ---
 ---@param command string[] A raw ripgrep command to run.
+---@param options _my.ripgrep.Options? Options for quickfix display.
 ---
-function _P.run_ripgrep(command)
+function M.run_ripgrep(command, options)
+    options = options or {}
+    local cwd = vim.fn.getcwd()
+    local display_root = options.display_root or cwd
+
     if _CURRENT_RIPGREP_COMMAND then
         _CURRENT_RIPGREP_COMMAND = nil
         vim.notify("Search interrupted. Please try your search again.", vim.log.levels.WARN)
@@ -1800,11 +1625,12 @@ function _P.run_ripgrep(command)
         return
     end
 
-    ---@type table<string, fun()>
+    ---@type string[]
     local commands = {
-        M._RIPGREP_EXECUTABLE,
+        M.RIPGREP_EXECUTABLE,
         "--vimgrep", -- Format: file:line:column:match
         "--smart-case",
+        "--no-messages",
         unpack(command),
     }
 
@@ -1822,9 +1648,24 @@ function _P.run_ripgrep(command)
 
         _CURRENT_RIPGREP_COMMAND = nil
 
-        if obj.code ~= 0 then
+        local stdout = obj.stdout or ""
+        local stderr = obj.stderr or ""
+
+        if obj.code == 1 and stdout == "" then
             vim.schedule(function()
-                vim.notify("Ripgrep failed: " .. (obj.stderr or "<No stderr found>"), vim.log.levels.ERROR)
+                vim.fn.setqflist({}, "r", { title = vim.fn.join(commands, " "), items = {} })
+                vim.cmd("silent! cclose")
+                vim.notify("No ripgrep matches found.", vim.log.levels.INFO)
+            end)
+
+            return
+        end
+
+        if obj.code ~= 0 and stdout == "" and not _P.is_ripgrep_filesystem_warning(stderr) then
+            vim.schedule(function()
+                local fallback = string.format("<No stderr found; exit code %d>", obj.code)
+
+                vim.notify("Ripgrep failed: " .. (stderr ~= "" and stderr or fallback), vim.log.levels.ERROR)
             end)
 
             return
@@ -1833,16 +1674,16 @@ function _P.run_ripgrep(command)
         ---@type vim.quickfix.entry[]
         local entries = {}
 
-        for line in vim.gsplit(obj.stdout or "", "\n") do
-            local filename, matched_line, column, text = string.match(line, "([^:]+):(%d+):(%d+):(.*)")
-            line = matched_line
+        for line in vim.gsplit(stdout, "\n") do
+            local filename, matched_line, column, text = _P.parse_ripgrep_vimgrep_line(line)
 
-            if filename and line and column and text then
-                filename = _P.cleanup_path(filename)
+            if filename and matched_line and column and text then
+                local path = _P.get_ripgrep_absolute_path(filename, cwd)
 
                 table.insert(entries, {
-                    filename = filename,
-                    lnum = tonumber(line),
+                    filename = path,
+                    module = _P.get_ripgrep_display_path(path, display_root),
+                    lnum = tonumber(matched_line),
                     col = tonumber(column),
                     text = text,
                 })
@@ -1858,7 +1699,9 @@ function _P.run_ripgrep(command)
             local title = _P.get_elided_right_text(full_title, _MAXIMUM_QUICK_FIX_LENGTH)
 
             vim.fn.setqflist({}, " ", { title = title, items = entries })
-            vim.cmd.copen()
+            M.with_file_messages_suppressed(function()
+                vim.cmd.copen()
+            end)
         end)
     end)
 
@@ -1868,7 +1711,6 @@ end
 --- Run `ripgrep` using Neovim.
 ---
 ---@param opts _neovim.commandline.Options
----
 function M.run_ripgrep_command(opts)
     if opts.args == "" then
         vim.notify("Usage: :Rg <pattern>", vim.log.levels.WARN)
@@ -1876,12 +1718,12 @@ function M.run_ripgrep_command(opts)
         return
     end
 
-    _P.run_ripgrep(require("modules.features.core_editor_setup").split_quoted_string(opts.args))
+    M.run_ripgrep(require("modules.features.core_editor_setup").split_quoted_string(opts.args))
 end
 
 --- Show, Select, and Navigate to a buffer from a list of buffers.
 function M.select_buffer()
-    ---@type string[]
+    ---@type integer[]
     local buffers = {}
 
     for _, buffer in ipairs(vim.api.nvim_list_bufs()) do

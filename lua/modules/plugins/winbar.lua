@@ -1,5 +1,10 @@
 --- A lightweight winbar inspired by fgheng/winbar.nvim.
 
+---@class _my.winbar
+local M = {}
+
+---@class _my.winbar._P
+---@field WINBAR_EXPRESSION string The 'winbar' value that every tracked window uses.
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
 
@@ -9,6 +14,9 @@ local core_helpers = require("modules.utilities.core_helpers")
 ---@field start_column integer The first zero-based column in the scope.
 ---@field end_row integer The final zero-based row in the scope.
 ---@field end_column integer The final zero-based column in the scope.
+---@field kind _my.winbar.ScopeKind? The scope kind, when known.
+
+---@alias _my.winbar.ScopeKind "class"|"function"
 
 ---@type table<string, boolean>
 local _EXCLUDED_FILETYPES = {
@@ -57,6 +65,20 @@ if core_helpers.IS_NERDFONT_ALLOWED then
     _ICONS.file_icon_default = ""
     _ICONS.lock_icon = ""
     _ICONS.separator = ">"
+end
+
+--- Get the visible prefix for a winbar context kind.
+---
+---@param kind _my.winbar.ScopeKind The context kind.
+---@return string # The configured prefix text.
+function _P.get_kind_prefix(kind)
+    local fonts = require("modules.utilities.fonts")
+
+    if kind == "class" then
+        return fonts.get_icon(fonts.Icon.winbar_class)
+    end
+
+    return fonts.get_icon(fonts.Icon.winbar_function)
 end
 
 --- Escape `text` for use inside a statusline-like option.
@@ -341,11 +363,29 @@ function _P.get_match_scope(match, query)
     return nil
 end
 
+--- Get the winbar kind represented by a Tree-sitter scope node.
+---
+---@param node TSNode The Tree-sitter scope node.
+---@return _my.winbar.ScopeKind? # The matching winbar kind, if known.
+function _P.get_treesitter_scope_kind(node)
+    local node_type = node:type()
+
+    if node_type:find("class", 1, true) then
+        return "class"
+    end
+
+    if node_type:find("function", 1, true) or node_type:find("method", 1, true) then
+        return "function"
+    end
+
+    return nil
+end
+
 ---@param buffer integer
 ---@return string[]
 function _P.get_treesitter_scope_names(buffer)
     local filetype = vim.bo[buffer].filetype
-    local language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
+    local language = core_helpers.FILETYPE_TO_TREESITTER[filetype] or filetype
     local query = _P.get_treesitter_query(language)
 
     if not query or not core_helpers.has_treesitter_parser(language) then
@@ -391,6 +431,7 @@ function _P.get_treesitter_scope_names(buffer)
                 table.insert(scopes, {
                     end_column = end_column,
                     end_row = end_row,
+                    kind = _P.get_treesitter_scope_kind(scope),
                     name = name,
                     start_column = start_column,
                     start_row = start_row,
@@ -405,7 +446,13 @@ function _P.get_treesitter_scope_names(buffer)
     local names = {}
 
     for _, scope in ipairs(scopes) do
-        table.insert(names, scope.name)
+        local name = scope.name
+
+        if scope.kind then
+            name = _P.get_kind_prefix(scope.kind) .. " " .. name
+        end
+
+        table.insert(names, name)
     end
 
     return names
@@ -417,7 +464,7 @@ end
 ---@return boolean # If a parser can be used, return `true`.
 function _P.has_treesitter_context(buffer)
     local filetype = vim.bo[buffer].filetype
-    local language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
+    local language = core_helpers.FILETYPE_TO_TREESITTER[filetype] or filetype
 
     if language == "" then
         return false
@@ -495,6 +542,79 @@ function _P.simplify_context_text(text)
     return cleaned
 end
 
+--- Strip common class/function definition markers from fallback context text.
+---
+---@param text string The simplified context text.
+---@return string text The text without the leading definition marker.
+---@return _my.winbar.ScopeKind? kind The detected context kind, if any.
+function _P.strip_context_definition_marker(text)
+    local class_name = text:match("^class%s+([%w_][%w_]*)")
+
+    if class_name then
+        return class_name, "class"
+    end
+
+    local function_name = text:match("^async%s+def%s+([%w_][%w_]*)") or text:match("^def%s+([%w_][%w_]*)")
+
+    if function_name then
+        return function_name, "function"
+    end
+
+    function_name = text:match("^local%s+function%s+([%w_%.:][%w_%.:]*)")
+        or text:match("^function%s+([%w_%.:][%w_%.:]*)")
+
+    if function_name then
+        return function_name, "function"
+    end
+
+    return text, nil
+end
+
+--- Simplify a context section and prefix it with its inferred type.
+---
+---@param text string The raw context text.
+---@return string # The display-ready context text.
+function _P.simplify_typed_context_text(text)
+    local cleaned, kind = _P.strip_context_definition_marker(_P.simplify_context_text(text))
+
+    if kind then
+        return _P.get_kind_prefix(kind) .. " " .. cleaned
+    end
+
+    return cleaned
+end
+
+--- Check whether `text` looks like the end of a multi-line definition header.
+---
+---@param text string The raw context line.
+---@return boolean # Whether the line begins with a closing bracket.
+function _P.is_multiline_definition_close(text)
+    return _P.clean_indent_context_text(text):match("^[%)%]%}]") ~= nil
+end
+
+--- Find the opening definition for a multi-line context closing line.
+---
+---@param buffer integer The buffer to inspect.
+---@param row integer The 1-or-more closing-line row.
+---@param indent integer The closing line indentation level.
+---@param tabstop integer The buffer tabstop used for indentation columns.
+---@return string? # The matching opening definition line, if found.
+function _P.find_multiline_definition_start(buffer, row, indent, tabstop)
+    for index = row - 1, 1, -1 do
+        local line = vim.api.nvim_buf_get_lines(buffer, index - 1, index, false)[1] or ""
+
+        if line:match("%S") and _P.get_line_indent(line, tabstop) == indent then
+            local _, kind = _P.strip_context_definition_marker(_P.simplify_context_text(line))
+
+            if kind then
+                return line
+            end
+        end
+    end
+
+    return nil
+end
+
 --- Get the indentation level of `text`.
 ---
 ---@param text string The line text to inspect.
@@ -540,27 +660,30 @@ end
 ---@param row integer? The 1-or-more cursor row. Defaults to the window cursor.
 ---@return string[] # The indentation context from shallowest to deepest.
 function _P.get_indentation_scope_names(buffer, row)
-    row = row or vim.api.nvim_win_get_cursor(0)[1]
-    row = _find_nearest_nonblank_row(buffer, row)
+    local start_row = _find_nearest_nonblank_row(buffer, row or vim.api.nvim_win_get_cursor(0)[1])
 
-    if not row then
+    if not start_row then
         return {}
     end
 
-    local line = vim.api.nvim_buf_get_lines(buffer, row - 1, row, false)[1] or ""
+    local line = vim.api.nvim_buf_get_lines(buffer, start_row - 1, start_row, false)[1] or ""
     local tabstop = vim.bo[buffer].tabstop
     local maximum_indent = _P.get_line_indent(line, tabstop)
     ---@type string[]
     local names = {}
 
-    for index = row - 1, 1, -1 do
+    for index = start_row - 1, 1, -1 do
         line = vim.api.nvim_buf_get_lines(buffer, index - 1, index, false)[1] or ""
 
         if line:match("%S") then
             local indent = _P.get_line_indent(line, tabstop)
 
             if indent < maximum_indent then
-                local name = _P.simplify_context_text(line)
+                if _P.is_multiline_definition_close(line) then
+                    line = _P.find_multiline_definition_start(buffer, index, indent, tabstop) or line
+                end
+
+                local name = _P.simplify_typed_context_text(line)
 
                 if name ~= "" then
                     table.insert(names, 1, name)
@@ -805,6 +928,7 @@ function _P.get_winbar()
     }, "")
 end
 
+---@return string # The 'winbar' text for the current window.
 _G.get_winbar = function()
     return _P.get_winbar()
 end
@@ -821,7 +945,21 @@ function _P.sync_window_winbar(window)
 
     local buffer = vim.api.nvim_win_get_buf(window)
 
-    if _P.is_excluded(window, buffer) then
+    if _P.is_window_excluded(window) then
+        vim.wo[window].winbar = ""
+
+        return
+    end
+
+    local quickfix_winbar = require("modules.features.quickfix_winbar")
+
+    if quickfix_winbar.is_quickfix_window(window) then
+        vim.wo[window].winbar = quickfix_winbar.WINBAR_EXPRESSION
+
+        return
+    end
+
+    if _P.is_buffer_excluded(buffer) then
         vim.wo[window].winbar = ""
 
         return
@@ -853,4 +991,8 @@ vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "BufWinEnter", "TermOpen",
 
 _P.sync_all_window_winbars()
 
-return _P
+--- Expose the private namespace so the specs can reach it.
+---@type _my.winbar._P
+M._P = _P
+
+return M

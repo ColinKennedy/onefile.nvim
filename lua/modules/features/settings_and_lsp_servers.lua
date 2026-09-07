@@ -2,6 +2,9 @@
 
 local M = {}
 
+---@class _my.settings_and_lsp_servers._P
+local _P = {}
+
 ---------- Saver [Start] ----------
 -- NOTE: Create the :AsyncWrite command (for writing without blocking Neovim)
 vim.api.nvim_create_user_command("AsyncWrite", function()
@@ -27,7 +30,15 @@ local temporary_directory = os.getenv("HOME") or os.getenv("APPDATA")
 vim.opt.undodir = temporary_directory .. "/.vim/undodir"
 vim.api.nvim_create_autocmd("BufWritePost", {
     pattern = "*",
-    command = "execute 'wundo ' . escape(undofile(expand('%')),'% ')",
+    callback = function(event)
+        local name = vim.api.nvim_buf_get_name(event.buf)
+
+        if name == "" or vim.bo[event.buf].buftype ~= "" then
+            return
+        end
+
+        vim.cmd("wundo " .. vim.fn.fnameescape(vim.fn.undofile(name)))
+    end,
 })
 
 vim.opt.cmdheight = 2
@@ -43,11 +54,6 @@ vim.api.nvim_create_autocmd("FileType", {
         vim.opt_local.colorcolumn = "88"
     end,
 })
-
-vim.g.python_host_prog = "/bin/python"
--- Reference: https://www.inmotionhosting.com/support/server/linux/install-python-3-9-centos-7/
--- vim.g.python3_host_prog = "/usr/local/bin/python3.7"
-vim.g.python3_host_prog = "/bin/python3.10"
 
 -- Force Neovim to have one statusline for all buffers (rather than one-per-buffer)
 --
@@ -76,84 +82,79 @@ vim.o.exrc = true
 vim.opt.shell = os.getenv("NEOVIM_SHELL_COMMAND") or vim.opt.shell
 
 ---@type _my.lsp.ServerDefinition[]
-M.servers = {
-    -- {
-    --     name = "basedpyright",
-    --     filetypes = "python",
-    --     callback = function(event)
-    --         local command = "basedpyright-langserver"
-    --
-    --         if vim.fn.executable(command) ~= 1 then
-    --             vim.notify(
-    --                 string.format('Cannot load LSP. There is no "%s" executable.', command),
-    --                 vim.log.levels.ERROR
-    --             )
-    --
-    --             return
-    --         end
-    --
-    --         vim.lsp.start({
-    --             name = "basedpyright",
-    --             cmd = { command, "--stdio" },
-    --             settings = {
-    --                 basedpyright = {
-    --                     disableOrganizeImports = true,
-    --                     analysis = {
-    --                         typeCheckingMode = "basic",
-    --                     },
-    --                 },
-    --             },
-    --         }, { bufnr = event.buf })
-    --     end,
-    -- },
+_P.servers = {
     {
         name = "ty",
-        filetypes = "python",
-        callback = function(event)
-            local command = "ty"
-
-            if vim.fn.executable(command) ~= 1 then
-                vim.notify(
-                    string.format('Cannot load LSP. There is no "%s" executable.', command),
-                    vim.log.levels.ERROR
-                )
-
-                return
-            end
-
-            vim.lsp.start({
-                name = "ty",
-                cmd = { command, "server" },
-            }, { bufnr = event.buf })
-        end,
+        config = {
+            cmd = { "ty", "server" },
+            filetypes = { "python" },
+        },
     },
     {
         name = "lua_ls",
-        filetypes = { "lua" },
-        callback = function(event)
-            local paths = vim.tbl_deep_extend("force", {}, require("modules.utilities.core_helpers")._LUA_ROOT_PATHS)
+        config = function()
+            local paths = vim.tbl_deep_extend("force", {}, require("modules.utilities.core_helpers").LUA_ROOT_PATHS)
             table.insert(paths, ".git")
 
-            local command = "lua-language-server"
-
-            if vim.fn.executable(command) ~= 1 then
-                vim.schedule(function()
-                    vim.notify(
-                        string.format('Cannot load LSP. There is no "%s" executable.', command),
-                        vim.log.levels.ERROR
-                    )
-                end)
-
-                return
-            end
-
-            vim.lsp.start({
-                cmd = { command },
-                name = "lua-language-server",
-                root_dir = vim.fs.root(0, paths),
-            }, { bufnr = event.buf })
+            return {
+                cmd = { "lua-language-server" },
+                filetypes = { "lua" },
+                root_markers = paths,
+            }
         end,
     },
 }
+
+--- Configure and enable all built-in LSP servers.
+---
+---@param config_lsp? fun(name: string, config: vim.lsp.Config): nil Test seam for `vim.lsp.config`.
+---@param enable_lsp? fun(name: string): nil Test seam for `vim.lsp.enable`.
+function M._configure_lsp_servers(config_lsp, enable_lsp)
+    if
+        not config_lsp
+        and not enable_lsp
+        and (type(vim.lsp.config) ~= "function" or type(vim.lsp.enable) ~= "function")
+    then
+        return
+    end
+
+    config_lsp = config_lsp or function(name, config)
+        vim.lsp.config(name, config)
+    end
+    enable_lsp = enable_lsp or function(name)
+        vim.lsp.enable(name)
+    end
+
+    for _, server in ipairs(_P.servers) do
+        ---@type vim.lsp.Config
+        local config
+
+        if type(server.config) == "function" then
+            config = (server.config --[[@as fun(): vim.lsp.Config]])()
+        else
+            config = server.config --[[@as vim.lsp.Config]]
+        end
+
+        config_lsp(server.name, config)
+        enable_lsp(server.name)
+    end
+end
+
+--- Check if Neovim is running the Busted test harness.
+---
+---@return boolean # If this process is running Busted, return `true`.
+function _P.is_running_busted()
+    if vim.g.my_is_running_busted then
+        return true
+    end
+
+    local arguments = _G.arg or {}
+
+    return tostring(arguments[0] or ""):match("busted") ~= nil
+end
+
+if not _P.is_running_busted() then
+    M._configure_lsp_servers()
+end
 
 return M

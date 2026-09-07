@@ -152,7 +152,7 @@ local function _watch_keys()
 end
 
 --- Install the better-escape mappings.
-function M.setup()
+function M._setup()
     pcall(vim.keymap.del, "i", "jk")
     pcall(vim.keymap.del, "t", "jk")
     _map_mode("i")
@@ -166,12 +166,14 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
             _TIMER:stop()
         end
 
-        _TIMER:close()
+        if not _TIMER:is_closing() then
+            _TIMER:close()
+        end
     end,
     desc = "Close the better-escape timer.",
     group = _AUGROUP,
 })
 
-M.setup()
+M._setup()
 
 return M

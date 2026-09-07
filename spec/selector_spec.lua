@@ -79,9 +79,13 @@ local function press_normal(keys)
 end
 
 describe("selector UI", function()
+    ---@type integer
     local original_lines
+    ---@type integer
     local original_columns
+    ---@type integer
     local original_scrolloff
+    ---@type boolean
     local original_showmode
 
     before_each(function()
@@ -130,6 +134,7 @@ describe("selector UI", function()
         local list_window = get_selector_list_window()
         local list_buffer = vim.api.nvim_win_get_buf(list_window)
         local lines = vim.api.nvim_buf_get_lines(list_buffer, 0, -1, false)
+        ---@type integer?
         local selected_row = nil
 
         for index, line in ipairs(lines) do
@@ -462,9 +467,9 @@ describe("selector UI", function()
         press("<C-n>")
         assert.equal(1, render_count)
 
-        vim.wait(1000, function()
+        assert.True(vim.wait(10000, function()
             return render_count == 2
-        end)
+        end))
 
         local preview_window = get_selector_preview_window("markdown")
         local preview_buffer = vim.api.nvim_win_get_buf(preview_window)
@@ -708,6 +713,7 @@ describe("selector UI", function()
         refresh()
 
         local marks = vim.api.nvim_buf_get_extmarks(prompt_buffer, -1, 0, -1, { details = true })
+        ---@type string?
         local count_text = nil
 
         for _, mark in ipairs(marks) do
@@ -725,6 +731,7 @@ describe("selector UI", function()
     end)
 
     it("toggles multi-selected rows and confirms selected entries even when filtered out", function()
+        ---@type _my.selector_gui.entry.Selection[]?
         local confirmed = nil
         local refresh = core_editor_setup.select_from_options({ "alpha", "beta", "gamma" }, {
             multiple_selection = true,
@@ -769,6 +776,7 @@ describe("selector UI", function()
         refresh()
 
         local marks = vim.api.nvim_buf_get_extmarks(prompt_buffer, -1, 0, -1, { details = true })
+        ---@type string?
         local count_text = nil
 
         for _, mark in ipairs(marks) do
@@ -796,6 +804,7 @@ describe("selector UI", function()
     end)
 
     it("confirms the hovered entry as a one-item list when multi-select has no explicit selections", function()
+        ---@type _my.selector_gui.entry.Selection[]?
         local confirmed = nil
         local refresh = core_editor_setup.select_from_options({ "alpha", "beta" }, {
             multiple_selection = true,
@@ -821,7 +830,7 @@ describe("selector UI", function()
     end)
 
     it("shortens selector directory headers with home and parent abbreviations", function()
-        local header = core_editor_setup.shorten_selector_directory_path(
+        local header = core_editor_setup._shorten_selector_directory_path(
             "/home/selecaoone/repositories/personal/.config/noplugins",
             "/home/selecaoone"
         )
@@ -830,7 +839,7 @@ describe("selector UI", function()
     end)
 
     it("shortens Windows selector directory headers with home and parent abbreviations", function()
-        local header = core_editor_setup.shorten_selector_directory_path(
+        local header = core_editor_setup._shorten_selector_directory_path(
             [[C:\Users\selecaoone\repositories\personal\.config\noplugins]],
             [[c:\users\selecaoone]]
         )
@@ -839,7 +848,7 @@ describe("selector UI", function()
     end)
 
     it("shortens Windows drive paths when they are outside home", function()
-        local header = core_editor_setup.shorten_selector_directory_path(
+        local header = core_editor_setup._shorten_selector_directory_path(
             [[D:\work\repositories\personal\noplugins]],
             [[C:\Users\selecaoone]]
         )
@@ -848,7 +857,7 @@ describe("selector UI", function()
     end)
 
     it("keeps single-segment selector directory headers readable", function()
-        local header = core_editor_setup.shorten_selector_directory_path("/tmp", "/home/selecaoone")
+        local header = core_editor_setup._shorten_selector_directory_path("/tmp", "/home/selecaoone")
 
         assert.are.same("/tmp", header)
     end)
@@ -968,6 +977,8 @@ describe("selector UI", function()
         local refresh = core_editor_setup.select_from_options({ path }, {
             confirm = function() end,
             deserialize = function(value)
+                ---@cast value string
+
                 return { display = vim.fs.basename(value), value = value }
             end,
             preview = {
@@ -1002,10 +1013,11 @@ describe("selector UI", function()
         local core_helpers = require("modules.utilities.core_helpers")
         local original_exists_command = core_helpers.exists_command
         local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
-        local original_get_stash_changed_line_count_async = core_editor_setup.get_stash_changed_line_count_async
-        local original_get_stash_preview_lines_async = core_editor_setup.get_stash_preview_lines_async
+        local original_get_stash_changed_line_count_async = core_editor_setup._get_stash_changed_line_count_async
+        local original_get_stash_preview_lines_async = core_editor_setup._get_stash_preview_lines_async
         ---@type _my.selector_gui.entry.Selection[]
         local stashes = {}
+        ---@type fun(): nil
         local on_update
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -1019,11 +1031,11 @@ describe("selector UI", function()
             return stashes
         end
         ---@diagnostic disable-next-line: duplicate-set-field
-        core_editor_setup.get_stash_changed_line_count_async = function(_, callback)
+        core_editor_setup._get_stash_changed_line_count_async = function(_, callback)
             callback(20)
         end
         ---@diagnostic disable-next-line: duplicate-set-field
-        core_editor_setup.get_stash_preview_lines_async = function(_, callback)
+        core_editor_setup._get_stash_preview_lines_async = function(_, callback)
             callback({ "diff --git a/file b/file" })
         end
 
@@ -1068,8 +1080,8 @@ describe("selector UI", function()
 
         core_helpers.exists_command = original_exists_command
         core_helpers.get_deferred_shell_command_results = original_get_deferred_results
-        core_editor_setup.get_stash_changed_line_count_async = original_get_stash_changed_line_count_async
-        core_editor_setup.get_stash_preview_lines_async = original_get_stash_preview_lines_async
+        core_editor_setup._get_stash_changed_line_count_async = original_get_stash_changed_line_count_async
+        core_editor_setup._get_stash_preview_lines_async = original_get_stash_preview_lines_async
 
         assert.is_true(found_stash_text)
     end)
@@ -1078,8 +1090,8 @@ describe("selector UI", function()
         local core_helpers = require("modules.utilities.core_helpers")
         local original_exists_command = core_helpers.exists_command
         local original_get_deferred_results = core_helpers.get_deferred_shell_command_results
-        local original_get_stash_changed_line_count = core_editor_setup.get_stash_changed_line_count
-        local original_get_stash_preview_lines = core_editor_setup.get_stash_preview_lines
+        local original_get_stash_changed_line_count = core_editor_setup._get_stash_changed_line_count
+        local original_get_stash_preview_lines = core_editor_setup._get_stash_preview_lines
 
         ---@diagnostic disable-next-line: duplicate-set-field
         core_helpers.exists_command = function()
@@ -1090,11 +1102,11 @@ describe("selector UI", function()
             return { "stash@{0}: On main: important stash" }
         end
         ---@diagnostic disable-next-line: duplicate-set-field
-        core_editor_setup.get_stash_changed_line_count = function()
+        core_editor_setup._get_stash_changed_line_count = function()
             error("stash line counts must not be computed synchronously", 0)
         end
         ---@diagnostic disable-next-line: duplicate-set-field
-        core_editor_setup.get_stash_preview_lines = function()
+        core_editor_setup._get_stash_preview_lines = function()
             error("stash previews must not be computed synchronously", 0)
         end
 
@@ -1105,8 +1117,8 @@ describe("selector UI", function()
 
         core_helpers.exists_command = original_exists_command
         core_helpers.get_deferred_shell_command_results = original_get_deferred_results
-        core_editor_setup.get_stash_changed_line_count = original_get_stash_changed_line_count
-        core_editor_setup.get_stash_preview_lines = original_get_stash_preview_lines
+        core_editor_setup._get_stash_changed_line_count = original_get_stash_changed_line_count
+        core_editor_setup._get_stash_preview_lines = original_get_stash_preview_lines
     end)
 
     it("<Space>B uses multi-select buffer selection", function()

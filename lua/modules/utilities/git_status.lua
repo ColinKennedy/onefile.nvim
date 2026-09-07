@@ -3,6 +3,9 @@
 local core_helpers = require("modules.utilities.core_helpers")
 
 local M = {}
+
+---@class _my.git_status._P
+---@field opts _my.git_status.Options The tunable Git status settings.
 local _P = {}
 
 ---@class _my.git_status.Operation
@@ -47,8 +50,7 @@ local _P = {}
 ---@field auto_fetch_interval integer
 ---@field git_status_timeout integer
 
----@type _my.git_status.Options
-M.opts = {
+_P.opts = {
     auto_fetch_interval = 30000,
     git_status_timeout = 1000,
 }
@@ -57,8 +59,10 @@ local _GIT_STATUS_REFRESH_INTERVAL = 1000
 local _GIT_STATUS_BUSY_DELAY = 1000
 ---@type table<string, _my.git_status.CacheEntry>
 local _CACHE = {}
+---@type boolean?
 local _IS_GIT_AVAILABLE = nil
 local _DID_SETUP = false
+---@type uv.uv_timer_t?
 local _FETCH_TIMER = nil
 
 ---@type table<string, table<string, string>>
@@ -114,7 +118,7 @@ end
 ---@return boolean
 local function _is_git_available()
     if _IS_GIT_AVAILABLE == nil then
-        _IS_GIT_AVAILABLE = core_helpers.exists_command(core_helpers._GIT_EXECUTABLE)
+        _IS_GIT_AVAILABLE = core_helpers.exists_command(core_helpers.GIT_EXECUTABLE)
     end
 
     return _IS_GIT_AVAILABLE
@@ -210,7 +214,7 @@ end
 ---@param callback fun(details: _my.git_status.RepositoryDetails?): nil
 local function _get_repository_details(path, callback)
     vim.system(
-        { core_helpers._GIT_EXECUTABLE, "-C", path, "rev-parse", "--show-toplevel", "--absolute-git-dir" },
+        { core_helpers.GIT_EXECUTABLE, "-C", path, "rev-parse", "--show-toplevel", "--absolute-git-dir" },
         { text = true },
         function(process)
             if process.code ~= 0 then
@@ -407,7 +411,7 @@ local function _watch_git_dir(entry)
         end
 
         vim.schedule(function()
-            M.refresh()
+            M._refresh()
         end)
     end)
 
@@ -421,7 +425,7 @@ local function _run_status(entry)
     end
 
     vim.system({
-        core_helpers._GIT_EXECUTABLE,
+        core_helpers.GIT_EXECUTABLE,
         "-C",
         entry.details.repository,
         "--no-optional-locks",
@@ -432,7 +436,7 @@ local function _run_status(entry)
         "--untracked-files=all",
     }, {
         text = true,
-        timeout = M.opts.git_status_timeout,
+        timeout = _P.opts.git_status_timeout,
     }, function(process)
         vim.defer_fn(function()
             entry.in_flight = false
@@ -464,7 +468,7 @@ local function _run_status(entry)
 end
 
 ---@param path string?
-function M.refresh(path)
+function M._refresh(path)
     if not _is_git_available() then
         return
     end
@@ -500,7 +504,7 @@ function M.refresh(path)
     end)
 end
 
-function M.fetch()
+function _P.fetch()
     if not _is_git_available() then
         return
     end
@@ -512,12 +516,12 @@ function M.fetch()
     end
 
     vim.system(
-        { core_helpers._GIT_EXECUTABLE, "-C", entry.details.repository, "fetch" },
+        { core_helpers.GIT_EXECUTABLE, "-C", entry.details.repository, "fetch" },
         { text = true },
         function(process)
             if process.code == 0 then
                 vim.schedule(function()
-                    M.refresh()
+                    M._refresh()
                 end)
             end
         end
@@ -572,7 +576,7 @@ function M.get_statusline(path)
     local now = vim.uv.now()
 
     if entry.checked_at == 0 or (now - entry.checked_at) > _GIT_STATUS_REFRESH_INTERVAL then
-        M.refresh(path)
+        M._refresh(path)
     end
 
     if not entry.status then
@@ -613,20 +617,20 @@ function M.setup()
         { "BufEnter", "BufFilePost", "BufWritePost", "DirChanged", "FileChangedShellPost", "FocusGained" },
         {
             callback = function()
-                M.refresh()
+                M._refresh()
             end,
         }
     )
 
-    M.refresh()
+    M._refresh()
 
-    if M.opts.auto_fetch_interval and M.opts.auto_fetch_interval > 0 then
-        local interval = math.max(M.opts.auto_fetch_interval, 1000)
+    if _P.opts.auto_fetch_interval and _P.opts.auto_fetch_interval > 0 then
+        local interval = math.max(_P.opts.auto_fetch_interval, 1000)
         _FETCH_TIMER = vim.uv.new_timer()
 
         if _FETCH_TIMER then
             _FETCH_TIMER:start(interval, interval, function()
-                vim.schedule(M.fetch)
+                vim.schedule(_P.fetch)
             end)
         end
     end

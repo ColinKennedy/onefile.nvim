@@ -1,12 +1,16 @@
 --- Synchronize custom session tracking when Neovim loads a Session.vim file.
 
+---@class _my.session_sync
+local M = {}
+
+---@class _my.session_sync._P
+---@field session_load_options _my.session_sync.Options? The options to restore once a session finishes loading.
 local _P = {}
 
 ---@class _my.session_sync.Options
 ---@field shortmess string
 ---@field more boolean
 
----@type _my.session_sync.Options?
 _P.session_load_options = nil
 
 --- Quiet noisy session restore messages that otherwise trigger hit-enter prompts.
@@ -49,7 +53,7 @@ pcall(function()
 
             -- NOTE: We use `pcall` because this method will error if there is no session to load
             pcall(function()
-                require("modules.features.core_editor_setup")._SESSION_MANAGER:sync_current_session()
+                require("modules.features.core_editor_setup").SESSION_MANAGER:sync_current_session()
             end)
         end,
     })
@@ -60,4 +64,8 @@ pcall(function()
     })
 end)
 
-return _P
+--- Expose the private namespace so the specs can reach it.
+---@type _my.session_sync._P
+M._P = _P
+
+return M

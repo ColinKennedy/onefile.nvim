@@ -1,4 +1,5 @@
 --- Build the custom statusline with mode colors, git branch, Grapple marks, and cursor progress.
+local M = {}
 local _P = {}
 local core_helpers = require("modules.utilities.core_helpers")
 local git_status = require("modules.utilities.git_status")
@@ -12,7 +13,13 @@ local _Color = {
     visual = "#803a95",
     insert = "#61afef",
     replace = "#11d0ef",
+    git_submode = "#0b6e2b",
 }
+
+--- If `true`, force the Git add submode statusline color regardless of the current Vim mode.
+---
+---@type boolean
+local _GIT_SUBMODE_ACTIVE = false
 
 -- Note: termcodes \19 and \22 are ^S and ^V
 ---@type table<string, {name: string, hl: string}>
@@ -215,8 +222,23 @@ function _P.update_status_mode_colors(mode)
         color = mode_color.hl
     end
 
+    if _GIT_SUBMODE_ACTIVE then
+        color = _Color.git_submode
+    end
+
     _P.clone_highlight("StatusMode", "StatusMode", { bg = color })
     _P.clone_highlight("StatusModeArrow", "StatusMode", { fg = color, bg = lighter_background })
+end
+
+--- Force (or release) the Git add submode statusline color.
+---
+--- While active, this overrides the normal per-mode statusline color so the
+--- submode stays visible even though the underlying Vim mode is still Normal.
+---
+---@param active boolean If `true`, show the Git add submode color until released.
+function M.set_git_submode_active(active)
+    _GIT_SUBMODE_ACTIVE = active
+    _P.update_status_mode_colors(vim.api.nvim_get_mode().mode)
 end
 
 vim.api.nvim_create_autocmd({ "ModeChanged", "InsertEnter" }, {
@@ -229,3 +251,5 @@ vim.api.nvim_create_autocmd({ "ModeChanged", "InsertEnter" }, {
 git_status.setup()
 
 _P.update_status_mode_colors(vim.api.nvim_get_mode().mode)
+
+return M

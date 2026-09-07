@@ -29,10 +29,16 @@ end
 
 --- Create a temporary Git repository for integration tests.
 ---
+--- CAVEAT: `git init` inherits the developer's global configuration, and the
+--- diff parser hard-codes the default `a/`/`b/` header prefixes. A machine with
+--- `diff.noprefix` or `diff.mnemonicPrefix` set globally therefore fails these
+--- tests for reasons unrelated to the code under test.
+---
 ---@return string # The temporary repository root.
 local function make_repo()
     local root = vim.fn.tempname()
     assert.equal(1, vim.fn.mkdir(root, "p"))
+    root = vim.uv.fs_realpath(root) or root
 
     local result = vim.system({ "git", "-C", root, "init" }, { text = true }):wait()
     assert.equal(0, result.code, result.stderr)
@@ -140,26 +146,89 @@ local function press_normal_keys(keys)
     vim.wait(400)
 end
 
+--- Normalize a path's separators for cross-platform comparisons.
+---
+--- On Windows, a buffer created through `setqflist()`'s `filename` field (or
+--- resolved by jumping to a quickfix entry) comes back with native
+--- backslashes, while a path built here with `vim.fs.joinpath` keeps the
+--- forward slashes it was given. Both name the same file, so tests compare
+--- them after normalizing to forward slashes.
+---
+---@param path string The path to normalize.
+---@return string # The path with forward slashes.
+local function to_forward_slashes(path)
+    return (path:gsub("\\", "/"))
+end
+
+--- Get the resolved absolute path for a quickfix entry.
+---
+--- Quickfix entries store a buffer number, and Vim may display that buffer's
+--- name relative to the current directory. Tests compare absolute paths so that
+--- the current directory cannot change the result.
+---
+---@param entry vim.quickfix.entry The quickfix entry to inspect.
+---@return string # The absolute file path for `entry`.
+local function get_quickfix_path(entry)
+    return to_forward_slashes(vim.fn.fnamemodify(vim.fn.bufname(entry.bufnr), ":p"))
+end
+
+--- Run `:LoadGitDiff` from `directory` and wait for the quickfix list.
+---
+--- The current buffer is emptied first so that the repository is resolved from
+--- the current directory instead of a buffer path.
+---
+---@param root string The repository root, used to wait for the loaded state.
+---@param directory string The directory to run `:LoadGitDiff` from.
+---@return vim.quickfix.entry[] # The resulting quickfix entries.
+local function load_quickfix_from(root, directory)
+    ---@type vim.quickfix.entry[]
+    local items = {}
+
+    with_cwd(directory, function()
+        vim.cmd("silent enew!")
+        vim.cmd("LoadGitDiff")
+        vim.wait(10000, function()
+            return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
+        end)
+
+        items = vim.fn.getqflist()
+    end)
+
+    return items
+end
+
 --- Load repository hunks and wait for async completion.
 ---
 ---@return boolean # If hunks loaded, return `true`.
 local function load_hunks()
+    ---@type boolean?
     local loaded
 
-    git_hunk_navigation.load(nil, function(success)
+    git_hunk_navigation._load(nil, function(success)
         loaded = success
     end)
 
-    vim.wait(1000, function()
+    vim.wait(10000, function()
         return loaded ~= nil
     end)
 
     return loaded == true
 end
 
+--- Remove repository state left by another integration spec.
+local function clear_hunk_state()
+    local state = git_hunk_navigation._get_state()
+
+    state.active_repository = nil
+    state.repositories = {}
+end
+
 describe("modules.features.git_hunk_navigation", function()
+    before_each(clear_hunk_state)
+    after_each(clear_hunk_state)
+
     it("parses repository-wide hunks sequentially", function()
-        local entries = git_hunk_navigation.parse_diff(
+        local entries = git_hunk_navigation._parse_diff(
             "/tmp/repo",
             [[
 diff --git a/a.txt b/a.txt
@@ -186,7 +255,7 @@ index 2222222..3333333 100644
     end)
 
     it("parses renamed file hunks using the target path", function()
-        local entries = git_hunk_navigation.parse_diff(
+        local entries = git_hunk_navigation._parse_diff(
             "/tmp/repo",
             [[
 diff --git a/old/file.txt b/new/file.txt
@@ -208,7 +277,7 @@ index 1111111..2222222 100644
     end)
 
     it("skips whole-file deletion hunks because there is no target buffer to open", function()
-        local entries = git_hunk_navigation.parse_diff(
+        local entries = git_hunk_navigation._parse_diff(
             "/tmp/repo",
             [[
 diff --git a/deleted.txt b/deleted.txt
@@ -252,7 +321,7 @@ index 2222222..3333333 100644
                     assert.True(load_hunks())
                 end)
 
-                local state = git_hunk_navigation.get_state()
+                local state = git_hunk_navigation._get_state()
                 assert.equal(1, #state.repositories[first].entries)
                 assert.equal(1, #state.repositories[second].entries)
                 assert.equal("file.txt", state.repositories[first].entries[1].relative_path)
@@ -316,7 +385,7 @@ index 2222222..3333333 100644
                     assert.is_false(vim.api.nvim_buf_is_loaded(unloaded))
                     assert.True(load_hunks())
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(3, #repository_state.entries)
                     assert.equal("first.txt", repository_state.entries[1].relative_path)
                     assert.equal(2, repository_state.entries[1].lnum)
@@ -351,10 +420,18 @@ index 2222222..3333333 100644
                     vim.api.nvim_win_set_cursor(0, { 1, 0 })
                     press_normal_keys("]g")
 
+                    vim.wait(10000, function()
+                        local repository_state = git_hunk_navigation._get_repository_state(root)
+
+                        return repository_state ~= nil
+                            and not repository_state.stale
+                            and vim.api.nvim_win_get_cursor(0)[1] == 2
+                    end)
+
                     assert.equal(vim.fs.joinpath(root, "file.txt"), vim.api.nvim_buf_get_name(0))
                     assert.are.same({ 2, 0 }, vim.api.nvim_win_get_cursor(0))
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(1, #repository_state.entries)
                 end)
             end)
@@ -417,13 +494,282 @@ index 2222222..3333333 100644
             local ok, err = pcall(function()
                 with_cwd(root, function()
                     vim.cmd("LoadGitDiff")
-                    vim.wait(1000, function()
-                        return git_hunk_navigation.get_repository_state(root) ~= nil and has_quickfix_window()
+                    vim.wait(10000, function()
+                        return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
                     end)
 
-                    local repository_state = assert(git_hunk_navigation.get_repository_state(root))
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
                     assert.equal(#repository_state.entries, #vim.fn.getqflist())
                     assert.equal("file.txt", repository_state.entries[1].relative_path)
+                end)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("shortens the home directory to `~` in the quickfix title", function()
+        local home = vim.fn.fnamemodify("~", ":p"):gsub("[/\\]$", "")
+
+        assert.equal(
+            "Git: " .. vim.fs.joinpath("~", "repositories/example"),
+            git_hunk_navigation._get_quickfix_title(vim.fs.joinpath(home, "repositories/example"))
+        )
+
+        -- NOTE: The home directory itself collapses to a bare `~`.
+        assert.equal("Git: ~", git_hunk_navigation._get_quickfix_title(home))
+    end)
+
+    it("leaves a repository root outside the home directory unshortened", function()
+        -- NOTE: `:~` only rewrites paths under the home directory, so a repository
+        -- somewhere else keeps its full path rather than being mangled.
+        assert.equal("Git: /opt/example/repository", git_hunk_navigation._get_quickfix_title("/opt/example/repository"))
+    end)
+
+    it("titles the quickfix list with the shortened repository root", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\n")
+            write_text(vim.fs.joinpath(root, "file.txt"), "one\nTWO\n")
+
+            local ok, err = pcall(function()
+                load_quickfix_from(root, root)
+
+                assert.equal(git_hunk_navigation._get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("still titles the quickfix list when the repository has no hunks", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\n")
+
+            local ok, err = pcall(function()
+                -- NOTE: A clean repository empties the list, but the title should
+                -- still say which repository was inspected.
+                load_quickfix_from(root, root)
+
+                assert.equal(0, #vim.fn.getqflist())
+                assert.equal(git_hunk_navigation._get_quickfix_title(root), vim.fn.getqflist({ title = 0 }).title)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("resolves quickfix paths from the repository root when the current directory is a subfolder", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "docs/beta.txt", "a\nb\nc\nd\n")
+            commit_file(root, "src/deep/nested/alpha.txt", "one\ntwo\nthree\n")
+            write_text(vim.fs.joinpath(root, "docs/beta.txt"), "a\nb\nC\nd\n")
+            write_text(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), "one\nTWO\nthree\n")
+
+            local ok, err = pcall(function()
+                local items = load_quickfix_from(root, vim.fs.joinpath(root, "src/deep"))
+
+                assert.equal(2, #items)
+
+                -- NOTE: Git reports diff paths relative to the repository root,
+                -- never relative to the current directory. The quickfix entries
+                -- must point at the real files even though `src/deep` is neither
+                -- the repository root nor a parent of `docs/beta.txt`.
+                assert.equal(
+                    to_forward_slashes(vim.fn.fnamemodify(vim.fs.joinpath(root, "docs/beta.txt"), ":p")),
+                    get_quickfix_path(items[1])
+                )
+                assert.equal(3, items[1].lnum)
+                assert.equal(
+                    to_forward_slashes(vim.fn.fnamemodify(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), ":p")),
+                    get_quickfix_path(items[2])
+                )
+                assert.equal(2, items[2].lnum)
+
+                -- NOTE: The quickfix columns already show the file and line, so
+                -- the display text shows the changed line's contents.
+                assert.equal("C", items[1].text)
+                assert.equal("TWO", items[2].text)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("shows the removed line as the display text for delete-only hunks", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\nthree\n")
+            write_text(vim.fs.joinpath(root, "file.txt"), "one\nthree\n")
+
+            local ok, err = pcall(function()
+                local items = load_quickfix_from(root, root)
+
+                assert.equal(1, #items)
+                assert.equal("two", items[1].text)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("shows the nearest non-empty hunk line when the changed line is blank", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\n")
+            write_text(vim.fs.joinpath(root, "file.txt"), "one\n\n    \nADDED\ntwo\n")
+
+            local ok, err = pcall(function()
+                local items = load_quickfix_from(root, root)
+
+                assert.equal(1, #items)
+                assert.equal(2, items[1].lnum)
+
+                -- NOTE: A blank line says nothing about the change, so the
+                -- display text skips ahead to the next line with contents.
+                assert.equal("ADDED", items[1].text)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("shows the nearest non-empty file line when a whole hunk is blank", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\nKEEP ME\n")
+            write_text(vim.fs.joinpath(root, "file.txt"), "one\nKEEP ME\n\n")
+
+            local ok, err = pcall(function()
+                with_cwd(root, function()
+                    vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "file.txt")))
+                    assert.True(load_hunks())
+
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
+                    assert.equal(1, #repository_state.entries)
+                    assert.equal("KEEP ME", repository_state.entries[1].text)
+                end)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("shows unsaved buffer text as the display text", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "file.txt", "one\ntwo\nthree\n")
+
+            local ok, err = pcall(function()
+                with_cwd(root, function()
+                    vim.cmd("silent edit " .. vim.fn.fnameescape(vim.fs.joinpath(root, "file.txt")))
+                    vim.api.nvim_buf_set_lines(0, 1, 2, false, { "    unsaved text" })
+                    assert.True(load_hunks())
+
+                    local repository_state = assert(git_hunk_navigation._get_repository_state(root))
+                    assert.equal(1, #repository_state.entries)
+                    assert.equal("unsaved text", repository_state.entries[1].text)
+                end)
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("builds the same quickfix entries from the repository root and from a subfolder", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "top.txt", "one\ntwo\n")
+            commit_file(root, "src/deep/nested/alpha.txt", "one\ntwo\nthree\n")
+            write_text(vim.fs.joinpath(root, "top.txt"), "one\nTWO\n")
+            write_text(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), "one\nTWO\nthree\n")
+
+            local ok, err = pcall(function()
+                local from_root = load_quickfix_from(root, root)
+                local from_subfolder = load_quickfix_from(root, vim.fs.joinpath(root, "src/deep/nested"))
+
+                assert.equal(2, #from_root)
+                assert.equal(#from_root, #from_subfolder)
+
+                for index = 1, #from_root do
+                    assert.equal(get_quickfix_path(from_root[index]), get_quickfix_path(from_subfolder[index]))
+                    assert.equal(from_root[index].lnum, from_subfolder[index].lnum)
+                    assert.equal(from_root[index].text, from_subfolder[index].text)
+                end
+            end)
+
+            remove_tree(root)
+
+            if not ok then
+                error(err)
+            end
+        end)
+    end)
+
+    it("jumps to the correct file and line from a subfolder quickfix entry", function()
+        with_captured_notifications(function()
+            local root = make_repo()
+
+            commit_file(root, "src/deep/nested/alpha.txt", "one\ntwo\nthree\nfour\nfive\n")
+            write_text(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), "one\ntwo\nthree\nFOUR\nfive\n")
+
+            local ok, err = pcall(function()
+                local subfolder = vim.fs.joinpath(root, "src/deep")
+                local items = load_quickfix_from(root, subfolder)
+
+                assert.equal(1, #items)
+
+                with_cwd(subfolder, function()
+                    vim.cmd("silent cfirst")
+
+                    local expected_path = vim.fn.fnamemodify(vim.fs.joinpath(root, "src/deep/nested/alpha.txt"), ":p")
+                    local actual_path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p")
+
+                    assert.equal(to_forward_slashes(expected_path), to_forward_slashes(actual_path))
+                    assert.equal(4, vim.api.nvim_win_get_cursor(0)[1])
+                    assert.equal("FOUR", vim.api.nvim_get_current_line())
                 end)
             end)
 

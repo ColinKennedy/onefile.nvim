@@ -1,16 +1,6 @@
 --- Register filetype and editor autocommands for LSP setup, file reloads, terminal buffers, and formatting.
 
 local core_helpers = require("modules.utilities.core_helpers")
-local settings_and_lsp_servers = require("modules.features.settings_and_lsp_servers")
-
-for _, data in ipairs(settings_and_lsp_servers.servers) do
-    vim.api.nvim_create_autocmd("FileType", {
-        group = core_helpers._LSP_GROUP,
-        pattern = data.filetypes,
-        callback = data.callback,
-    })
-end
-
 -- Add tree-sitter highlighting if a parser is found
 vim.api.nvim_create_autocmd("FileType", {
     callback = function()
@@ -23,7 +13,7 @@ vim.api.nvim_create_autocmd("FileType", {
             return
         end
 
-        local treesitter_language = core_helpers._FILETYPE_TO_TREESITTER[filetype] or filetype
+        local treesitter_language = core_helpers.FILETYPE_TO_TREESITTER[filetype] or filetype
 
         local success, result = pcall(function()
             treesitter.query.get(treesitter_language, "highlights")
@@ -49,7 +39,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
         ---@cast event _my.lsp_attach.Result
         require("modules.features.core_editor_setup").setup_lsp_details(event)
     end,
-    group = core_helpers._LSP_GROUP,
+    group = core_helpers.LSP_GROUP,
 })
 
 -- NOTE: Make sure long lines do not wrap to the next line

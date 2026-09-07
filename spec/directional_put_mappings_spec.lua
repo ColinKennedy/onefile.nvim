@@ -49,7 +49,7 @@ describe("directional put mappings", function()
         set_register({ "        alpha", "            beta" })
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
 
-        directional_put.put_linewise("below", "same")
+        directional_put._put_linewise("below", "same")
 
         assert.same({
             "    current",
@@ -64,7 +64,7 @@ describe("directional put mappings", function()
         set_register({ "        alpha", "            beta" })
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
 
-        directional_put.put_linewise("above", "same")
+        directional_put._put_linewise("above", "same")
 
         assert.same({
             "start",
@@ -79,7 +79,7 @@ describe("directional put mappings", function()
         set_register({ "        alpha", "            beta" })
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
 
-        directional_put.put_linewise("below", "indent")
+        directional_put._put_linewise("below", "indent")
 
         assert.same({
             "    current",
@@ -94,7 +94,7 @@ describe("directional put mappings", function()
         set_register({ "        alpha", "            beta" })
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
 
-        directional_put.put_linewise("below", "dedent")
+        directional_put._put_linewise("below", "dedent")
 
         assert.same({
             "        current",
@@ -109,7 +109,7 @@ describe("directional put mappings", function()
         set_register({ "        alpha", "            beta" })
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
 
-        directional_put.put_linewise("below", "dedent")
+        directional_put._put_linewise("below", "dedent")
 
         assert.same({
             "  current",
@@ -125,7 +125,7 @@ describe("directional put mappings", function()
         set_register({ "\t\talpha", "\t\t\tbeta" })
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
 
-        directional_put.put_linewise("below", "indent")
+        directional_put._put_linewise("below", "indent")
 
         assert.same({
             "\tcurrent",
@@ -139,9 +139,9 @@ describe("directional put mappings", function()
         make_buffer({ "    current", "done" })
         set_register({ "        alpha", "            beta" })
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
-        directional_put.put_linewise("below", "same")
+        directional_put._put_linewise("below", "same")
 
-        directional_put.select_last_put()
+        directional_put._select_last_put()
 
         local visual_start = vim.fn.getpos("v")[2]
         local cursor = vim.api.nvim_win_get_cursor(0)
@@ -157,7 +157,7 @@ describe("directional put mappings", function()
 
         vim.cmd(":+put")
         assert.same({ "current", "done", "alpha", "beta" }, get_lines())
-        directional_put.select_last_put()
+        directional_put._select_last_put()
 
         local visual_start = vim.fn.getpos("v")[2]
         local cursor = vim.api.nvim_win_get_cursor(0)
@@ -173,7 +173,7 @@ describe("directional put mappings", function()
 
         vim.cmd("normal! p")
         assert.same({ "current", "alpha", "beta", "done" }, get_lines())
-        directional_put.select_last_put()
+        directional_put._select_last_put()
 
         local visual_start = vim.fn.getpos("v")[2]
         local cursor = vim.api.nvim_win_get_cursor(0)
@@ -202,7 +202,7 @@ describe("directional put mappings", function()
         make_buffer({ "current", "done" })
         set_register({ "alpha", "beta" })
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
-        directional_put.put_linewise("below", "same")
+        directional_put._put_linewise("below", "same")
         set_register({ "fresh" })
         vim.api.nvim_win_set_cursor(0, { 4, 0 })
 
@@ -217,10 +217,10 @@ describe("directional put mappings", function()
         assert.equal(5, math.max(visual_start, cursor[1]))
     end)
 
-    it("selects multiline characterwise text inserted with the clipboard pp mapping", function()
+    it("selects multiline characterwise text inserted with an explicit-register pp mapping", function()
         make_buffer({ "", "", "" })
         vim.fn.setreg(
-            "+",
+            "a",
             table.concat({
                 "Sens. James Lankford and Jacky Rosen will introduce a sweeping, bipartisan bill Tuesday aimed "
                     .. "at combating antisemitism.",
@@ -232,7 +232,7 @@ describe("directional put mappings", function()
         )
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
 
-        press_keys([["+pp]])
+        press_keys([["app]])
         press_keys("gp")
 
         local visual_start = vim.fn.getpos("v")[2]
@@ -242,7 +242,7 @@ describe("directional put mappings", function()
         assert.equal(4, math.max(visual_start, cursor[1]))
     end)
 
-    it("does not select the whole buffer after clipboard pp in blank space", function()
+    it("does not select the whole buffer after explicit-register pp in blank space", function()
         make_buffer({
             "# title",
             "",
@@ -262,7 +262,7 @@ describe("directional put mappings", function()
             "tail",
         })
         vim.fn.setreg(
-            "+",
+            "a",
             table.concat({
                 "Sens. James Lankford and Jacky Rosen will introduce a sweeping, bipartisan bill Tuesday aimed "
                     .. "at combating antisemitism.",
@@ -274,7 +274,7 @@ describe("directional put mappings", function()
         )
         vim.api.nvim_win_set_cursor(0, { 12, 0 })
 
-        press_keys([["+pp]])
+        press_keys([["app]])
         press_keys("gp")
 
         local visual_start = vim.fn.getpos("v")[2]

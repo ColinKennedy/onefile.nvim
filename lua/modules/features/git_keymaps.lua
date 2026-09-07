@@ -43,7 +43,7 @@ end
 function _P.run_git_command(command, directory)
     --- Print `object` to the user.
     ---
-    ---@param object any Some object to inspect and print.
+    ---@param object vim.SystemCompleted The failed command's result to inspect and print.
     ---
     local function _on_fail(object)
         vim.notify(string.format('Command failed: Got "%s" error.', vim.inspect(object)), vim.log.levels.ERROR)
@@ -51,7 +51,7 @@ function _P.run_git_command(command, directory)
 
     ---@type string[]
     local full_command = {}
-    vim.list_extend(full_command, { require("modules.utilities.core_helpers")._GIT_EXECUTABLE, "-C", directory })
+    vim.list_extend(full_command, { require("modules.utilities.core_helpers").GIT_EXECUTABLE, "-C", directory })
     vim.list_extend(full_command, command)
 
     vim.system(full_command, { text = true }, function(object)
@@ -93,8 +93,8 @@ vim.keymap.set("n", "<leader>gsa", function()
     require("modules.features.core_editor_setup").show_git_stashes()
 end, { desc = "Show the git stashes that are available." })
 vim.keymap.set("n", "<leader>gap", function()
-    require("modules.utilities.core_helpers").run_git_add_p()
-end, { noremap = true, silent = true, desc = "Create a terminal and run `git add -p` on it." })
+    require("modules.features.git_add_submode").start()
+end, { noremap = true, silent = true, desc = "Enter interactive Git add mode (native git add -p)." })
 vim.keymap.set("n", "<leader>gcop", function()
     require("modules.utilities.core_helpers").run_git_checkout_p()
 end, { noremap = true, silent = true, desc = "Create a terminal and run `git checkout -p` on it." })

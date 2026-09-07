@@ -92,7 +92,13 @@ end
 
 ---@return boolean # Check if the current cursor's okay run the "compute = sign".
 function _P.is_blacklisted_context()
-    return vim.treesitter.get_node({ buffer = 0 }):type() == "string_content"
+    local node = vim.treesitter.get_node({ buffer = 0 })
+
+    if not node then
+        return true
+    end
+
+    return node:type() == "string_content"
 end
 
 --- Check if `text` is a Python keyword.

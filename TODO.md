@@ -1,13 +1,9 @@
 - `:Git diff` isn't showing anything. Fix
-
 - Fix CI/CD later - https://github.com/ColinKennedy/onefile.nvim/actions/runs/26374509626/job/77632334991
 
 - Once that neovim remote PR is merged, add that to my git commit / git rebase
   editor command so that I don't get nested Neovims anymore.
-- A <M-S-{1,2,3,4}> for grapple
 `<space>`W
-`<space>`q
-- Add :Gcd
 
 - Add Cli-based mark support
  - Async-update whenever the file is changed
@@ -16,17 +12,6 @@
 - Add my tmux config at work, for psmux
 
 - Make an AI write my commit messages for me, somehow. SLM?
-
-- There's probably greater opportunity for defer-evalling in the codebase. For
-  example, each module's private functions don't need to be defined in the same
-  modules as the public functions. They could be moved and defer-eval required
-  into the relevant spots. This could make startup time faster, but by how much
-  I don't know
-
-- Update my LSp setup to use config + start
- - add ty LSP support
-
-- Add a "cleanup all buffers except terminal buffers" command. Call if BufOnly
 
 - trailing whitespace bug
  - adding prefix > lines does not delete trailing whitespace

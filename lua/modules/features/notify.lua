@@ -1,11 +1,15 @@
 --- Extend vim.notify with log-level filtering and optional file logging.
 
+---@class _my.notify._P
+---@field ENABLE_NOTIFY_LOGGING_VARIABLE string The environment variable that enables file logging.
+---@field MINIMUM_LOG_LEVEL integer Notifications below this vim.log.levels value are dropped.
+---@field TEMPORARY_LOG_PATH string? The file that notifications are appended to, if logging is on.
 local _P = {}
 
 local _ORIGINAL_VIM_NOTIFY = vim.notify
 
-_P.ENABLE_NOTIFY_LOGGING_VARIABLE = "VIM_ENABLE_NOTIFY_LOGGING"
-_P.MINIMUM_LOG_LEVEL = tonumber(os.getenv("VIM_LOG_LEVEL") or "2") or vim.log.levels.INFO
+_P.ENABLE_NOTIFY_LOGGING_VARIABLE = "NEOVIM_ENABLE_NOTIFY_LOGGING"
+_P.MINIMUM_LOG_LEVEL = tonumber(os.getenv("NEOVIM_LOG_LEVEL") or "2") or vim.log.levels.INFO
 _P.TEMPORARY_LOG_PATH = nil
 
 ---@param level integer? Some raw log value.
@@ -79,5 +83,3 @@ vim.api.nvim_create_user_command("OpenLogPath", function()
     print(string.format('Opening "%s" log file.', _P.TEMPORARY_LOG_PATH))
     vim.cmd.edit({ args = { _P.TEMPORARY_LOG_PATH }, mods = { silent = true } })
 end, { nargs = "?", desc = "View/Edit the vim.notify(...) master log file." })
-
-return _P

@@ -1,0 +1,37 @@
+local settings_and_lsp_servers = require("modules.features.settings_and_lsp_servers")
+
+describe("settings and LSP servers", function()
+    it("configures and enables declarative LSP configs instead of starting on FileType", function()
+        ---@type table<string, vim.lsp.Config>
+        local configured = {}
+        ---@type string[]
+        local enabled = {}
+
+        settings_and_lsp_servers._configure_lsp_servers(function(name, config)
+            configured[name] = config
+        end, function(name)
+            table.insert(enabled, name)
+        end)
+
+        assert.are.same({ "ty", "server" }, configured.ty.cmd)
+        assert.are.same({ "python" }, configured.ty.filetypes)
+        ---@diagnostic disable-next-line: undefined-field
+        assert.is_nil(configured.ty.callback)
+        ---@diagnostic disable-next-line: undefined-field
+        assert.is_nil(configured.ty.executable)
+        assert.is_table(configured.lua_ls.root_markers)
+        assert.are.same({ "ty", "lua_ls" }, enabled)
+    end)
+
+    it("does not write undo files for unnamed buffers", function()
+        local buffer = vim.api.nvim_create_buf(false, true)
+
+        vim.api.nvim_set_current_buf(buffer)
+
+        local ok, message = pcall(function()
+            vim.api.nvim_exec_autocmds("BufWritePost", { buffer = buffer })
+        end)
+
+        assert(ok, message)
+    end)
+end)

@@ -30,8 +30,37 @@ local _P = {}
 
 --- Find the location on-disk where we should save a Sesssion.vim file.
 ---
----@param reference_path string The path on-disk to search for a git / VCS root.
+---@param root string The path on-disk to search for a git / VCS root.
 ---@return string? # The recommended Session.vim save location, if any.
+---
+local function _get_git_branch(root)
+    local core_helpers = require("modules.utilities.core_helpers")
+    local result = vim.system({
+        core_helpers.GIT_EXECUTABLE,
+        "-C",
+        root,
+        "rev-parse",
+        "--abbrev-ref",
+        "HEAD",
+    }, { text = true }):wait()
+
+    if result.code ~= 0 then
+        return nil
+    end
+
+    local branch = vim.split(result.stdout or "", "\n", { plain = true })[1]
+
+    if branch == "" then
+        return nil
+    end
+
+    return branch
+end
+
+--- Get the branch-specific session file to write for `reference_path`.
+---
+---@param reference_path string The file or directory to search for a project root from.
+---@return string? # The session file path, if a project root and branch were found.
 ---
 function _P.get_session_branch_path(reference_path)
     local core_helpers = require("modules.utilities.core_helpers")
@@ -46,7 +75,7 @@ function _P.get_session_branch_path(reference_path)
         return nil
     end
 
-    local branch = require("modules.features.core_editor_setup").get_git_branch_safe()
+    local branch = _get_git_branch(root)
 
     if not branch then
         vim.notify(string.format('Cannot save "%s" project. No branch was found.', root), vim.log.levels.ERROR)
@@ -54,7 +83,7 @@ function _P.get_session_branch_path(reference_path)
         return nil
     end
 
-    return vim.fs.joinpath(root, core_helpers._SESSIONS_DIRECTORY_NAME, branch, core_helpers._VIM_SESSION_FILE_NAME)
+    return vim.fs.joinpath(root, core_helpers.SESSIONS_DIRECTORY_NAME, branch, core_helpers.VIM_SESSION_FILE_NAME)
 end
 
 --- Keep track of the current Vim Session.vim, if there is one.
@@ -125,7 +154,7 @@ vim.api.nvim_create_user_command("SessionWrite", function()
         return
     end
 
-    local session = vim.fs.joinpath(directory, require("modules.utilities.core_helpers")._VIM_SESSION_FILE_NAME)
+    local session = vim.fs.joinpath(directory, require("modules.utilities.core_helpers").VIM_SESSION_FILE_NAME)
     _P.save_session(session)
     vim.uv.fs_mkdir(vim.fs.dirname(path), 448) -- NOTE: 448 = 0700
     vim.uv.fs_copyfile(session, path)

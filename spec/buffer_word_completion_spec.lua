@@ -1,6 +1,8 @@
 local buffer_word_completion = require("modules.features.buffer_word_completion")
 
+---@type fun(filter: vim.lsp.get_clients.Filter?): vim.lsp.Client[]
 local _GET_CLIENTS
+---@type fun(startcol: integer, matches: {word: string}[]): nil
 local _COMPLETE
 
 describe("modules.features.buffer_word_completion", function()
@@ -8,6 +10,7 @@ describe("modules.features.buffer_word_completion", function()
         _GET_CLIENTS = vim.lsp.get_clients
         _COMPLETE = vim.fn.complete
         ---@diagnostic disable-next-line: duplicate-set-field
+        ---@return boolean # Always pretend that insert mode is active.
         buffer_word_completion._P.is_insert_mode = function()
             return true
         end
@@ -17,6 +20,7 @@ describe("modules.features.buffer_word_completion", function()
         vim.lsp.get_clients = _GET_CLIENTS
         vim.fn.complete = _COMPLETE
         ---@diagnostic disable-next-line: duplicate-set-field
+        ---@return boolean # If Neovim is in insert mode, return `true`.
         buffer_word_completion._P.is_insert_mode = function()
             return vim.api.nvim_get_mode().mode == "i"
         end

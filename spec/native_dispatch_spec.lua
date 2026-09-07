@@ -21,11 +21,25 @@ local function make_command_args(args)
     }
 end
 
+---@class _my.native_dispatch_spec.JobOptions The `jobstart()` options that dispatch passes.
+---@field stdin string? The stdin mode, if the job sets one.
+---@field on_stdout fun(job: integer, data: string[]): nil The stdout callback.
+---@field on_exit fun(job: integer, code: integer): nil The job-exit callback.
+
 describe("native dispatch", function()
+    ---@type fun(cmd: string | string[], opts: _my.native_dispatch_spec.JobOptions?): integer
     local original_jobstart
+    ---@type fun(message: string, level: integer?): nil
     local original_notify
+    ---@type fun(cmd: string | string[], input: string?): string
     local original_system
+    ---@type fun(cmd: string | string[], input: string?): string[]
     local original_systemlist
+    ---@type fun(command: string[]): string
+    local original_dispatch_system
+    ---@type fun(command: string[]): string[]
+    local original_dispatch_systemlist
+    ---@type {message: string, level: integer?}[]
     local notifications
 
     before_each(function()
@@ -33,6 +47,8 @@ describe("native dispatch", function()
         original_notify = vim.notify
         original_system = vim.fn.system
         original_systemlist = vim.fn.systemlist
+        original_dispatch_system = native_dispatch._P.system
+        original_dispatch_systemlist = native_dispatch._P.systemlist
         notifications = {}
 
         rawset(vim, "notify", function(message, level)
@@ -44,6 +60,8 @@ describe("native dispatch", function()
         vim.fn.jobstart = original_jobstart
         vim.fn.system = original_system
         vim.fn.systemlist = original_systemlist
+        rawset(native_dispatch._P, "system", original_dispatch_system)
+        rawset(native_dispatch._P, "systemlist", original_dispatch_systemlist)
         rawset(vim, "notify", original_notify)
         vim.fn.setqflist({}, "r")
         vim.cmd("silent! cclose")
@@ -64,6 +82,64 @@ describe("native dispatch", function()
 
         assert.is_true(options.jump_first)
         assert.are.same({ "rg", "needle" }, options.command)
+    end)
+
+    it("makes :Dispatch quiet and jump-first by default", function()
+        local original_run = native_dispatch._run
+        ---@type _my.dispatch.Options?
+        local captured = nil
+
+        rawset(native_dispatch, "_run", function(options)
+            captured = options
+        end)
+
+        native_dispatch._dispatch(make_command_args("make luacheck"))
+
+        rawset(native_dispatch, "_run", original_run)
+
+        local options = assert(captured)
+
+        assert.equal("on_error", options.display)
+        assert.is_true(options.jump_first)
+        assert.are.same({ "make", "luacheck" }, options.command)
+    end)
+
+    it("lets explicit :Dispatch flags override the defaults", function()
+        local original_run = native_dispatch._run
+        ---@type _my.dispatch.Options?
+        local captured = nil
+
+        rawset(native_dispatch, "_run", function(options)
+            captured = options
+        end)
+
+        native_dispatch._dispatch(make_command_args("--display=always --no-jump-first make luacheck"))
+
+        rawset(native_dispatch, "_run", original_run)
+
+        local options = assert(captured)
+
+        assert.equal("always", options.display)
+        assert.is_false(options.jump_first)
+    end)
+
+    it("makes :DispatchOutput mirror output and stay put by default", function()
+        local original_run = native_dispatch._run
+        ---@type _my.dispatch.Options?
+        local captured = nil
+
+        rawset(native_dispatch, "_run", function(options)
+            captured = options
+        end)
+
+        native_dispatch._dispatch_output(make_command_args("make luacheck"))
+
+        rawset(native_dispatch, "_run", original_run)
+
+        local options = assert(captured)
+
+        assert.equal("always", options.display)
+        assert.is_false(options.jump_first)
     end)
 
     it("loads parsed and unparsed output into quickfix with a dispatch title", function()
@@ -93,10 +169,135 @@ describe("native dispatch", function()
         assert.equal("plain teardown log", quickfix.items[3].text)
     end)
 
+    it("keeps only the first of each run of repeated locations", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "lua/example.lua:7:3:found needle",
+            "lua/example.lua:7:3:found needle",
+            -- NOTE: A different message is still the same location.
+            "lua/example.lua:7:3:some other message",
+            "lua/example.lua:8:3:found needle",
+        })
+
+        local quickfix = vim.fn.getqflist({ items = true })
+
+        assert.equal(2, #quickfix.items)
+        assert.equal(7, quickfix.items[1].lnum)
+        assert.equal("found needle", quickfix.items[1].text)
+        assert.equal(8, quickfix.items[2].lnum)
+    end)
+
+    it("keeps a repeated location when it comes back later in the output", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "lua/example.lua:7:3:first report",
+            "lua/other.lua:2:1:something else",
+            "lua/example.lua:7:3:second report",
+        })
+
+        local quickfix = vim.fn.getqflist({ items = true })
+
+        assert.equal(3, #quickfix.items)
+        assert.equal("first report", quickfix.items[1].text)
+        assert.equal("something else", quickfix.items[2].text)
+        assert.equal("second report", quickfix.items[3].text)
+    end)
+
+    it("treats the same line in different files as different locations", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "lua/example.lua:7:3:found needle",
+            "lua/other.lua:7:3:found needle",
+        })
+
+        assert.equal(2, #vim.fn.getqflist())
+    end)
+
+    it("treats the same line in different columns as different locations", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "lua/example.lua:7:3:found needle",
+            "lua/example.lua:7:9:found needle",
+        })
+
+        assert.equal(2, #vim.fn.getqflist())
+    end)
+
+    it("never treats repeated unparsed output lines as duplicates", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+        }, {
+            "plain log",
+            "plain log",
+            "lua/example.lua:7:3:found needle",
+        })
+
+        local quickfix = vim.fn.getqflist({ items = true })
+
+        assert.equal(3, #quickfix.items)
+        assert.equal("plain log", quickfix.items[1].text)
+        assert.equal("plain log", quickfix.items[2].text)
+    end)
+
+    it("keeps every repeated location when allow-duplicates is set", function()
+        vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
+
+        native_dispatch._P.finish({
+            command = { "make", "test" },
+            raw_command = "make test",
+            display = "never",
+            allow_duplicates = true,
+        }, {
+            "lua/example.lua:7:3:found needle",
+            "lua/example.lua:7:3:found needle",
+            "lua/example.lua:7:3:some other message",
+        })
+
+        assert.equal(3, #vim.fn.getqflist())
+    end)
+
+    it("parses allow-duplicates as a dispatch flag", function()
+        local options = assert(native_dispatch._P.parse_arguments("--allow-duplicates make test"))
+
+        assert.is_true(options.allow_duplicates)
+        assert.are.same({ "make", "test" }, options.command)
+    end)
+
+    it("removes duplicate locations by default", function()
+        local options = assert(native_dispatch._P.parse_arguments("make test"))
+
+        assert.is_false(options.allow_duplicates)
+    end)
+
     it("jumps to the first parsed quickfix item when requested", function()
         local path = vim.fn.tempname() .. ".lua"
 
         vim.fn.writefile({ "first", "second", "third" }, path)
+        path = vim.uv.fs_realpath(path) or path
         vim.o.errorformat = "%f:%l:%c:%m,%f:%l:%m"
 
         native_dispatch._P.finish({
@@ -109,7 +310,7 @@ describe("native dispatch", function()
             path .. ":2:1:found needle",
         })
 
-        assert.equal(path, vim.api.nvim_buf_get_name(0))
+        assert.equal(vim.fs.normalize(path), vim.fs.normalize(vim.api.nvim_buf_get_name(0)))
         assert.are.same({ 2, 0 }, vim.api.nvim_win_get_cursor(0))
 
         vim.fn.delete(path)
@@ -128,6 +329,62 @@ describe("native dispatch", function()
         })
 
         assert.equal("qf", vim.bo.filetype)
+    end)
+
+    it("does not open quickfix and notifies when a dispatch command passes", function()
+        native_dispatch._P.finish({
+            command = { "make", "luacheck" },
+            raw_command = "make luacheck",
+            display = "on_error",
+        }, {
+            "Checking lua/modules/example.lua OK",
+        }, 0)
+
+        assert.are.same({}, vim.fn.getqflist())
+        assert.equal(vim.log.levels.INFO, notifications[1].level)
+        assert.equal("Dispatch passed: make luacheck", notifications[1].message)
+        assert.Not.equal("qf", vim.bo.filetype)
+    end)
+
+    it("keeps somebody else's quickfix list when a dispatch command passes", function()
+        vim.fn.setqflist({}, "r", {
+            title = "Ripgrep: needle",
+            items = { { filename = "lua/example.lua", lnum = 3, text = "found needle" } },
+        })
+
+        native_dispatch._P.finish({
+            command = { "make", "luacheck" },
+            raw_command = "make luacheck",
+            display = "on_error",
+        }, {
+            "Checking lua/modules/example.lua OK",
+        }, 0)
+
+        local quickfix = vim.fn.getqflist({ title = true, items = true })
+
+        assert.equal("Ripgrep: needle", quickfix.title)
+        assert.equal(1, #quickfix.items)
+        assert.equal("found needle", quickfix.items[1].text)
+    end)
+
+    it("drops its own stale results when a re-run of the same command passes", function()
+        vim.fn.setqflist({}, "r", {
+            title = "Dispatch: make luacheck",
+            items = { { filename = "lua/example.lua", lnum = 3, text = "old failure" } },
+        })
+
+        native_dispatch._P.finish({
+            command = { "make", "luacheck" },
+            raw_command = "make luacheck",
+            display = "on_error",
+        }, {
+            "Checking lua/modules/example.lua OK",
+        }, 0)
+
+        local quickfix = vim.fn.getqflist({ title = true, items = true })
+
+        assert.equal("Dispatch: make luacheck", quickfix.title)
+        assert.are.same({}, quickfix.items)
     end)
 
     it("uses ad-hoc compilers and restores compiler options afterward", function()
@@ -162,6 +419,7 @@ describe("native dispatch", function()
     end)
 
     it("runs concurrent argv jobs through jobstart", function()
+        ---@type {command: string[], options: _my.native_dispatch_spec.JobOptions}[]
         local captured = {}
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -173,12 +431,12 @@ describe("native dispatch", function()
             return #captured
         end
 
-        native_dispatch.run({
+        native_dispatch._run({
             command = { "make", "one" },
             raw_command = "make one",
             display = "never",
         })
-        native_dispatch.run({
+        native_dispatch._run({
             command = { "make", "two" },
             raw_command = "make two",
             display = "never",
@@ -195,7 +453,7 @@ describe("native dispatch", function()
     end)
 
     it("closes job stdin so ripgrep searches files instead of waiting for input", function()
-        ---@type table?
+        ---@type _my.native_dispatch_spec.JobOptions?
         local captured_options = nil
 
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -206,7 +464,7 @@ describe("native dispatch", function()
             return 1
         end
 
-        native_dispatch.run({
+        native_dispatch._run({
             command = { "rg", "something" },
             raw_command = "rg something",
             display = "never",
@@ -215,6 +473,44 @@ describe("native dispatch", function()
         local options = assert(captured_options)
 
         assert.equal("null", options.stdin)
+    end)
+
+    it("does not open a display pane for on-error dispatch output", function()
+        local original_open_display = native_dispatch._P.open_display
+        local opened_display = false
+
+        rawset(native_dispatch._P, "open_display", function()
+            opened_display = true
+
+            return {
+                close = function() end,
+                write = function() end,
+            }
+        end)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.fn.jobstart = function(_, options)
+            options.on_stdout(1, { "lua/example.lua:4:2:error", "" })
+            options.on_exit(1, 1)
+
+            return 1
+        end
+
+        native_dispatch._run({
+            command = { "fake" },
+            raw_command = "fake",
+            compiler = "vimgrep",
+            display = "on_error",
+        })
+
+        vim.wait(100, function()
+            return #vim.fn.getqflist() > 0
+        end)
+
+        rawset(native_dispatch._P, "open_display", original_open_display)
+
+        assert.is_false(opened_display)
+        assert.equal("qf", vim.bo.filetype)
     end)
 
     it("joins partial job output chunks before loading quickfix", function()
@@ -230,7 +526,7 @@ describe("native dispatch", function()
             return 1
         end
 
-        native_dispatch.run({
+        native_dispatch._run({
             command = { "fake" },
             raw_command = "fake",
             display = "never",
@@ -251,18 +547,17 @@ describe("native dispatch", function()
     end)
 
     it("keeps tmux display panes smaller than the maximum at their natural height", function()
+        ---@type string[][]
         local resize_commands = {}
 
-        ---@diagnostic disable-next-line: duplicate-set-field
-        vim.fn.systemlist = function()
-            return { "24" }
-        end
-        ---@diagnostic disable-next-line: duplicate-set-field
-        vim.fn.system = function(command)
+        rawset(native_dispatch._P, "systemlist", function()
+            return { "10" }
+        end)
+        rawset(native_dispatch._P, "system", function(command)
             table.insert(resize_commands, command)
 
             return ""
-        end
+        end)
 
         native_dispatch._P.clamp_tmux_display_height("%7")
 
@@ -270,28 +565,97 @@ describe("native dispatch", function()
     end)
 
     it("clamps oversized tmux display panes to forty rows", function()
+        ---@type string[][]
         local resize_commands = {}
 
-        ---@diagnostic disable-next-line: duplicate-set-field
-        vim.fn.systemlist = function()
+        rawset(native_dispatch._P, "systemlist", function()
             return { "80" }
-        end
-        ---@diagnostic disable-next-line: duplicate-set-field
-        vim.fn.system = function(command)
+        end)
+        rawset(native_dispatch._P, "system", function(command)
             table.insert(resize_commands, command)
 
             return ""
-        end
+        end)
 
         native_dispatch._P.clamp_tmux_display_height("%7")
 
         assert.are.same({
-            { "tmux", "resize-pane", "-t", "%7", "-y", "40" },
+            { "tmux", "resize-pane", "-t", "%7", "-y", "15" },
         }, resize_commands)
     end)
 
+    it("restores window sizes so a bottom terminal keeps its height across a dispatch", function()
+        -- Recreate the reported layout: a main window with a shorter,
+        -- terminal-like window pinned along the bottom.
+        vim.cmd("silent! only")
+        vim.cmd("botright new")
+        local terminal_window = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_height(terminal_window, 6)
+
+        local height_before = vim.api.nvim_win_get_height(terminal_window)
+
+        -- Emulate an "always" tmux display: opening the pane steals rows from
+        -- Neovim's host pane, which makes Neovim re-flow every window and shrink
+        -- the bottom terminal. This is exactly what disturbed the layout before.
+        local original_open_display = native_dispatch._P.open_display
+        rawset(native_dispatch._P, "open_display", function()
+            vim.api.nvim_win_set_height(terminal_window, 2)
+
+            return {
+                write = function() end,
+                close = function() end,
+            }
+        end)
+
+        ---@diagnostic disable-next-line: duplicate-set-field
+        vim.fn.jobstart = function(_, options)
+            options.on_exit(1, 0)
+
+            return 1
+        end
+
+        native_dispatch._run({
+            command = { "make" },
+            raw_command = "make",
+            display = "always",
+        })
+
+        vim.wait(100, function()
+            return vim.api.nvim_win_get_height(terminal_window) == height_before
+        end)
+
+        rawset(native_dispatch._P, "open_display", original_open_display)
+
+        assert.is_true(vim.api.nvim_win_is_valid(terminal_window))
+        assert.equal(height_before, vim.api.nvim_win_get_height(terminal_window))
+
+        vim.cmd("silent! only")
+    end)
+
+    it("defers window-size restoration until Neovim grows back after a tmux resize", function()
+        -- A tmux display pane resizes Neovim asynchronously, so at restore time
+        -- Neovim is still shrunk. Restoring then would fight the pending resize
+        -- and leave the layout worse, so restoration must wait for the grow-back.
+        local layout = vim.fn.winrestcmd()
+
+        native_dispatch._P.restore_window_layout(layout, vim.o.lines + 10)
+
+        ---@type boolean
+        local has_deferred_restore = false
+
+        for _, autocmd in ipairs(vim.api.nvim_get_autocmds({ event = "VimResized" })) do
+            if autocmd.desc and autocmd.desc:match("Dispatch") then
+                has_deferred_restore = true
+
+                pcall(vim.api.nvim_del_autocmd, autocmd.id)
+            end
+        end
+
+        assert.is_true(has_deferred_restore)
+    end)
+
     it("reports invalid dispatch flags", function()
-        native_dispatch.dispatch(make_command_args("--display=sometimes make test"))
+        native_dispatch._dispatch(make_command_args("--display=sometimes make test"))
 
         assert.equal('Invalid Dispatch display mode "sometimes".', notifications[1].message)
     end)

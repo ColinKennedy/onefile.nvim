@@ -1,5 +1,7 @@
 describe("session sync", function()
+    ---@type string
     local original_shortmess
+    ---@type boolean
     local original_more
 
     before_each(function()
@@ -13,7 +15,7 @@ describe("session sync", function()
     end)
 
     it("quiets noisy file messages while a session is loading", function()
-        local session_sync = require("modules.features.session_sync")
+        local session_sync = require("modules.features.session_sync")._P
         vim.o.shortmess = "filnxtToO"
         vim.o.more = true
 

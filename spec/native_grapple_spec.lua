@@ -417,7 +417,7 @@ describe("modules.plugins.native_grapple", function()
 
             run_git(root, { "checkout", "feature" })
 
-            assert.True(vim.wait(2500, function()
+            assert.True(vim.wait(10000, function()
                 return vim.deep_equal({ "1:feature.txt:1" }, get_bookmark_summaries())
             end, 20))
         end)

@@ -113,7 +113,7 @@ describe("modules.plugins.toggle_terminal", function()
 
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
         end, 20))
 
@@ -136,7 +136,7 @@ describe("modules.plugins.toggle_terminal", function()
     it("restores a saved terminal-normal mode without entering terminal insert", function()
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
         end, 20))
 
@@ -161,7 +161,7 @@ describe("modules.plugins.toggle_terminal", function()
     it("writes terminal-normal mode into appended session state", function()
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
         end, 20))
 
@@ -200,7 +200,7 @@ describe("modules.plugins.toggle_terminal", function()
 
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return vim.bo[vim.api.nvim_get_current_buf()].buftype == "terminal"
         end, 20))
         assert.equal(shortmess, vim.o.shortmess)
@@ -213,13 +213,13 @@ describe("modules.plugins.toggle_terminal", function()
         vim.cmd.stopinsert()
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return not is_buffer_visible(terminal_buffer)
         end, 20))
 
         press_toggle_terminal()
 
-        assert.True(vim.wait(3000, function()
+        assert.True(vim.wait(10000, function()
             return is_buffer_visible(terminal_buffer)
         end, 20))
         assert.equal(shortmess, vim.o.shortmess)

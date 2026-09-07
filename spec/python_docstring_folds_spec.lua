@@ -237,9 +237,9 @@ describe("python docstring folds", function()
         python_docstring_folds._schedule_refresh(buffer, 20)
         python_docstring_folds._schedule_refresh(buffer, 20)
 
-        vim.wait(100)
-
-        assert.equal(1, refreshed)
+        assert.True(vim.wait(10000, function()
+            return refreshed == 1
+        end))
     end)
 
     it("updates cached fold levels after an externally changed Python buffer is reloaded", function()

@@ -212,6 +212,18 @@ function _P.normalize_path(path)
     return (vim.fs.normalize(resolved):gsub("\\", "/"))
 end
 
+--- Normalize path case for comparison on Windows drive-letter paths.
+---
+---@param path string An already normalized path.
+---@return string # A path suitable for identity and prefix comparisons.
+local function _get_comparison_path(path)
+    if path:match("^%a:") then
+        return path:lower()
+    end
+
+    return path
+end
+
 --- Get the Obsidian workspace root for `path`, if any.
 ---
 ---@param path string A buffer path.
@@ -264,22 +276,12 @@ end
 
 --- Find all markdown files in `workspace_root` recursively.
 ---
---- CAVEAT: `vim.fn.glob()` on Windows does not reliably recurse through a `**`
---- pattern built from forward slashes, so the pattern is converted to native
---- separators before the call. Results are normalized back to forward
---- slashes afterward so every caller compares paths the same way regardless
---- of platform.
----
 ---@param workspace_root string The workspace to scan.
 ---@return string[] # Sorted, normalized markdown file paths.
 function _P.get_markdown_files(workspace_root)
-    local template = vim.fs.joinpath(workspace_root, "**", "*.md")
-
-    if vim.fn.has("win32") == 1 then
-        template = template:gsub("/", "\\")
-    end
-
-    local paths = vim.fn.glob(template, true, true)
+    local paths = vim.fs.find(function(name)
+        return name:lower():sub(-3) == ".md"
+    end, { limit = math.huge, path = workspace_root, type = "file" })
 
     for index, path in ipairs(paths) do
         paths[index] = _P.normalize_path(path)

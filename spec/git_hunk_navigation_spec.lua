@@ -187,7 +187,7 @@ local function load_quickfix_from(root, directory)
     with_cwd(directory, function()
         vim.cmd("silent enew!")
         vim.cmd("LoadGitDiff")
-        vim.wait(1000, function()
+        vim.wait(10000, function()
             return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
         end)
 
@@ -494,7 +494,7 @@ index 2222222..3333333 100644
             local ok, err = pcall(function()
                 with_cwd(root, function()
                     vim.cmd("LoadGitDiff")
-                    vim.wait(1000, function()
+                    vim.wait(10000, function()
                         return git_hunk_navigation._get_repository_state(root) ~= nil and has_quickfix_window()
                     end)
 

@@ -86,6 +86,16 @@ local function _get_comparison_path(path)
     return path
 end
 
+--- Check whether two paths identify the same location across separator and
+--- Windows drive-letter case differences.
+---
+---@param left string The first path to compare.
+---@param right string The second path to compare.
+---@return boolean # Whether the normalized paths are equal.
+local function _paths_equal(left, right)
+    return _get_comparison_path(_normalize_path(left)) == _get_comparison_path(_normalize_path(right))
+end
+
 --- Get `path` relative to `repository`, if `path` is inside it.
 ---
 ---@param repository string The repository root.

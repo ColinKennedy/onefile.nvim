@@ -1,7 +1,7 @@
 return {
   _all = {
     coverage = false,
-    lua = "nvim --clean -U NONE -N -i NONE -l",
+    lua = "nvim --clean -U NONE -N -i NONE --cmd \"lua pcall(function() vim.lsp._watchfiles._watchfunc = function() return function() end end end)\" -l",
   },
   default = {
     helper = "./spec/minimal_init.lua",

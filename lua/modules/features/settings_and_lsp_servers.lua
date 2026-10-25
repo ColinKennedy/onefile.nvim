@@ -5,9 +5,6 @@ local M = {}
 ---@class _my.settings_and_lsp_servers._P
 local _P = {}
 
----@class _my.settings_and_lsp_servers._P
-local _P = {}
-
 ---------- Saver [Start] ----------
 -- NOTE: Create the :AsyncWrite command (for writing without blocking Neovim)
 vim.api.nvim_create_user_command("AsyncWrite", function()

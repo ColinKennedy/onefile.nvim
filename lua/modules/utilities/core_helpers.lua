@@ -1504,6 +1504,7 @@ function M.run_git_checkout_p()
     vim.cmd.split()
     vim.cmd.terminal(string.format("%s checkout -p", M.GIT_EXECUTABLE))
     vim.cmd.startinsert() -- NOTE: Drop into INSERT mode immediately
+end
 
 --- Check whether `path` is already absolute.
 ---

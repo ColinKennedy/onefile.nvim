@@ -116,7 +116,7 @@ end
 ---@param path string The path to normalize.
 ---@return string # `path` with every backslash converted to a forward slash.
 local function to_forward_slashes(path)
-    return (path:gsub("\\", "/"))
+    return (path:gsub("\\\\", "/"):gsub("\\", "/"))
 end
 
 --- Find the first visible aerial window.

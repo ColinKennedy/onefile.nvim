@@ -33,6 +33,9 @@ jobs:
         with:
           neovim: true
           version: ${{ matrix.neovim.version }}
+        env:
+          # NOTE: Works around rhysd/action-setup-vim#80 (EXDEV on new runners)
+          TMPDIR: ${{ runner.temp }}
 
       - name: Run :checkhealth
         uses: ColinKennedy/nvim-checkhealth-gh-action@v1.1.1

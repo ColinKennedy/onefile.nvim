@@ -112,6 +112,9 @@ jobs:
       with:
         neovim: true
         version: stable
+      env:
+        # NOTE: Works around rhysd/action-setup-vim#80 (EXDEV on new runners)
+        TMPDIR: ${{ runner.temp }}
 
     - name: Install A Lua Interpreter
       uses: leafo/gh-actions-lua@v11
@@ -150,6 +153,9 @@ jobs:
       with:
         neovim: true
         version: stable
+      env:
+        # NOTE: Works around rhysd/action-setup-vim#80 (EXDEV on new runners)
+        TMPDIR: ${{ runner.temp }}
 
     - name: Install A Lua Interpreter
       uses: leafo/gh-actions-lua@v11

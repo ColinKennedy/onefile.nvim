@@ -88,6 +88,39 @@ local function wait_for(predicate)
     assert.True(vim.wait(10000, predicate, 20))
 end
 
+--- Wait for a watcher-driven refresh, re-triggering the watcher while waiting.
+---
+--- Some platforms (notably macOS) can drop filesystem events that happen right
+--- after a watcher starts. Touching a sentinel file in `directory` generates a
+--- fresh event so the refresh is not left waiting on one missed notification.
+---
+---@param directory string The watched directory to poke.
+---@param predicate fun(): boolean? The condition to wait for.
+---
+local function wait_for_watched_refresh(directory, predicate)
+    local sentinel = vim.fs.joinpath(directory, ".watcher_poke")
+    local last_poke = 0
+
+    ---@return boolean # True once the condition passes.
+    local function poll()
+        if predicate() then
+            return true
+        end
+
+        local now = vim.uv.now()
+
+        if now - last_poke >= 500 then
+            last_poke = now
+            vim.fn.writefile({}, sentinel)
+            vim.fn.delete(sentinel)
+        end
+
+        return false
+    end
+
+    assert.True(vim.wait(10000, poll, 20))
+end
+
 --- Find a window that shows a file tree buffer that lost its 'filetype'.
 ---
 ---@return integer? # The found window, if any.
@@ -337,7 +370,7 @@ describe("file tree", function()
         assert.is_not_nil(buffer_text(buffer):match("notes%.md"))
         assert.equal(0, vim.fn.delete(vim.fs.joinpath(root, "notes.md")))
 
-        wait_for(function()
+        wait_for_watched_refresh(root, function()
             return buffer_text(buffer):match("notes%.md") == nil
         end)
 
@@ -359,7 +392,7 @@ describe("file tree", function()
         assert.is_not_nil(buffer_text(buffer):match("util%.py"))
         assert.equal(0, vim.fn.delete(nested_file))
 
-        wait_for(function()
+        wait_for_watched_refresh(vim.fs.dirname(nested_file), function()
             return buffer_text(buffer):match("util%.py") == nil
         end)
 

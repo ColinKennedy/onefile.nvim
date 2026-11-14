@@ -532,6 +532,8 @@ function M.select_from_options(values, options)
     local preview_window = nil
     ---@type string?
     local preview_key = nil
+    --- Set once the selector windows are closed. Late async refreshes must be ignored.
+    local is_closed = false
     local preview_timer = assert((vim.uv or vim.loop).new_timer())
 
     if should_show_preview then
@@ -673,6 +675,10 @@ function M.select_from_options(values, options)
             return
         end
 
+        if not vim.api.nvim_buf_is_valid(preview_buffer) or not vim.api.nvim_win_is_valid(preview_window) then
+            return
+        end
+
         local entry = state.filtered[state.selected]
 
         if not entry then
@@ -811,6 +817,10 @@ function M.select_from_options(values, options)
 
     --- Populate filtered items.
     local function _update_filter()
+        if is_closed or not vim.api.nvim_buf_is_valid(prompt_buffer) then
+            return
+        end
+
         local line = vim.api.nvim_buf_get_lines(prompt_buffer, 0, 1, false)[1]
         state.input = line or ""
         ---@type _my.selector_gui.entry.Selection[]
@@ -859,6 +869,7 @@ function M.select_from_options(values, options)
 
     --- Close all search-related floating windows.
     local function _close_all()
+        is_closed = true
         vim.api.nvim_win_close(list_window, true)
         vim.api.nvim_win_close(prompt_window, true)
 

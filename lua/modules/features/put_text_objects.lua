@@ -67,8 +67,20 @@ function _P.operator_paste(type_)
     if type_ == "char" then
         _P.replace_characterwise_range(register)
     elseif type_ == "line" then
-        vim.cmd('normal! `[V`]"_d')
-        vim.cmd(string.format('normal! `["%sP', register))
+        local start_row = vim.fn.getpos("'[")[2]
+        vim.cmd('silent normal! `[V`]"_d')
+
+        -- If the deleted range reached the end of the buffer, `'[` no longer exists.
+        -- Put below the new last line instead of above the (missing) start line.
+        local last_row = vim.api.nvim_buf_line_count(0)
+
+        if start_row > last_row then
+            vim.api.nvim_win_set_cursor(0, { last_row, 0 })
+            vim.cmd(string.format('normal! "%sp', register))
+        else
+            vim.api.nvim_win_set_cursor(0, { start_row, 0 })
+            vim.cmd(string.format('normal! "%sP', register))
+        end
     else
         vim.notify(string.format('Unknown mode "%s" is not supported for paste operator.', type_), vim.log.levels.WARN)
 

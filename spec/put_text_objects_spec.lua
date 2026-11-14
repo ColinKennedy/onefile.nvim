@@ -40,4 +40,16 @@ describe("put text objects", function()
 
         assert.equal("foo/bar/new", get_line())
     end)
+
+    it("replaces lines through the end of the buffer with `G` without erroring", function()
+        vim.fn.setreg("a", { "new" }, "l")
+        local buffer = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buffer)
+        vim.api.nvim_buf_set_lines(buffer, 0, -1, false, { "one", "two", "three", "four" })
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+        press('"apG')
+
+        assert.same({ "one", "new" }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+    end)
 end)

@@ -274,19 +274,56 @@ function _P.get_wikilink_target_at_cursor(buffer, cursor_row, cursor_column)
     end
 end
 
+--- Collect markdown files under `directory`, skipping hidden directories.
+---
+--- Hidden directories (`.git`, `.venv`, `.obsidian`, etc.) never hold notes but
+--- can contain thousands of files, which made scanning slow.
+---
+---@param directory string An already normalized directory to scan.
+---@param output string[] The list that found paths are appended to.
+function _P.collect_markdown_files(directory, output)
+    local handle = vim.uv.fs_scandir(directory)
+
+    if not handle then
+        return
+    end
+
+    while true do
+        local name, kind = vim.uv.fs_scandir_next(handle)
+
+        if not name then
+            break
+        end
+
+        local path = directory .. "/" .. name
+
+        if kind == "link" then
+            local stat = vim.uv.fs_stat(path)
+            kind = stat and stat.type or nil
+            path = _P.normalize_path(path)
+        end
+
+        if kind == "directory" then
+            if name:sub(1, 1) ~= "." then
+                _P.collect_markdown_files(path, output)
+            end
+        elseif kind == "file" and name:lower():sub(-3) == ".md" then
+            table.insert(output, path)
+        end
+    end
+end
+
 --- Find all markdown files in `workspace_root` recursively.
+---
+--- Hidden directories (those starting with `.`) are skipped.
 ---
 ---@param workspace_root string The workspace to scan.
 ---@return string[] # Sorted, normalized markdown file paths.
 function _P.get_markdown_files(workspace_root)
-    local paths = vim.fs.find(function(name)
-        return name:lower():sub(-3) == ".md"
-    end, { limit = math.huge, path = workspace_root, type = "file" })
+    ---@type string[]
+    local paths = {}
 
-    for index, path in ipairs(paths) do
-        paths[index] = _P.normalize_path(path)
-    end
-
+    _P.collect_markdown_files((_P.normalize_path(workspace_root):gsub("/+$", "")), paths)
     table.sort(paths)
 
     return paths

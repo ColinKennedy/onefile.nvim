@@ -575,4 +575,52 @@ describe("modules.plugins.obsidian", function()
         assert.equal(obsidian.normalize_path(first), obsidian.normalize_path(vim.api.nvim_buf_get_name(0)))
         vim.fn.delete(root, "rf")
     end)
+
+    describe("get_markdown_files", function()
+        it("finds nested markdown files in sorted order", function()
+            local root = vim.fn.tempname()
+
+            write_note(vim.fs.joinpath(root, "b", "deep", "two.MD"), { "two" })
+            write_note(vim.fs.joinpath(root, "a.md"), { "one" })
+            write_lines(vim.fs.joinpath(root, "ignored.txt"), { "nope" })
+            root = obsidian.normalize_path(root)
+
+            assert.same({
+                vim.fs.joinpath(root, "a.md"),
+                vim.fs.joinpath(root, "b", "deep", "two.MD"),
+            }, obsidian.get_markdown_files(root))
+            vim.fn.delete(root, "rf")
+        end)
+
+        it("skips hidden directories such as .venv and .git", function()
+            local root = vim.fn.tempname()
+
+            write_note(vim.fs.joinpath(root, "note.md"), { "real" })
+            write_note(vim.fs.joinpath(root, ".venv", "lib", "README.md"), { "junk" })
+            write_note(vim.fs.joinpath(root, "sub", ".git", "x.md"), { "junk" })
+            root = obsidian.normalize_path(root)
+
+            assert.same({ vim.fs.joinpath(root, "note.md") }, obsidian.get_markdown_files(root))
+            vim.fn.delete(root, "rf")
+        end)
+
+        it("scans a large vault with many hidden files quickly", function()
+            local root = vim.fn.tempname()
+
+            write_note(vim.fs.joinpath(root, "note.md"), { "real" })
+
+            for index = 1, 300 do
+                write_lines(vim.fs.joinpath(root, ".venv", "pkg" .. index, "doc.md"), { "junk" })
+            end
+
+            root = obsidian.normalize_path(root)
+            local start = vim.uv.hrtime()
+            local paths = obsidian.get_markdown_files(root)
+            local elapsed_ms = (vim.uv.hrtime() - start) / 1e6
+
+            assert.same({ vim.fs.joinpath(root, "note.md") }, paths)
+            assert.is_true(elapsed_ms < 100, "scan took " .. elapsed_ms .. "ms")
+            vim.fn.delete(root, "rf")
+        end)
+    end)
 end)

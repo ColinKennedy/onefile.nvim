@@ -32,6 +32,10 @@ describe("search highlight", function()
         assert.equal(1, count_autocmds(enter_buffer({ "abc" })))
     end)
 
+    it("tracks the cursor in empty buffers", function()
+        assert.equal(1, count_autocmds(enter_buffer({})))
+    end)
+
     it("registers only once per buffer", function()
         local buffer = enter_buffer({ "abc" })
         vim.cmd.enew({ bang = true })

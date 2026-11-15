@@ -25,6 +25,11 @@ function _P.highlight_search_text()
     local col = vim.fn.col(".")
     local pattern = vim.fn.getreg("/")
 
+    -- Lines with NUL bytes (e.g. binary files) become Blobs when passed to vim.fn, and `match()` rejects those.
+    if line:find("\0", 1, true) or pattern:find("\0", 1, true) then
+        return
+    end
+
     -- match() returns 0-based index, or -1
     local pos = vim.fn.match(line, pattern, col - 1) + 1
 

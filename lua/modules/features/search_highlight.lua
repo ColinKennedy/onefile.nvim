@@ -25,6 +25,11 @@ function _P.highlight_search_text()
     local col = vim.fn.col(".")
     local pattern = vim.fn.getreg("/")
 
+    -- A pattern with NUL bytes becomes a Blob in vim.fn, and `match()` rejects those.
+    if pattern:find("\0", 1, true) then
+        return
+    end
+
     -- match() returns 0-based index, or -1
     local pos = vim.fn.match(line, pattern, col - 1) + 1
 
@@ -33,9 +38,33 @@ function _P.highlight_search_text()
     end
 end
 
-vim.api.nvim_create_autocmd("CursorMoved", {
+--- Track the cursor in `buffer`, unless it looks binary (NUL bytes become Blobs in `vim.fn.match`, E976).
+---
+---@param buffer integer A 0-or-more buffer number.
+---
+function _P.register_cursor_tracking(buffer)
+    local first_line = vim.api.nvim_buf_get_lines(buffer, 0, 1, false)[1] or ""
+
+    if first_line:find("\0", 1, true) then
+        return
+    end
+
+    if #vim.api.nvim_get_autocmds({ group = _GROUP, event = "CursorMoved", buffer = buffer }) > 0 then
+        return
+    end
+
+    vim.api.nvim_create_autocmd("CursorMoved", {
+        group = _GROUP,
+        buffer = buffer,
+        callback = _P.highlight_search_text,
+    })
+end
+
+vim.api.nvim_create_autocmd("BufEnter", {
     group = _GROUP,
-    callback = _P.highlight_search_text,
+    callback = function(event)
+        _P.register_cursor_tracking(event.buf)
+    end,
 })
 
 vim.api.nvim_create_autocmd("InsertEnter", {

@@ -400,6 +400,31 @@ describe("selector UI", function()
         assert.equal(scrolled, refreshed)
     end)
 
+    it("ignores late refreshes after the selector is closed", function()
+        local refresh = core_editor_setup.select_from_options({ "alpha" }, {
+            cancel = function() end,
+            confirm = function() end,
+            deserialize = function(value)
+                return { display = value, value = value }
+            end,
+            preview = {
+                location = "top",
+                min_height = 4,
+                height_ratio = 0.5,
+                render = function()
+                    return { buftype = "nofile", filetype = "markdown", lines = { "alpha" } }
+                end,
+            },
+        })
+
+        press_normal("<Esc>")
+
+        local _, message = pcall(refresh)
+
+        assert.is_nil(message)
+        vim.wait(150)
+    end)
+
     it("scrolls a top preview after moving to another selected item", function()
         local refresh = core_editor_setup.select_from_options({ "alpha", "beta" }, {
             confirm = function() end,

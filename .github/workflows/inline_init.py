@@ -101,10 +101,10 @@ def rename_module_tables(text: str, module: str) -> tuple[str, str | None]:
     private_name = f"{prefix}_P"
 
     if re.search(r"(?m)^\s*local\s+M\s*=", text):
-        text = re.sub(r"\bM\b", public_name, text)
+        text = re.sub(r"(?<![\w.:])M\b", public_name, text)
 
     if re.search(r"(?m)^\s*local\s+_P\s*=", text):
-        text = re.sub(r"\b_P\b", private_name, text)
+        text = re.sub(r"(?<![\w.:])_P\b", private_name, text)
 
     return text, public_name
 

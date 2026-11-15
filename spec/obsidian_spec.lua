@@ -619,7 +619,7 @@ describe("modules.plugins.obsidian", function()
             local elapsed_ms = (vim.uv.hrtime() - start) / 1e6
 
             assert.same({ vim.fs.joinpath(root, "note.md") }, paths)
-            assert.is_true(elapsed_ms < 100, "scan took " .. elapsed_ms .. "ms")
+            assert(elapsed_ms < 100, "scan took " .. elapsed_ms .. "ms")
             vim.fn.delete(root, "rf")
         end)
     end)

@@ -1,6 +1,12 @@
 {
     "diagnostics.libraryFiles": "Disable",
     "runtime.version": "LuaJIT",
+    "diagnostics.disable": [
+        "assign-type-mismatch",
+        "deprecated",
+        "param-type-mismatch",
+        "return-type-mismatch"
+    ],
     "workspace.checkThirdParty": "Disable",
     "workspace.ignoreDir": [
         ".dependencies",

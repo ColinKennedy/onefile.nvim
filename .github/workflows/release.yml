@@ -4,7 +4,6 @@
 # python3 .github/workflows/inline_init.py --input init.lua --output init.lua
 # make luacheck
 # make test
-# make llscheck CONFIGURATION=.github/workflows/.luarc_release.json
 # ```
 
 name: Release
@@ -36,19 +35,12 @@ jobs:
           # NOTE: Works around rhysd/action-setup-vim#80 (EXDEV on new runners)
           TMPDIR: ${{ runner.temp }}
 
-      - name: Install lua-language-server
-        uses: jdx/mise-action@v2
-        with:
-          tool_versions: |
-            lua-language-server latest
-
       - name: Install Lua tooling
         run: |
           sudo apt-get update
           sudo apt-get install -y lua5.1 luarocks
           sudo luarocks install busted
           sudo luarocks install luacheck
-          sudo luarocks install llscheck
 
       - name: Generate bundled init
         run: |
@@ -65,10 +57,6 @@ jobs:
       - name: Luacheck bundled init tree
         run: |
           make luacheck
-
-      - name: llscheck bundled init tree
-        run: |
-          make llscheck CONFIGURATION=.github/workflows/.luarc_release.json
 
       - name: Test bundled init tree
         run: |

@@ -419,9 +419,9 @@ describe("selector UI", function()
 
         press_normal("<Esc>")
 
-        assert.has_no.errors(function()
-            refresh()
-        end)
+        local ok, message = pcall(refresh)
+
+        assert.is_true(ok, tostring(message))
         vim.wait(150)
     end)
 
